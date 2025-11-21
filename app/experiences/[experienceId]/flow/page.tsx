@@ -18,6 +18,23 @@ export default function OnboardingFlowView() {
   const [userAnswers, setUserAnswers] = useState<Record<string, any>>({})
   const [currentAnswer, setCurrentAnswer] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [accessLevel, setAccessLevel] = useState<"owner" | "customer">("customer")
+
+  // Load access level
+  useEffect(() => {
+    async function loadAccessLevel() {
+      try {
+        const response = await fetch(`/api/get-access-level?experienceId=${experienceId}`)
+        const data = await response.json()
+        if (data.accessLevel && (data.accessLevel === "owner" || data.accessLevel === "customer")) {
+          setAccessLevel(data.accessLevel)
+        }
+      } catch (error) {
+        console.error('Error loading access level:', error)
+      }
+    }
+    loadAccessLevel()
+  }, [experienceId])
 
   // Load flow data - in a real app, this would fetch from your data source
   useEffect(() => {
@@ -318,25 +335,32 @@ export default function OnboardingFlowView() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center relative py-8 px-4">
+      {/* Access Level Display */}
+      <div className="absolute top-4 right-4 z-20">
+        <span className="text-xs text-muted-foreground bg-card px-3 py-1.5 rounded-lg shadow-neumorphic-raised">
+          {accessLevel === "owner" ? "Owner" : "Customer"}
+        </span>
+      </div>
+      
       {/* Left Arrow */}
       <button
         onClick={handlePrev}
         disabled={!hasPrev}
-        className="absolute left-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 p-2 sm:p-3 rounded-full bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed text-foreground"
       >
-        <ChevronLeft className="w-5 h-5" />
+        <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
       </button>
       
       {/* Right Arrow */}
       <button
         onClick={handleNext}
         disabled={!hasNext || (needsAnswer && currentAnswer === null)}
-        className="absolute right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 p-2 sm:p-3 rounded-full bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed text-foreground"
       >
-        <ChevronRight className="w-5 h-5" />
+        <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
       </button>
       
-      <div className="w-full max-w-2xl mx-auto flex flex-col items-center justify-center">
+      <div className="w-full max-w-2xl mx-auto flex flex-col items-center justify-center px-2 sm:px-4">
         <PagePreview
           components={components}
           viewMode="mobile"
@@ -383,9 +407,9 @@ function InteractiveQuestionComponent({
                 value={option}
                 checked={value === option}
                 onChange={(e) => onChange(e.target.value)}
-                className="w-4 h-4"
+                className="w-4 h-4 accent-primary"
               />
-              <span className="text-sm">{option}</span>
+              <span className="text-sm flex-1">{option}</span>
             </label>
           ))}
         </div>
@@ -407,9 +431,9 @@ function InteractiveQuestionComponent({
                     onChange(selectedValues.filter((v: string) => v !== option))
                   }
                 }}
-                className="w-4 h-4"
+                className="w-4 h-4 accent-primary rounded"
               />
-              <span className="text-sm">{option}</span>
+              <span className="text-sm flex-1">{option}</span>
             </label>
           ))}
         </div>

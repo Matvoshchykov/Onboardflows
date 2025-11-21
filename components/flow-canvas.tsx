@@ -56,7 +56,7 @@ function normalizePageComponents(pageComponents: any): PageComponent[] {
   return []
 }
 
-export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase }: FlowCanvasProps) {
+export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel = "owner" }: FlowCanvasProps & { accessLevel?: "owner" | "customer" }) {
   const router = useRouter()
   const { theme } = useTheme()
   const [flowTitle, setFlowTitle] = useState(flow?.title || "Untitled Flow")
@@ -1612,6 +1612,9 @@ const getIncomingColorForNode = (nodeId: string): string | null => {
                 </span>
               </div>
             )}
+            <span className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap">
+              • {accessLevel === "owner" ? "Owner" : "Customer"}
+            </span>
           </div>
           {/* Save Changes Button - Moved to header */}
           {onSaveToDatabase && flow && (

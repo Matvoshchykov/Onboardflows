@@ -35,7 +35,7 @@ export function PagePreview({
           viewMode === "desktop" ? "w-full" : "w-full max-w-md mx-auto"
         }`}
       >
-        <div className={`space-y-6 flex flex-col items-center ${previewMode ? 'pt-5 pb-5' : ''} ${components.length === 1 || components.length === 2 ? '' : ''}`}>
+        <div className={`space-y-4 sm:space-y-6 flex flex-col items-center ${previewMode ? 'pt-5 pb-5' : ''} ${components.length === 1 || components.length === 2 ? '' : ''}`}>
           {components.length === 0 ? (
             <div className="flex items-center justify-center h-64 text-muted-foreground">
               Drag components here to build your page
@@ -46,13 +46,13 @@ export function PagePreview({
                 key={component.id}
                 data-preview-component={index === 0 ? 'first' : undefined}
                 onClick={previewMode ? undefined : () => onSelectComponent(component)}
-                className={`relative group rounded-xl p-6 transition-all ${
+                className={`relative group rounded-xl p-4 sm:p-6 transition-all ${
                   previewMode ? '' : 'cursor-pointer'
                 } ${
                   selectedComponent?.id === component.id
                     ? "bg-card shadow-neumorphic-pressed ring-2 ring-primary/20"
                     : "bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed"
-                } w-full min-h-[200px] flex flex-col justify-center overflow-visible`}
+                } w-full min-h-[150px] sm:min-h-[200px] flex flex-col justify-center overflow-visible`}
                 style={{ maxWidth: '840px' }}
               >
                 <ComponentRenderer 
@@ -500,23 +500,37 @@ export function ComponentRenderer({
             onClick={onUpdateComponent ? () => fileInputRef.current?.click() : undefined}
           >
             {filePreview || config.fileOriginal || config.fileUrl ? (
-              <div className="space-y-2">
+              <div className="space-y-2 w-full">
                 {isImage ? (
-                  <img
-                    src={filePreview || config.fileOriginal || config.fileUrl}
-                    alt={uploadedFileName || "Uploaded image"}
-                    className="w-full max-h-64 object-contain rounded-lg mx-auto"
-                  />
+                  <div className="w-full">
+                    <img
+                      src={filePreview || config.fileOriginal || config.fileUrl}
+                      alt={uploadedFileName || "Uploaded image"}
+                      className="w-full h-auto max-h-[400px] sm:max-h-[500px] object-contain rounded-lg mx-auto"
+                    />
+                    {uploadedFileName && (
+                      <p className="text-xs text-muted-foreground mt-2 text-center truncate px-2">
+                        {uploadedFileName}
+                      </p>
+                    )}
+                  </div>
                 ) : isVideo ? (
-                  <video
-                    src={filePreview || config.fileOriginal || config.fileUrl}
-                    controls
-                    className="w-full max-h-64 rounded-lg mx-auto"
-                  />
+                  <div className="w-full">
+                    <video
+                      src={filePreview || config.fileOriginal || config.fileUrl}
+                      controls
+                      className="w-full h-auto max-h-[400px] sm:max-h-[500px] rounded-lg mx-auto"
+                    />
+                    {uploadedFileName && (
+                      <p className="text-xs text-muted-foreground mt-2 text-center truncate px-2">
+                        {uploadedFileName}
+                      </p>
+                    )}
+                  </div>
                 ) : (
                   <div className="flex flex-col items-center gap-2">
                     <File className="w-12 h-12 text-muted-foreground" />
-                    <p className="text-xs text-muted-foreground">{uploadedFileName}</p>
+                    <p className="text-xs text-muted-foreground truncate max-w-full px-2">{uploadedFileName}</p>
                   </div>
                 )}
                 {onUpdateComponent && (
