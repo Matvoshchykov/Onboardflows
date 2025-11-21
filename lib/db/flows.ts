@@ -197,8 +197,9 @@ const ALL_FLOWS_CACHE_TTL = 3000 // 3 seconds cache
  */
 export async function loadAllFlows(): Promise<Flow[]> {
   if (!isSupabaseConfigured || !supabase) {
-    console.warn('Supabase not configured, returning empty flows array')
-    return []
+    const errorMsg = 'Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.'
+    console.error(errorMsg)
+    throw new Error(errorMsg)
   }
 
   // Check cache first
@@ -215,12 +216,14 @@ export async function loadAllFlows(): Promise<Flow[]> {
         .limit(50) // Reduced from 100
 
     if (error) {
+      let errorMsg = `Error loading flows from database: ${error.message}`
       if (error.code === 'PGRST205') {
-        console.warn('Database table does not exist. Please run the SQL schema from supabase/schema.sql')
-      } else {
-        console.error('Error loading flows:', error)
+        errorMsg = 'Database table "flows" does not exist. Please run the SQL schema from supabase/schema.sql in your Supabase SQL editor.'
+      } else if (error.code === 'PGRST301' || error.code === 'PGRST302') {
+        errorMsg = 'Database connection error. Please check your Supabase configuration.'
       }
-      return []
+      console.error('Error loading flows:', error)
+      throw new Error(errorMsg)
     }
 
     if (!data) return []
@@ -241,12 +244,20 @@ export async function loadAllFlows(): Promise<Flow[]> {
 
     return flows
   } catch (error) {
+    // Re-throw if it's already an Error with message
+    if (error instanceof Error && error.message.includes('Error loading flows')) {
+      throw error
+    }
+    
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-      console.error('Network error: Failed to connect to Supabase')
+      const errorMsg = 'Network error: Failed to connect to Supabase. Please check your network connection and Supabase configuration.'
+      console.error(errorMsg)
+      throw new Error(errorMsg)
     } else if (error instanceof Error) {
       console.error('Error loading flows:', error.message)
+      throw new Error(`Failed to load flows: ${error.message}`)
     }
-    return []
+    throw new Error('Unknown error occurred while loading flows')
   }
 }
 

@@ -120,10 +120,17 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
           } else {
             setSelectedFlow(firstFlow)
           }
+        } else {
+          // No flows found - this is OK, user can create one
+          toast.info('No flows found. Create your first flow to get started!')
         }
       } catch (error) {
         console.error('Error loading flows:', error)
-        toast.error('Failed to load flows from database')
+        const errorMessage = error instanceof Error ? error.message : 'Failed to load flows from database'
+        toast.error(errorMessage, { duration: 8000 })
+        
+        // Still allow the user to see the UI and try creating a flow
+        setFlows([])
       } finally {
         setIsLoading(false)
       }
