@@ -130,7 +130,7 @@ export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, isCol
               title="Launch the onboarding flow to their community"
             >
               <Play className="h-4 w-4" />
-              {!isCollapsed && <span>Go Live</span>}
+              {!isCollapsed && <span>{isLive ? 'Flow is Live' : 'Go Live'}</span>}
             </button>
           </>
         )}

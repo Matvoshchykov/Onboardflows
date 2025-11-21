@@ -31,13 +31,16 @@ export default async function ExperiencePage({
 	} catch (error) {
 		// If auth fails, still show UI for development
 		console.error("Auth error:", error);
+		accessLevel = "owner"; // Default to owner for development
 	}
+
+	const isAdmin = accessLevel === "owner";
 
 	// Render your FlowBuilder UI with access level
 	return (
 		<div className="flex flex-col h-screen">
 			<div className="flex-1 overflow-hidden">
-				<FlowBuilder />
+				<FlowBuilder isAdmin={isAdmin} />
 			</div>
 		</div>
 	);

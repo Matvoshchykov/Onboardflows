@@ -1,11 +1,12 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Sidebar } from "./sidebar"
 import { FlowCanvas } from "./flow-canvas"
 import { ChatModal } from "./chat-modal"
 import { FlowLoading } from "./flow-loading"
-import { loadAllFlows, createFlow, saveFlow } from "@/lib/db/flows"
+import { loadAllFlows, createFlow, saveFlow, toggleFlowActive, getActiveFlow } from "@/lib/db/flows"
 import { isSupabaseConfigured } from "@/lib/supabase"
 import { toast } from "sonner"
 import type { PageComponent } from "./page-editor"
@@ -34,15 +35,70 @@ export type Flow = {
   logicBlocks?: LogicBlock[]
 }
 
-export default function FlowBuilder() {
+type FlowBuilderProps = {
+  isAdmin?: boolean
+}
+
+export default function FlowBuilder({ isAdmin = true }: FlowBuilderProps = {}) {
+  const router = useRouter()
   const [flows, setFlows] = useState<Flow[]>([])
   const [selectedFlow, setSelectedFlow] = useState<Flow | null>(null)
   const [showChatModal, setShowChatModal] = useState(false)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
+  const [hasCheckedActiveFlow, setHasCheckedActiveFlow] = useState(false)
 
-  // Load flows from database on mount
+  // For non-admin users, redirect to active flow experience
   useEffect(() => {
+    if (!isAdmin) {
+      async function redirectToActiveFlow() {
+        setIsLoading(true)
+        try {
+          const activeFlow = await getActiveFlow()
+          if (activeFlow) {
+            router.push(`/experiences/${activeFlow.id}/flow`)
+          } else {
+            setHasCheckedActiveFlow(true)
+          }
+        } catch (error) {
+          console.error('Error getting active flow:', error)
+          setHasCheckedActiveFlow(true)
+        } finally {
+          setIsLoading(false)
+        }
+      }
+      redirectToActiveFlow()
+    }
+  }, [isAdmin, router])
+
+  // Show message for non-admin users while redirecting or if no active flow
+  if (!isAdmin) {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center h-screen">
+          <FlowLoading message="Loading onboarding flow..." />
+        </div>
+      )
+    }
+    
+    if (hasCheckedActiveFlow) {
+      return (
+        <div className="flex items-center justify-center h-screen">
+          <div className="text-center p-8">
+            <h1 className="text-2xl font-bold mb-2 text-foreground">No Active Flow</h1>
+            <p className="text-muted-foreground">There is no active onboarding flow at this time.</p>
+          </div>
+        </div>
+      )
+    }
+    
+    return null
+  }
+
+  // Load flows from database on mount (only for admin users)
+  useEffect(() => {
+    if (!isAdmin) return
+
     async function loadFlows() {
       setIsLoading(true)
       try {
@@ -72,7 +128,7 @@ export default function FlowBuilder() {
       }
     }
     loadFlows()
-  }, [])
+  }, [isAdmin])
 
   return (
     <div className="flex h-full overflow-hidden bg-background relative">
@@ -96,11 +152,63 @@ export default function FlowBuilder() {
         onCreateFlow={() => setShowChatModal(true)}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-        onGoLive={() => {
-          // TODO: Implement go live functionality
-          toast.success('Flow is now live!')
+        onGoLive={async () => {
+          if (!selectedFlow) {
+            toast.error('Please select a flow first')
+            return
+          }
+
+          try {
+            const newActiveStatus = selectedFlow.status !== 'Live'
+            console.log(`Toggling flow ${selectedFlow.id} to active: ${newActiveStatus}`)
+            
+            const success = await toggleFlowActive(selectedFlow.id, newActiveStatus)
+            
+            if (success) {
+              // Update local state - set selected flow to new status, all others to Draft
+              const updatedFlow = { ...selectedFlow, status: newActiveStatus ? 'Live' : 'Draft' }
+              setSelectedFlow(updatedFlow)
+              setFlows(flows.map(f => {
+                if (f.id === updatedFlow.id) {
+                  return updatedFlow
+                }
+                // If setting a flow to active, deactivate all others
+                if (newActiveStatus && f.status === 'Live') {
+                  return { ...f, status: 'Draft' }
+                }
+                return f
+              }))
+              
+              // Verify the update by reloading the flow
+              setTimeout(async () => {
+                const { loadFlow } = await import('@/lib/db/flows')
+                const reloadedFlow = await loadFlow(selectedFlow.id)
+                if (reloadedFlow) {
+                  console.log('Reloaded flow status:', reloadedFlow.status, 'Expected:', newActiveStatus ? 'Live' : 'Draft')
+                  if (reloadedFlow.status !== (newActiveStatus ? 'Live' : 'Draft')) {
+                    console.warn('Flow status mismatch! Database may not have updated correctly.')
+                  }
+                }
+              }, 500)
+              
+              if (newActiveStatus) {
+                toast.success('Flow is now live!')
+              } else {
+                toast.success('Flow is now offline')
+              }
+            } else {
+              console.error('toggleFlowActive returned false')
+              toast.error('Failed to update flow status. Check console for details.')
+            }
+          } catch (error) {
+            console.error('Error toggling flow active:', error)
+            if (error instanceof Error) {
+              console.error('Error message:', error.message)
+            }
+            toast.error('Failed to update flow status')
+          }
         }}
-        isLive={false}
+        isLive={selectedFlow?.status === 'Live'}
       />
       
       <div className="flex-1 flex flex-col min-w-0">

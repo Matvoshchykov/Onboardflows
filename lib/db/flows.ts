@@ -344,21 +344,118 @@ export async function deleteFlow(flowId: string): Promise<boolean> {
  * Toggle flow active status
  */
 export async function toggleFlowActive(flowId: string, active: boolean): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase) {
+    console.warn('Supabase not configured, cannot toggle flow active')
+    return false
+  }
+
   try {
-    const { error } = await supabase
+    // If setting a flow to active, first deactivate all other flows
+    if (active) {
+      const { error: deactivateError, data: deactivateData } = await supabase
+        .from('flows')
+        .update({ active: false })
+        .neq('id', flowId)
+        .select()
+
+      if (deactivateError) {
+        console.error('Error deactivating other flows:', deactivateError)
+        console.error('Deactivate error details:', JSON.stringify(deactivateError, null, 2))
+        return false
+      }
+      console.log('Deactivated other flows:', deactivateData)
+    }
+
+    // Use upsert to ensure the update happens even if there are conflicts
+    const { error, data } = await supabase
       .from('flows')
-      .update({ active })
-      .eq('id', flowId)
+      .upsert({ 
+        id: flowId,
+        active,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'id'
+      })
+      .select()
 
     if (error) {
       console.error('Error toggling flow active:', error)
+      console.error('Update error details:', JSON.stringify(error, null, 2))
       return false
     }
+
+    console.log(`Successfully set flow ${flowId} active status to ${active}`, data)
+    
+    // Verify the update was successful by reading it back
+    const { data: verifyData, error: verifyError } = await supabase
+      .from('flows')
+      .select('id, active')
+      .eq('id', flowId)
+      .single()
+    
+    if (verifyError) {
+      console.error('Error verifying flow active status:', verifyError)
+    } else {
+      console.log('Verified flow active status:', verifyData?.active, 'Expected:', active)
+      if (verifyData?.active !== active) {
+        console.error('WARNING: Flow active status mismatch! Database shows:', verifyData?.active, 'but expected:', active)
+      }
+    }
+
+    // Clear cache to force refresh
+    clearFlowCache()
 
     return true
   } catch (error) {
     console.error('Error toggling flow active:', error)
+    if (error instanceof Error) {
+      console.error('Error message:', error.message)
+      console.error('Error stack:', error.stack)
+    }
     return false
+  }
+}
+
+/**
+ * Find the active flow (where active = true)
+ */
+export async function getActiveFlow(): Promise<Flow | null> {
+  if (!isSupabaseConfigured || !supabase) {
+    console.warn('Supabase not configured, cannot get active flow')
+    return null
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('flows')
+      .select('id, title, active, flow_data, created_at, updated_at')
+      .eq('active', true)
+      .limit(1)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No active flow found
+        return null
+      }
+      console.error('Error getting active flow:', error)
+      return null
+    }
+
+    if (!data) return null
+
+    const flowRecord = data as FlowRecord
+    return {
+      id: flowRecord.id,
+      title: flowRecord.title,
+      dateCreated: new Date(flowRecord.created_at).toISOString().split('T')[0],
+      status: 'Live',
+      nodes: flowRecord.flow_data.nodes || [],
+      logicBlocks: flowRecord.flow_data.logicBlocks || []
+    }
+  } catch (error) {
+    console.error('Error getting active flow:', error)
+    return null
   }
 }
 
