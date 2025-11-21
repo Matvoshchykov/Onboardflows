@@ -233,43 +233,80 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
         {analytics.sessions.length > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {/* Completion Pie Chart */}
-            <div className="bg-card rounded-lg p-4 shadow-neumorphic-raised">
-              <div className="flex items-center gap-2 mb-1">
+            <div className="bg-card rounded-lg p-4 shadow-neumorphic-raised relative">
+              <div className="flex items-center gap-2 mb-4">
                 <PieChart className="w-4 h-4 text-muted-foreground" />
                 <h3 className="text-xs font-semibold text-foreground">Completion Overview</h3>
               </div>
-              <div className="flex gap-4 items-center mt-[20px]">
-                <div className="flex-shrink-0 flex flex-col justify-center gap-2">
-                  {completionChartData.map((entry, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <div 
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
-                        style={{ backgroundColor: entry.fill }}
-                      />
-                      <span className="text-[10px] text-foreground whitespace-nowrap">
-                        {entry.name}: {entry.value} ({analytics.totalSessions > 0 ? Math.round((entry.value / analytics.totalSessions) * 100) : 0}%)
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex-1 flex justify-center">
-                  <ResponsiveContainer width="100%" height={260}>
-                    <RechartsPieChart>
-                      <Pie
-                        data={completionChartData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={110}
-                        paddingAngle={2}
-                        dataKey="value"
-                      >
-                        {completionChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.fill} />
-                        ))}
-                      </Pie>
-                    </RechartsPieChart>
-                  </ResponsiveContainer>
+              {/* Pie Chart Container - Centered and Symmetrical */}
+              <div className="flex justify-center items-center py-4" style={{ minHeight: '260px' }}>
+                <div className="relative flex items-center justify-center" style={{ width: '100%', maxWidth: '320px', height: '260px' }}>
+                  {/* Pie Chart */}
+                  <div className="relative" style={{ width: '220px', height: '260px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RechartsPieChart>
+                        <Pie
+                          data={completionChartData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={110}
+                          paddingAngle={2}
+                          dataKey="value"
+                          startAngle={90}
+                          endAngle={-270}
+                        >
+                          {completionChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                          ))}
+                        </Pie>
+                      </RechartsPieChart>
+                    </ResponsiveContainer>
+                    
+                    {/* Legends positioned to stem from their pie segments */}
+                    {completionChartData.map((entry, index) => {
+                      const total = completionChartData.reduce((sum, e) => sum + e.value, 0)
+                      const percentage = entry.value / total
+                      // Calculate cumulative angle to find segment midpoint
+                      let cumulativeAngle = 0
+                      for (let i = 0; i < index; i++) {
+                        cumulativeAngle += (completionChartData[i].value / total) * 360
+                      }
+                      const segmentMidAngle = cumulativeAngle + (percentage * 360) / 2
+                      // Convert angle to position (starting from top, clockwise)
+                      // Pie starts at 90° (top), so adjust
+                      const angleFromTop = segmentMidAngle - 90
+                      const radians = (angleFromTop * Math.PI) / 180
+                      // Position legend at outer edge of pie + offset
+                      const centerX = 110 // half of pie chart width
+                      const centerY = 130 // half of pie chart height
+                      const outerRadius = 110
+                      const labelDistance = outerRadius + 30
+                      const labelX = centerX + Math.sin(radians) * labelDistance
+                      const labelY = centerY - Math.cos(radians) * labelDistance
+                      
+                      return (
+                        <div
+                          key={index}
+                          className="absolute flex items-center gap-2"
+                          style={{
+                            left: `${labelX}px`,
+                            top: `${labelY}px`,
+                            transform: 'translate(-50%, -50%)',
+                            pointerEvents: 'auto'
+                          }}
+                        >
+                          <div 
+                            className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
+                            style={{ backgroundColor: entry.fill }}
+                          />
+                          <span className="text-[10px] text-foreground whitespace-nowrap">
+                            {entry.name}: {entry.value} ({Math.round(percentage * 100)}%)
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
             </div>

@@ -159,66 +159,6 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
         onCreateFlow={() => setShowChatModal(true)}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-        onGoLive={async () => {
-          if (!selectedFlow) {
-            toast.error('Please select a flow first')
-            return
-          }
-
-          try {
-            const newActiveStatus = selectedFlow.status !== 'Live'
-            console.log(`Toggling flow ${selectedFlow.id} to active: ${newActiveStatus}`)
-            
-            const success = await toggleFlowActive(selectedFlow.id, newActiveStatus)
-            
-            if (success) {
-              // Update local state - set selected flow to new status, all others to Draft
-              const updatedFlow: Flow = { 
-                ...selectedFlow, 
-                status: (newActiveStatus ? 'Live' : 'Draft') as "Live" | "Draft" | "Archived"
-              }
-              setSelectedFlow(updatedFlow)
-              setFlows(flows.map(f => {
-                if (f.id === updatedFlow.id) {
-                  return updatedFlow
-                }
-                // If setting a flow to active, deactivate all others
-                if (newActiveStatus && f.status === 'Live') {
-                  return { ...f, status: 'Draft' as const }
-                }
-                return f
-              }))
-              
-              // Verify the update by reloading the flow
-              setTimeout(async () => {
-                const { loadFlow } = await import('@/lib/db/flows')
-                const reloadedFlow = await loadFlow(selectedFlow.id)
-                if (reloadedFlow) {
-                  console.log('Reloaded flow status:', reloadedFlow.status, 'Expected:', newActiveStatus ? 'Live' : 'Draft')
-                  if (reloadedFlow.status !== (newActiveStatus ? 'Live' : 'Draft')) {
-                    console.warn('Flow status mismatch! Database may not have updated correctly.')
-                  }
-                }
-              }, 500)
-              
-              if (newActiveStatus) {
-                toast.success('Flow is now live!')
-              } else {
-                toast.success('Flow is now offline')
-              }
-            } else {
-              console.error('toggleFlowActive returned false')
-              toast.error('Failed to update flow status. Check console for details.')
-            }
-          } catch (error) {
-            console.error('Error toggling flow active:', error)
-            if (error instanceof Error) {
-              console.error('Error message:', error.message)
-            }
-            toast.error('Failed to update flow status')
-          }
-        }}
-        isLive={selectedFlow?.status === 'Live'}
       />
       
       <div className="flex-1 flex flex-col min-w-0">

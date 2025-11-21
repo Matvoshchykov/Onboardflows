@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect, mem
 import { clearFlowCache } from "@/lib/db/flows"
 import { FileText, Plus, Upload, X, Play, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ArrowUpDown, Eye, Trash2, Check, Crown, Minus } from 'lucide-react'
 import { toast } from "sonner"
+import { toggleFlowActive } from "@/lib/db/flows"
 import { useTheme } from "./theme-provider"
 import type { Flow, FlowNode } from "./flow-builder"
 import { LogicBlockLibrary } from "./logic-block-library"
@@ -18,6 +19,7 @@ import { supabase } from "@/lib/supabase"
 import { deleteComponentFiles } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { PlanSelectionModal } from "./plan-selection-modal"
+import { UploadFlowModal } from "./upload-flow-modal"
 
 type PortPoint = { x: number; y: number }
 
@@ -108,6 +110,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
   const [isLive, setIsLive] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [showPlanModal, setShowPlanModal] = useState(false)
+  const [showUploadModal, setShowUploadModal] = useState(false)
   
   // Mobile touch gesture state
   const [isMobile, setIsMobile] = useState(false)
@@ -136,18 +139,24 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
   // Calculate plan limits and usage
   const planLimits = useMemo(() => {
     if (currentPlan === "free") {
-      return { flows: 1, blocks: 20 } // Same block access for all tiers
+      return { flows: 1, blocks: 5 } // Free: 1 flow, 5 blocks per flow
     } else {
-      return { flows: 3, blocks: 20 } // Same block access for all tiers
+      return { flows: 3, blocks: 20 } // Premium: 3 flows, 20 blocks per flow
     }
   }, [currentPlan])
   
   const planUsage = useMemo(() => {
-    // TODO: Get actual usage from database
-    const totalFlows = 1 // Placeholder
-    const totalBlocks = flow?.nodes?.reduce((sum, node) => sum + (node.components || 0), 0) || 0
+    // TODO: Get actual usage from database - count total flows
+    // For now, this is a placeholder - should get from parent component that has all flows
+    const totalFlows = 1 // Placeholder - should be count from all flows
+    
+    // Count total blocks in current flow: flow nodes + logic blocks
+    const flowBlocks = flow?.nodes?.length || 0
+    const logicBlocksCount = logicBlocks?.length || 0
+    const totalBlocks = flowBlocks + logicBlocksCount
+    
     return { flows: totalFlows, blocks: totalBlocks }
-  }, [flow])
+  }, [flow, logicBlocks])
 
   // Sync logicBlocks with flow when it changes
   useEffect(() => {
@@ -1539,17 +1548,47 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
     <>
         <header className="bg-card px-2 sm:px-4 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 border-b border-border shadow-neumorphic-subtle relative">
           <div className="flex items-center gap-3">
-            <input
-              type="text"
-              value={flowTitle}
-              onChange={(e) => {
-                setFlowTitle(e.target.value)
-                if (flow) {
-                  onUpdateFlow({ ...flow, title: e.target.value })
-                }
-              }}
-              className="text-lg font-bold bg-card shadow-neumorphic-inset rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 text-foreground placeholder:text-muted-foreground"
-            />
+            <div className="relative">
+              <input
+                type="text"
+                value={flowTitle}
+                onChange={(e) => {
+                  setFlowTitle(e.target.value)
+                  if (flow) {
+                    onUpdateFlow({ ...flow, title: e.target.value })
+                  }
+                }}
+                className="text-lg font-bold bg-card shadow-neumorphic-inset rounded-xl px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 text-foreground placeholder:text-muted-foreground"
+              />
+              {flow && (
+                <button
+                  onClick={() => {
+                    if (flow.status === "Live") {
+                      // Disable flow instantly
+                      toggleFlowActive(flow.id, false).then((success) => {
+                        if (success && onUpdateFlow) {
+                          onUpdateFlow({ ...flow, status: "Draft" as const })
+                          toast.success("Flow disabled successfully")
+                        }
+                      })
+                    } else {
+                      setShowUploadModal(true)
+                    }
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-neumorphic-raised hover:shadow-neumorphic-pressed z-10"
+                  style={{
+                    backgroundColor: flow.status === "Live" ? '#ef4444' : '#10b981',
+                  }}
+                  title={flow.status === "Live" ? "Disable Flow" : "Enable Flow"}
+                >
+                  {flow.status === "Live" ? (
+                    <X className="w-3.5 h-3.5 text-white" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5 text-white" />
+                  )}
+                </button>
+              )}
+            </div>
           </div>
           {/* Mode Toggle Buttons - Top Center */}
           <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 z-20">
@@ -1578,17 +1617,47 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
     <>
         <header className="bg-card px-2 sm:px-4 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 border-b border-border shadow-neumorphic-subtle relative">
         <div className="flex items-center gap-3">
-          <input
-            type="text"
-            value={flowTitle}
-            onChange={(e) => {
-              setFlowTitle(e.target.value)
-              if (flow) {
-                onUpdateFlow({ ...flow, title: e.target.value })
-              }
-            }}
-            className="text-lg font-bold bg-card shadow-neumorphic-inset rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 text-foreground placeholder:text-muted-foreground"
-          />
+          <div className="relative">
+            <input
+              type="text"
+              value={flowTitle}
+              onChange={(e) => {
+                setFlowTitle(e.target.value)
+                if (flow) {
+                  onUpdateFlow({ ...flow, title: e.target.value })
+                }
+              }}
+              className="text-lg font-bold bg-card shadow-neumorphic-inset rounded-xl px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 text-foreground placeholder:text-muted-foreground"
+            />
+            {flow && (
+              <button
+                onClick={() => {
+                  if (flow.status === "Live") {
+                    // Disable flow instantly
+                    toggleFlowActive(flow.id, false).then((success) => {
+                      if (success && onUpdateFlow) {
+                        onUpdateFlow({ ...flow, status: "Draft" as const })
+                        toast.success("Flow disabled successfully")
+                      }
+                    })
+                  } else {
+                    setShowUploadModal(true)
+                  }
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-neumorphic-raised hover:shadow-neumorphic-pressed z-10"
+                style={{
+                  backgroundColor: flow.status === "Live" ? '#ef4444' : '#10b981',
+                }}
+                title={flow.status === "Live" ? "Disable Flow" : "Enable Flow"}
+              >
+                {flow.status === "Live" ? (
+                  <X className="w-3.5 h-3.5 text-white" />
+                ) : (
+                  <Check className="w-3.5 h-3.5 text-white" />
+                )}
+              </button>
+            )}
+          </div>
         </div>
         {/* Mode Toggle Buttons - Top Center */}
         <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 z-20">
@@ -2879,6 +2948,21 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
         <PlanSelectionModal
           onClose={() => setShowPlanModal(false)}
           currentPlan={currentPlan}
+        />
+      )}
+
+      {/* Upload Flow Modal */}
+      {showUploadModal && flow && (
+        <UploadFlowModal
+          onClose={() => setShowUploadModal(false)}
+          flowId={flow.id}
+          flowTitle={flow.title}
+          onSuccess={() => {
+            // Refresh the flow status after upload
+            if (onUpdateFlow) {
+              onUpdateFlow({ ...flow, status: "Live" as const })
+            }
+          }}
         />
       )}
     </>

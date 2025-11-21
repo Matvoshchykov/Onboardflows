@@ -30,6 +30,17 @@
   .animate-fade-in {
     animation: fade-in 0.5s ease-out;
   }
+
+  @keyframes glow {
+    from {
+      filter: drop-shadow(0 0 8px rgba(34, 197, 94, 0.8)) drop-shadow(0 0 16px rgba(34, 197, 94, 0.6));
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+    }
+    to {
+      filter: drop-shadow(0 0 16px rgba(34, 197, 94, 1)) drop-shadow(0 0 24px rgba(34, 197, 94, 0.8));
+      box-shadow: 0 0 16px rgba(16, 185, 129, 1), 0 0 24px rgba(16, 185, 129, 0.8);
+    }
+  }
 }
 
 @layer base {
