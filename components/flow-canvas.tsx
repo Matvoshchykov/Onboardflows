@@ -8,6 +8,7 @@ import { useTheme } from "./theme-provider"
 import type { Flow, FlowNode } from "./flow-builder"
 import { LogicBlockLibrary } from "./logic-block-library"
 import { PagePreview, ComponentRenderer } from "./page-preview"
+import { FlowAnalytics } from "./flow-analytics"
 import { ComponentLibrary } from "./component-library"
 import type { PageComponent, ComponentType } from "./page-editor"
 import { startFlowSession, updateSessionStep, completeFlowSession } from "@/lib/db/sessions"
@@ -57,6 +58,7 @@ function normalizePageComponents(pageComponents: any): PageComponent[] {
 }
 
 export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel = "owner" }: FlowCanvasProps & { accessLevel?: "owner" | "customer" }) {
+  const [viewMode, setViewMode] = useState<"create" | "analytics">("create")
   const router = useRouter()
   const { theme } = useTheme()
   const [flowTitle, setFlowTitle] = useState(flow?.title || "Untitled Flow")
@@ -1531,6 +1533,49 @@ const getIncomingColorForNode = (nodeId: string): string | null => {
     return null
   }
 
+  // Show analytics view if in analytics mode
+  if (viewMode === "analytics" && flow) {
+    return (
+      <>
+        <header className="bg-card px-2 sm:px-4 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 border-b border-border shadow-neumorphic-subtle">
+          <div className="flex items-center gap-3">
+            <input
+              type="text"
+              value={flowTitle}
+              onChange={(e) => {
+                setFlowTitle(e.target.value)
+                if (flow) {
+                  onUpdateFlow({ ...flow, title: e.target.value })
+                }
+              }}
+              className="text-lg font-bold bg-card shadow-neumorphic-inset rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 text-foreground placeholder:text-muted-foreground"
+            />
+          </div>
+          <div className="flex items-center gap-4">
+            {/* Mode Toggle Buttons */}
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setViewMode("create")}
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors relative pb-1"
+              >
+                Flow Creation
+                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-foreground transition-all" style={{ width: '0' }} />
+              </button>
+              <button
+                onClick={() => setViewMode("analytics")}
+                className="text-sm text-foreground font-medium relative pb-1"
+              >
+                Data Analytics
+                <span className="absolute bottom-0 left-0 w-full h-0.5 bg-foreground" />
+              </button>
+            </div>
+          </div>
+        </header>
+        <FlowAnalytics flow={flow} />
+      </>
+    )
+  }
+
   return (
     <>
       <header className="bg-card px-2 sm:px-4 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 border-b border-border shadow-neumorphic-subtle">
@@ -1594,6 +1639,23 @@ const getIncomingColorForNode = (nodeId: string): string | null => {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3" style={{ fontSize: isMobile ? '0.5rem' : '0.5625rem' }}>
+          {/* Mode Toggle Buttons */}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setViewMode("create")}
+              className="text-sm text-foreground font-medium relative pb-1"
+            >
+              Flow Creation
+              <span className="absolute bottom-0 left-0 w-full h-0.5 bg-foreground" />
+            </button>
+            <button
+              onClick={() => setViewMode("analytics")}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors relative pb-1"
+            >
+              Data Analytics
+              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-foreground transition-all" style={{ width: '0' }} />
+            </button>
+          </div>
           <div className="flex items-center gap-1 sm:gap-2">
             {currentPlan === "free" ? (
               <span className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap">
