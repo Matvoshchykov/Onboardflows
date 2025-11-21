@@ -198,6 +198,7 @@ export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, isCol
           </button>
         )}
       </div>
-    </div>
+      </div>
+    </>
   )
 }
