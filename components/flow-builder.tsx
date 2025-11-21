@@ -166,7 +166,10 @@ export default function FlowBuilder({ isAdmin = true }: FlowBuilderProps = {}) {
             
             if (success) {
               // Update local state - set selected flow to new status, all others to Draft
-              const updatedFlow = { ...selectedFlow, status: newActiveStatus ? 'Live' : 'Draft' }
+              const updatedFlow: Flow = { 
+                ...selectedFlow, 
+                status: (newActiveStatus ? 'Live' : 'Draft') as "Live" | "Draft" | "Archived"
+              }
               setSelectedFlow(updatedFlow)
               setFlows(flows.map(f => {
                 if (f.id === updatedFlow.id) {
@@ -174,7 +177,7 @@ export default function FlowBuilder({ isAdmin = true }: FlowBuilderProps = {}) {
                 }
                 // If setting a flow to active, deactivate all others
                 if (newActiveStatus && f.status === 'Live') {
-                  return { ...f, status: 'Draft' }
+                  return { ...f, status: 'Draft' as const }
                 }
                 return f
               }))
