@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect, memo } from "react"
 import { clearFlowCache } from "@/lib/db/flows"
-import { FileText, Plus, Upload, X, Play, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ArrowUpDown, Eye, Trash2, Check, Crown } from 'lucide-react'
+import { FileText, Plus, Upload, X, Play, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ArrowUpDown, Eye, Trash2, Check, Crown, Minus } from 'lucide-react'
 import { toast } from "sonner"
 import { useTheme } from "./theme-provider"
 import type { Flow, FlowNode } from "./flow-builder"
@@ -106,6 +106,30 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase }: FlowCanvasP
   const [isLive, setIsLive] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [showPlanModal, setShowPlanModal] = useState(false)
+  
+  // Mobile touch gesture state
+  const [isMobile, setIsMobile] = useState(false)
+  const touchStateRef = useRef<{
+    touches: Map<number, { x: number; y: number }>
+    lastDistance: number | null
+    lastCenter: { x: number; y: number } | null
+    isPanning: boolean
+  }>({
+    touches: new Map(),
+    lastDistance: null,
+    lastCenter: null,
+    isPanning: false
+  })
+  
+  // Detect mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window || navigator.maxTouchPoints > 0)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
   
   // Calculate plan limits and usage
   const planLimits = useMemo(() => {
@@ -1193,6 +1217,201 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase }: FlowCanvasP
     setCanvasOffset({ x: newOffsetX, y: newOffsetY })
   }
 
+  // Calculate distance between two touch points
+  const getTouchDistance = (touch1: React.Touch, touch2: React.Touch): number => {
+    const dx = touch2.clientX - touch1.clientX
+    const dy = touch2.clientY - touch1.clientY
+    return Math.sqrt(dx * dx + dy * dy)
+  }
+
+  // Calculate center point between two touches
+  const getTouchCenter = (touch1: React.Touch, touch2: React.Touch): { x: number; y: number } => {
+    return {
+      x: (touch1.clientX + touch2.clientX) / 2,
+      y: (touch1.clientY + touch2.clientY) / 2
+    }
+  }
+
+  // Handle touch start
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!canvasRef.current) return
+
+    const touchArray = Array.from(e.touches)
+    touchStateRef.current.touches.clear()
+    
+    touchArray.forEach(touch => {
+      touchStateRef.current.touches.set(touch.identifier, { x: touch.clientX, y: touch.clientY })
+    })
+
+    // Handle single touch (pan) or two touches (pinch zoom)
+    if (touchArray.length === 1) {
+      const touch = touchArray[0]
+      // Only pan if not touching a block or port
+      const target = document.elementFromPoint(touch.clientX, touch.clientY)
+      if (target && target.closest('.node-card, .logic-block, .connection-port')) {
+        touchStateRef.current.isPanning = false
+        return
+      }
+      touchStateRef.current.isPanning = true
+      setPanStart({ x: touch.clientX - canvasOffset.x, y: touch.clientY - canvasOffset.y })
+    } else if (touchArray.length === 2) {
+      touchStateRef.current.isPanning = false
+      const distance = getTouchDistance(touchArray[0], touchArray[1])
+      const center = getTouchCenter(touchArray[0], touchArray[1])
+      touchStateRef.current.lastDistance = distance
+      touchStateRef.current.lastCenter = center
+      
+      // Convert center to world coordinates
+      const worldPosBefore = screenToWorld(center.x, center.y)
+      
+      // Store for zoom calculation
+      if (canvasRef.current) {
+        const rect = canvasRef.current.getBoundingClientRect()
+        touchStateRef.current.lastCenter = {
+          x: center.x - rect.left,
+          y: center.y - rect.top
+        }
+      }
+    }
+  }
+
+  // Handle touch move
+  const handleTouchMove = (e: React.TouchEvent) => {
+    e.preventDefault()
+    if (!canvasRef.current || !flow) return
+
+    const touchArray = Array.from(e.touches)
+    
+    // Update touch positions
+    touchStateRef.current.touches.clear()
+    touchArray.forEach(touch => {
+      touchStateRef.current.touches.set(touch.identifier, { x: touch.clientX, y: touch.clientY })
+    })
+
+    // Single touch - pan
+    if (touchArray.length === 1 && touchStateRef.current.isPanning && !draggingNodeId && !draggingLogicId && !connectingFrom) {
+      const touch = touchArray[0]
+      setCanvasOffset({
+        x: touch.clientX - panStart.x,
+        y: touch.clientY - panStart.y
+      })
+    }
+    // Two touches - pinch zoom
+    else if (touchArray.length === 2) {
+      const distance = getTouchDistance(touchArray[0], touchArray[1])
+      const center = getTouchCenter(touchArray[0], touchArray[1])
+      
+      if (touchStateRef.current.lastDistance && touchStateRef.current.lastCenter) {
+        const scale = distance / touchStateRef.current.lastDistance
+        const newZoom = Math.min(Math.max(zoom * scale, 0.25), 2)
+        
+        if (canvasRef.current) {
+          const rect = canvasRef.current.getBoundingClientRect()
+          const centerX = center.x - rect.left
+          const centerY = center.y - rect.top
+          
+          const worldPosBefore = screenToWorld(center.x, center.y)
+          
+          setZoom(newZoom)
+          
+          const newOffsetX = centerX - worldPosBefore.x * newZoom
+          const newOffsetY = centerY - worldPosBefore.y * newZoom
+          
+          setCanvasOffset({ x: newOffsetX, y: newOffsetY })
+        }
+        
+        touchStateRef.current.lastDistance = distance
+      }
+    }
+  }
+
+  // Handle touch end
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const remainingTouches = Array.from(e.touches)
+    touchStateRef.current.touches.clear()
+    remainingTouches.forEach(touch => {
+      touchStateRef.current.touches.set(touch.identifier, { x: touch.clientX, y: touch.clientY })
+    })
+    
+    if (remainingTouches.length === 0) {
+      touchStateRef.current.isPanning = false
+      touchStateRef.current.lastDistance = null
+      touchStateRef.current.lastCenter = null
+    } else if (remainingTouches.length === 1) {
+      // Switched from pinch to single touch - reset pan start
+      const touch = remainingTouches[0]
+      const target = document.elementFromPoint(touch.clientX, touch.clientY)
+      if (target && !target.closest('.node-card, .logic-block, .connection-port')) {
+        touchStateRef.current.isPanning = true
+        setPanStart({ x: touch.clientX - canvasOffset.x, y: touch.clientY - canvasOffset.y })
+      }
+    }
+    
+    setIsPanning(false)
+  }
+
+  // Zoom control functions
+  const handleZoomIn = () => {
+    if (!canvasRef.current) return
+    const rect = canvasRef.current.getBoundingClientRect()
+    const centerX = rect.width / 2
+    const centerY = rect.height / 2
+    
+    const worldPosBefore = screenToWorld(rect.left + centerX, rect.top + centerY)
+    const newZoom = Math.min(zoom * 1.2, 2)
+    
+    setZoom(newZoom)
+    
+    const newOffsetX = centerX - worldPosBefore.x * newZoom
+    const newOffsetY = centerY - worldPosBefore.y * newZoom
+    
+    setCanvasOffset({ x: newOffsetX, y: newOffsetY })
+  }
+
+  const handleZoomOut = () => {
+    if (!canvasRef.current) return
+    const rect = canvasRef.current.getBoundingClientRect()
+    const centerX = rect.width / 2
+    const centerY = rect.height / 2
+    
+    const worldPosBefore = screenToWorld(rect.left + centerX, rect.top + centerY)
+    const newZoom = Math.max(zoom / 1.2, 0.25)
+    
+    setZoom(newZoom)
+    
+    const newOffsetX = centerX - worldPosBefore.x * newZoom
+    const newOffsetY = centerY - worldPosBefore.y * newZoom
+    
+    setCanvasOffset({ x: newOffsetX, y: newOffsetY })
+  }
+
+  const handleResetView = () => {
+    setZoom(1)
+    setCanvasOffset({ x: 0, y: 0 })
+    hasCenteredFlowRef.current = null
+    // Trigger re-center
+    if (flow) {
+      const flowId = flow.id
+      hasCenteredFlowRef.current = null
+      setTimeout(() => {
+        if (flow.id === flowId) {
+          hasCenteredFlowRef.current = null
+        }
+      }, 100)
+    }
+  }
+
+  const handleFitToScreen = () => {
+    if (!flow || !canvasRef.current) return
+    hasCenteredFlowRef.current = null
+    // Trigger re-center effect
+    setTimeout(() => {
+      if (flow && canvasRef.current) {
+        hasCenteredFlowRef.current = null
+      }
+    }, 100)
+  }
+
   const handleDeleteConnection = (e: React.MouseEvent, sourceId: string, targetId: string) => {
     e.stopPropagation()
     e.preventDefault()
@@ -1314,7 +1533,7 @@ const getIncomingColorForNode = (nodeId: string): string | null => {
 
   return (
     <>
-      <header className="bg-card px-4 py-3 flex items-center justify-between border-b border-border shadow-neumorphic-subtle">
+      <header className="bg-card px-2 sm:px-4 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 border-b border-border shadow-neumorphic-subtle">
         <div className="flex items-center gap-3">
           <input
             type="text"
@@ -1374,20 +1593,22 @@ const getIncomingColorForNode = (nodeId: string): string | null => {
             </button>
           </div>
         </div>
-        <div className="flex items-center gap-3" style={{ fontSize: '0.5625rem' }}>
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3" style={{ fontSize: isMobile ? '0.5rem' : '0.5625rem' }}>
+          <div className="flex items-center gap-1 sm:gap-2">
             {currentPlan === "free" ? (
-              <span className="text-muted-foreground">Free Plan • {planUsage.flows}/{planLimits.flows} flows • {planUsage.blocks}/{planLimits.blocks} blocks</span>
+              <span className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap">
+                {isMobile ? `${planUsage.flows}/${planLimits.flows}` : `Free Plan • ${planUsage.flows}/${planLimits.flows} flows • ${planUsage.blocks}/${planLimits.blocks} blocks`}
+              </span>
             ) : (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
                 <div className="flex items-center gap-1">
                   <Crown className="w-2.5 h-2.5 text-[#3b82f6]" />
-                  <span className="font-medium text-foreground">
-                    {currentPlan === "premium-monthly" ? "Premium Monthly" : "Premium Yearly"}
+                  <span className="font-medium text-foreground text-xs sm:text-sm whitespace-nowrap">
+                    {currentPlan === "premium-monthly" ? (isMobile ? "Premium M" : "Premium Monthly") : (isMobile ? "Premium Y" : "Premium Yearly")}
                   </span>
                 </div>
-                <span className="text-muted-foreground">
-                  {planUsage.flows}/{planLimits.flows} flows • {planUsage.blocks}/{planLimits.blocks} blocks
+                <span className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap">
+                  {planUsage.flows}/{planLimits.flows} {isMobile ? '' : 'flows'} • {planUsage.blocks}/{planLimits.blocks} {isMobile ? '' : 'blocks'}
                 </span>
               </div>
             )}
@@ -1416,16 +1637,16 @@ const getIncomingColorForNode = (nodeId: string): string | null => {
                 }
               }}
               disabled={!hasUnsavedChanges || isSaving}
-              className={`font-medium transition-all duration-300 flex items-center justify-center shadow-neumorphic-raised hover:shadow-neumorphic-pressed bg-primary text-primary-foreground ${
+              className={`font-medium transition-all duration-300 flex items-center justify-center shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed bg-primary text-primary-foreground touch-manipulation ${
                 hasUnsavedChanges && !isSaving
                   ? 'cursor-pointer'
                   : 'cursor-not-allowed opacity-50'
               }`}
               style={{
-                minWidth: '140px',
-                height: '32px',
-                padding: '0 12px',
-                fontSize: '0.827rem',
+                minWidth: isMobile ? '100px' : '140px',
+                minHeight: isMobile ? '44px' : '32px',
+                padding: isMobile ? '0 16px' : '0 12px',
+                fontSize: isMobile ? '0.75rem' : '0.827rem',
                 borderRadius: '10px'
               }}
             >
@@ -1451,7 +1672,7 @@ const getIncomingColorForNode = (nodeId: string): string | null => {
       <div className="flex flex-1 overflow-hidden">
         <div
           ref={canvasRef}
-          className={`flex-1 bg-background relative overflow-hidden ${
+          className={`flex-1 bg-background relative overflow-hidden touch-none ${
             isPanning ? 'cursor-grabbing' : draggingNodeId || draggingLogicId ? 'cursor-grabbing' : 'cursor-grab'
           }`}
           style={{
@@ -1464,7 +1685,43 @@ const getIncomingColorForNode = (nodeId: string): string | null => {
           onMouseUp={handleCanvasMouseUp}
           onMouseLeave={handleCanvasMouseUp}
           onWheel={handleWheel}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
         >
+          {/* Mobile Controls - Floating buttons */}
+          {isMobile && (
+            <div className="absolute bottom-4 right-4 z-50 flex flex-col gap-2">
+              <button
+                onClick={handleZoomIn}
+                className="w-12 h-12 rounded-full bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all flex items-center justify-center touch-manipulation"
+                aria-label="Zoom in"
+              >
+                <Plus className="w-5 h-5 text-foreground" />
+              </button>
+              <button
+                onClick={handleZoomOut}
+                className="w-12 h-12 rounded-full bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all flex items-center justify-center touch-manipulation"
+                aria-label="Zoom out"
+              >
+                <Minus className="w-5 h-5 text-foreground" />
+              </button>
+              <button
+                onClick={handleFitToScreen}
+                className="w-12 h-12 rounded-full bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all flex items-center justify-center touch-manipulation"
+                aria-label="Fit to screen"
+              >
+                <Eye className="w-5 h-5 text-foreground" />
+              </button>
+              <button
+                onClick={handleResetView}
+                className="w-12 h-12 rounded-full bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all flex items-center justify-center touch-manipulation"
+                aria-label="Reset view"
+              >
+                <ArrowUpDown className="w-5 h-5 text-foreground" />
+              </button>
+            </div>
+          )}
           <svg
             className="absolute inset-0 pointer-events-none"
             style={{

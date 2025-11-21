@@ -6,6 +6,15 @@
   .text-balance {
     text-wrap: balance;
   }
+  
+  .touch-manipulation {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  .touch-none {
+    touch-action: none;
+  }
 }
 
 @layer base {

@@ -40,16 +40,39 @@ export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, isCol
     setTimeout(() => setShowNewIndicatorPopup(false), 2000)
   }
 
+  const [isMobile, setIsMobile] = useState(false)
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window || navigator.maxTouchPoints > 0)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+  
   return (
-    <div
-      className={cn(
-        "relative flex h-screen flex-col bg-neutral-50 dark:bg-neutral-900 transition-all duration-300 ease-in-out border-r border-neutral-200 dark:border-neutral-800",
-        isCollapsed ? "w-16" : "w-80"
+    <>
+      {/* Mobile backdrop */}
+      {isMobile && !isCollapsed && (
+        <div
+          className="fixed inset-0 bg-black/50 z-20 transition-opacity"
+          onClick={onToggleCollapse}
+          aria-hidden="true"
+        />
       )}
-    >
+      <div
+        className={cn(
+          "relative flex h-screen flex-col bg-neutral-50 dark:bg-neutral-900 transition-all duration-300 ease-in-out border-r border-neutral-200 dark:border-neutral-800 z-30",
+          isMobile 
+            ? (isCollapsed ? "w-0 overflow-hidden" : "w-full sm:w-80 absolute inset-y-0 left-0 shadow-lg")
+            : (isCollapsed ? "w-16" : "w-80")
+        )}
+      >
       <button
         onClick={onToggleCollapse}
-        className="absolute top-1/2 -translate-y-1/2 -right-3 z-20 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/70 backdrop-blur-sm p-1.5 shadow-[3px_3px_6px_rgba(0,0,0,0.08),-3px_-3px_6px_rgba(255,255,255,0.9)] dark:shadow-[3px_3px_6px_rgba(0,0,0,0.35),-3px_-3px_6px_rgba(255,255,255,0.02)] transition-all hover:bg-neutral-50 hover:dark:bg-neutral-900"
+        className="absolute top-1/2 -translate-y-1/2 -right-3 z-20 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/70 backdrop-blur-sm p-1.5 sm:p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center touch-manipulation shadow-[3px_3px_6px_rgba(0,0,0,0.08),-3px_-3px_6px_rgba(255,255,255,0.9)] dark:shadow-[3px_3px_6px_rgba(0,0,0,0.35),-3px_-3px_6px_rgba(255,255,255,0.02)] transition-all hover:bg-neutral-50 hover:dark:bg-neutral-900 active:shadow-neumorphic-pressed"
+        aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
         {isCollapsed ? (
           <ChevronRight className="h-4 w-4 text-neutral-600 dark:text-neutral-400" />
@@ -70,34 +93,36 @@ export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, isCol
           <>
             <button 
               onClick={handleNewFlow}
-              className="w-full rounded-xl p-2.5 shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all duration-300 bg-primary text-primary-foreground"
+              className="w-full rounded-xl p-3 sm:p-2.5 min-h-[44px] shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed transition-all duration-300 bg-primary text-primary-foreground touch-manipulation"
               style={{ marginTop: '15px' }}
+              aria-label="Create new flow"
             >
-              <Plus className="h-4 w-4 mx-auto" />
+              <Plus className="h-5 w-5 sm:h-4 sm:w-4 mx-auto" />
             </button>
             <button 
               onClick={onGoLive}
-              className="w-full rounded-xl p-2.5 shadow-[6px_6px_12px_rgba(0,0,0,0.2),-2px_-2px_6px_rgba(255,255,255,0.05)] dark:shadow-[6px_6px_12px_rgba(0,0,0,0.4),-2px_-2px_6px_rgba(255,255,255,0.1)] transition-all hover:shadow-[3px_3px_6px_rgba(0,0,0,0.15),-1px_-1px_3px_rgba(255,255,255,0.03)] dark:hover:shadow-[3px_3px_6px_rgba(0,0,0,0.3),-1px_-1px_3px_rgba(255,255,255,0.05)] group relative"
+              className="w-full rounded-xl p-3 sm:p-2.5 min-h-[44px] shadow-[6px_6px_12px_rgba(0,0,0,0.2),-2px_-2px_6px_rgba(255,255,255,0.05)] dark:shadow-[6px_6px_12px_rgba(0,0,0,0.4),-2px_-2px_6px_rgba(255,255,255,0.1)] transition-all hover:shadow-[3px_3px_6px_rgba(0,0,0,0.15),-1px_-1px_3px_rgba(255,255,255,0.03)] dark:hover:shadow-[3px_3px_6px_rgba(0,0,0,0.3),-1px_-1px_3px_rgba(255,255,255,0.05)] active:shadow-neumorphic-pressed touch-manipulation group relative"
               style={{ 
                 backgroundColor: isLive ? '#22c55e' : 'white',
                 color: isLive ? 'white' : '#6b7280'
               }}
               title="Launch the onboarding flow to their community"
+              aria-label={isLive ? "Stop flow" : "Launch flow"}
             >
-              <Play className={`h-4 w-4 mx-auto ${isLive ? 'text-white' : 'text-neutral-600 dark:text-neutral-400'}`} />
+              <Play className={`h-5 w-5 sm:h-4 sm:w-4 mx-auto ${isLive ? 'text-white' : 'text-neutral-600 dark:text-neutral-400'}`} />
             </button>
           </>
         ) : (
           <>
             <button 
               onClick={handleNewFlow}
-              className="w-full rounded-xl py-2.5 text-sm font-semibold shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all duration-300 bg-primary text-primary-foreground"
+              className="w-full rounded-xl py-3 sm:py-2.5 text-sm font-semibold min-h-[44px] shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed transition-all duration-300 bg-primary text-primary-foreground touch-manipulation"
             >
               New Flow
             </button>
             <button 
               onClick={onGoLive}
-              className="w-full rounded-xl py-2.5 text-sm font-semibold shadow-[6px_6px_12px_rgba(0,0,0,0.25),-2px_-2px_6px_rgba(255,255,255,0.1)] dark:shadow-[6px_6px_12px_rgba(0,0,0,0.5),-2px_-2px_8px_rgba(255,255,255,0.15)] transition-all hover:shadow-[3px_3px_6px_rgba(0,0,0,0.2),-1px_-1px_3px_rgba(255,255,255,0.05)] dark:hover:shadow-[3px_3px_6px_rgba(0,0,0,0.4),-1px_-1px_3px_rgba(255,255,255,0.1)] flex items-center justify-center gap-2 group relative"
+              className="w-full rounded-xl py-3 sm:py-2.5 text-sm font-semibold min-h-[44px] shadow-[6px_6px_12px_rgba(0,0,0,0.25),-2px_-2px_6px_rgba(255,255,255,0.1)] dark:shadow-[6px_6px_12px_rgba(0,0,0,0.5),-2px_-2px_8px_rgba(255,255,255,0.15)] transition-all hover:shadow-[3px_3px_6px_rgba(0,0,0,0.2),-1px_-1px_3px_rgba(255,255,255,0.05)] dark:hover:shadow-[3px_3px_6px_rgba(0,0,0,0.4),-1px_-1px_3px_rgba(255,255,255,0.1)] active:shadow-neumorphic-pressed touch-manipulation flex items-center justify-center gap-2 group relative"
               style={{ 
                 backgroundColor: isLive ? '#22c55e' : 'white',
                 color: isLive ? 'white' : '#6b7280'
