@@ -33,7 +33,6 @@ export type Flow = {
   status: "Live" | "Draft" | "Archived"
   nodes: FlowNode[]
   logicBlocks?: LogicBlock[]
-  iconUrl?: string
 }
 
 type FlowBuilderProps = {
