@@ -123,8 +123,8 @@ export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, isCol
             )}>
               <FileText className="h-4 w-4 text-neutral-700 dark:text-neutral-300" />
             </div>
-            {/* Tooltip on hover */}
-            <div className="absolute left-full ml-2 px-2 py-1 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+            {/* Tooltip on hover - opposite theme */}
+            <div className="absolute left-full ml-2 px-2 py-1 bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
               {flow.title}
             </div>
           </button>

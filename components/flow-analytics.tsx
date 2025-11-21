@@ -238,7 +238,7 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
                 <PieChart className="w-4 h-4 text-muted-foreground" />
                 <h3 className="text-xs font-semibold text-foreground">Completion Overview</h3>
               </div>
-              <div className="flex gap-4 items-center mt-[-40px]">
+              <div className="flex gap-4 items-center mt-[-60px]">
                 <div className="flex-shrink-0 flex flex-col justify-center gap-2">
                   {completionChartData.map((entry, index) => (
                     <div key={index} className="flex items-center gap-2">
@@ -282,11 +282,29 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
               const hasPrevious = nodeVisitPage > 0
               
               return (
-                <div className="bg-card rounded-lg p-4 shadow-neumorphic-raised">
+                <div className="bg-card rounded-lg p-4 shadow-neumorphic-raised relative">
                   <div className="flex items-center gap-2 mb-3">
                     <Activity className="w-4 h-4 text-muted-foreground" />
                     <h3 className="text-xs font-semibold text-foreground">Top Visited Nodes</h3>
                   </div>
+                  {/* Previous button - left extremity */}
+                  {hasPrevious && (
+                    <button
+                      onClick={() => setNodeVisitPage(prev => Math.max(0, prev - 1))}
+                      className="absolute left-4 top-4 text-[10px] text-neutral-900 dark:text-neutral-100 underline hover:opacity-80 transition-opacity cursor-pointer z-10"
+                    >
+                      Previous
+                    </button>
+                  )}
+                  {/* Next button - right extremity */}
+                  {hasMore && (
+                    <button
+                      onClick={() => setNodeVisitPage(prev => prev + 1)}
+                      className="absolute right-4 top-4 text-[10px] text-neutral-900 dark:text-neutral-100 underline hover:opacity-80 transition-opacity cursor-pointer z-10"
+                    >
+                      Next
+                    </button>
+                  )}
                   <div className="space-y-2">
                     {displayedNodes.map((node, displayIndex) => {
                       const actualIndex = startIndex + displayIndex
@@ -321,24 +339,6 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
                       )
                     })}
                   </div>
-                  {(hasMore || hasPrevious) && (
-                    <div className="flex justify-center mt-3">
-                      <button
-                        onClick={() => setNodeVisitPage(prev => Math.max(0, prev - 1))}
-                        disabled={!hasPrevious}
-                        className="px-3 py-1.5 text-[10px] rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-primary/20 mr-2"
-                      >
-                        Previous
-                      </button>
-                      <button
-                        onClick={() => setNodeVisitPage(prev => prev + 1)}
-                        disabled={!hasMore}
-                        className="px-3 py-1.5 text-[10px] rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-primary/20"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  )}
                 </div>
               )
             })()}

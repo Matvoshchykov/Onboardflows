@@ -1555,14 +1555,14 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
           <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 z-20">
             <button
               onClick={() => setViewMode("create")}
-              className="text-[11px] text-muted-foreground hover:text-foreground transition-colors relative pb-0.5"
+              className="text-[12px] text-muted-foreground hover:text-foreground transition-colors relative pb-0.5"
             >
               Flow Creation
               <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-muted-foreground transition-all" style={{ width: '0' }} />
             </button>
             <button
               onClick={() => setViewMode("analytics")}
-              className="text-[11px] text-foreground relative pb-0.5"
+              className="text-[12px] text-foreground relative pb-0.5"
             >
               Data Analytics
               <span className="absolute bottom-0 left-0 w-full h-[1px] bg-muted-foreground" />
@@ -1594,14 +1594,14 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
         <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 z-20">
           <button
             onClick={() => setViewMode("create")}
-            className="text-[11px] text-foreground relative pb-0.5"
+            className="text-[12px] text-foreground relative pb-0.5"
           >
             Flow Creation
             <span className="absolute bottom-0 left-0 w-full h-[1px] bg-muted-foreground" />
           </button>
           <button
             onClick={() => setViewMode("analytics")}
-            className="text-[11px] text-muted-foreground hover:text-foreground transition-colors relative pb-0.5"
+            className="text-[12px] text-muted-foreground hover:text-foreground transition-colors relative pb-0.5"
           >
             Data Analytics
             <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-muted-foreground transition-all" style={{ width: '0' }} />
