@@ -238,8 +238,8 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
                 <PieChart className="w-4 h-4 text-muted-foreground" />
                 <h3 className="text-xs font-semibold text-foreground">Completion Overview</h3>
               </div>
-              <div className="flex flex-col items-center mt-[-60px]">
-                <div className="flex-shrink-0 flex flex-col justify-center gap-2 mb-4">
+              <div className="flex gap-4 items-center mt-[-60px]">
+                <div className="flex-shrink-0 flex flex-col justify-center gap-2">
                   {completionChartData.map((entry, index) => (
                     <div key={index} className="flex items-center gap-2">
                       <div 
@@ -252,7 +252,7 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
                     </div>
                   ))}
                 </div>
-                <div className="w-full flex justify-center">
+                <div className="flex-1 flex justify-center">
                   <ResponsiveContainer width="100%" height={180}>
                     <RechartsPieChart>
                       <Pie

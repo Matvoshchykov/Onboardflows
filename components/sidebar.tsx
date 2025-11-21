@@ -73,47 +73,29 @@ export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, isCol
       <div className="px-3 pb-3 space-y-3" style={{ marginTop: '10px' }}>
         <button 
           onClick={handleNewFlow}
-          className="w-full rounded-lg p-3 min-h-[44px] shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed transition-all duration-300 bg-primary text-primary-foreground touch-manipulation relative overflow-hidden group flex items-center justify-center"
-          style={{ 
-            borderRadius: '8px',
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.2), 0 4px 8px rgba(0,0,0,0.1)',
-            border: '1px solid rgba(255,255,255,0.1)'
-          }}
+          className="w-full rounded-xl p-3 min-h-[44px] shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed transition-all duration-300 bg-primary text-primary-foreground touch-manipulation relative overflow-hidden group flex items-center justify-center"
           title="Create new flow"
         >
-          <Plus className="h-5 w-5 relative z-10 mr-2" style={{ 
+          <Plus className="h-5 w-5 relative z-10" style={{ 
             filter: 'drop-shadow(0 1px 2px rgba(255,255,255,0.5))'
           }} />
-          <span className="text-xs font-medium relative z-10">New Flow</span>
-          <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" style={{
-            borderRadius: '8px'
-          }} />
-          <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 opacity-0 group-hover:opacity-100 transition-opacity" style={{
-            borderRadius: '8px'
-          }} />
+          <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
         <button 
           onClick={onGoLive}
-          className="w-full rounded-lg p-3 min-h-[44px] shadow-[6px_6px_12px_rgba(0,0,0,0.25),-2px_-2px_6px_rgba(255,255,255,0.1)] dark:shadow-[6px_6px_12px_rgba(0,0,0,0.5),-2px_-2px_8px_rgba(255,255,255,0.15)] transition-all hover:shadow-[3px_3px_6px_rgba(0,0,0,0.2),-1px_-1px_3px_rgba(255,255,255,0.05)] dark:hover:shadow-[3px_3px_6px_rgba(0,0,0,0.4),-1px_-1px_3px_rgba(255,255,255,0.1)] active:shadow-neumorphic-pressed touch-manipulation flex items-center justify-center group relative overflow-hidden"
+          className="w-full rounded-xl p-3 min-h-[44px] shadow-[6px_6px_12px_rgba(0,0,0,0.25),-2px_-2px_6px_rgba(255,255,255,0.1)] dark:shadow-[6px_6px_12px_rgba(0,0,0,0.5),-2px_-2px_8px_rgba(255,255,255,0.15)] transition-all hover:shadow-[3px_3px_6px_rgba(0,0,0,0.2),-1px_-1px_3px_rgba(255,255,255,0.05)] dark:hover:shadow-[3px_3px_6px_rgba(0,0,0,0.4),-1px_-1px_3px_rgba(255,255,255,0.1)] active:shadow-neumorphic-pressed touch-manipulation flex items-center justify-center group relative overflow-hidden"
           style={{ 
             backgroundColor: isLive ? '#22c55e' : 'white',
-            color: isLive ? 'white' : '#6b7280',
-            borderRadius: '8px',
-            boxShadow: isLive ? 'inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 8px rgba(0,0,0,0.15)' : 'inset 0 1px 0 rgba(255,255,255,0.2), 0 4px 8px rgba(0,0,0,0.1)',
-            border: isLive ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(0,0,0,0.05)'
+            color: isLive ? 'white' : '#6b7280'
           }}
           title={isLive ? "Flow is Live" : "Launch the onboarding flow"}
         >
-          <Play className="h-5 w-5 relative z-10 mr-2" style={{ 
+          <Play className="h-5 w-5 relative z-10" style={{ 
             filter: isLive ? 'drop-shadow(0 1px 2px rgba(255,255,255,0.5))' : 'none'
           }} />
-          <span className="text-xs font-medium relative z-10">{isLive ? 'Live' : 'Go Live'}</span>
-          <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" style={{
-            borderRadius: '8px'
-          }} />
-          <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 opacity-0 group-hover:opacity-100 transition-opacity" style={{
-            borderRadius: '8px'
-          }} />
+          <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
       </div>
 
