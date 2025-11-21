@@ -29,6 +29,7 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [userNicknames, setUserNicknames] = useState<Record<string, string>>({})
   const [isMobile, setIsMobile] = useState(false)
+  const [nodeVisitPage, setNodeVisitPage] = useState(0)
 
   useEffect(() => {
     const checkMobile = () => {
@@ -237,7 +238,7 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
                 <PieChart className="w-4 h-4 text-muted-foreground" />
                 <h3 className="text-xs font-semibold text-foreground">Completion Overview</h3>
               </div>
-              <div className="flex gap-4 items-center mt-[10px]">
+              <div className="flex gap-4 items-center mt-[-40px]">
                 <div className="flex-shrink-0 flex flex-col justify-center gap-2">
                   {completionChartData.map((entry, index) => (
                     <div key={index} className="flex items-center gap-2">
@@ -272,47 +273,75 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
             </div>
 
             {/* Top Visited Nodes - List View */}
-            {nodeVisitChartData.length > 0 && (
-              <div className="bg-card rounded-lg p-4 shadow-neumorphic-raised">
-                <div className="flex items-center gap-2 mb-3">
-                  <Activity className="w-4 h-4 text-muted-foreground" />
-                  <h3 className="text-xs font-semibold text-foreground">Top Visited Nodes</h3>
-                </div>
-                <div className="space-y-2">
-                  {nodeVisitChartData.map((node, index) => {
-                    const percentage = analytics.completedSessions > 0 
-                      ? Math.round((node.visits / analytics.completedSessions) * 100)
-                      : 0
-                    const colorIndex = index % CHART_COLORS.length
-                    return (
-                      <div key={index} className="flex items-center gap-2">
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-medium text-foreground truncate" title={node.name.length > 30 ? node.name : undefined}>
-                              {node.name.length > 30 ? node.name.slice(0, 30) + '...' : node.name}
-                            </span>
-                            <span className="text-[10px] font-semibold text-muted-foreground ml-2">{node.visits}</span>
-                          </div>
-                          <div className="w-full bg-muted/30 rounded-full h-1.5 overflow-hidden">
-                            <div 
-                              className="h-full rounded-full transition-all"
-                              style={{ 
-                                width: `${percentage}%`,
-                                backgroundColor: CHART_COLORS[colorIndex]
-                              }}
-                            />
-                          </div>
-                          <div className="flex items-center justify-between mt-0.5">
-                            <span className="text-[9px] text-muted-foreground">{formatDuration(node.avgTime)} avg</span>
-                            <span className="text-[9px] text-muted-foreground">{percentage}%</span>
+            {nodeVisitChartData.length > 0 && (() => {
+              const itemsPerPage = 4
+              const startIndex = nodeVisitPage * itemsPerPage
+              const endIndex = startIndex + itemsPerPage
+              const displayedNodes = nodeVisitChartData.slice(startIndex, endIndex)
+              const hasMore = endIndex < nodeVisitChartData.length
+              const hasPrevious = nodeVisitPage > 0
+              
+              return (
+                <div className="bg-card rounded-lg p-4 shadow-neumorphic-raised">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Activity className="w-4 h-4 text-muted-foreground" />
+                    <h3 className="text-xs font-semibold text-foreground">Top Visited Nodes</h3>
+                  </div>
+                  <div className="space-y-2">
+                    {displayedNodes.map((node, displayIndex) => {
+                      const actualIndex = startIndex + displayIndex
+                      const percentage = analytics.completedSessions > 0 
+                        ? Math.round((node.visits / analytics.completedSessions) * 100)
+                        : 0
+                      const colorIndex = actualIndex % CHART_COLORS.length
+                      return (
+                        <div key={actualIndex} className="flex items-center gap-2">
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-medium text-foreground truncate" title={node.name.length > 30 ? node.name : undefined}>
+                                {node.name.length > 30 ? node.name.slice(0, 30) + '...' : node.name}
+                              </span>
+                              <span className="text-[10px] font-semibold text-muted-foreground ml-2">{node.visits}</span>
+                            </div>
+                            <div className="w-full bg-muted/30 rounded-full h-1.5 overflow-hidden">
+                              <div 
+                                className="h-full rounded-full transition-all"
+                                style={{ 
+                                  width: `${percentage}%`,
+                                  backgroundColor: CHART_COLORS[colorIndex]
+                                }}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between mt-0.5">
+                              <span className="text-[9px] text-muted-foreground">{formatDuration(node.avgTime)} avg</span>
+                              <span className="text-[9px] text-muted-foreground">{percentage}%</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
+                  {(hasMore || hasPrevious) && (
+                    <div className="flex justify-center mt-3">
+                      <button
+                        onClick={() => setNodeVisitPage(prev => Math.max(0, prev - 1))}
+                        disabled={!hasPrevious}
+                        className="px-3 py-1.5 text-[10px] rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-primary/20 mr-2"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        onClick={() => setNodeVisitPage(prev => prev + 1)}
+                        disabled={!hasMore}
+                        className="px-3 py-1.5 text-[10px] rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-primary/20"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              )
+            })()}
           </div>
         )}
 
