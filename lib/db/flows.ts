@@ -32,6 +32,7 @@ export interface FlowRecord {
   title: string
   active: boolean
   flow_data: FlowData
+  icon_url?: string | null
   created_at: string
   updated_at: string
 }
@@ -174,7 +175,8 @@ export async function loadFlow(flowId: string): Promise<Flow | null> {
       dateCreated: new Date(flowRecord.created_at).toISOString().split('T')[0],
       status: flowRecord.active ? 'Live' : 'Draft',
       nodes: flowRecord.flow_data.nodes || [],
-      logicBlocks: flowRecord.flow_data.logicBlocks || []
+      logicBlocks: flowRecord.flow_data.logicBlocks || [],
+      iconUrl: flowRecord.icon_url || undefined
     }
   } catch (error) {
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
@@ -205,12 +207,12 @@ export async function loadAllFlows(): Promise<Flow[]> {
   }
 
   try {
-    // Only select minimal fields needed for list view - this is MUCH faster
-    const { data, error } = await supabase
-      .from('flows')
-      .select('id, title, active, created_at, updated_at')
-      .order('updated_at', { ascending: false })
-      .limit(50) // Reduced from 100
+      // Only select minimal fields needed for list view - this is MUCH faster
+      const { data, error } = await supabase
+        .from('flows')
+        .select('id, title, active, icon_url, created_at, updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(50) // Reduced from 100
 
     if (error) {
       if (error.code === 'PGRST205') {
@@ -230,7 +232,8 @@ export async function loadAllFlows(): Promise<Flow[]> {
       dateCreated: new Date(flowRecord.created_at).toISOString().split('T')[0],
       status: flowRecord.active ? 'Live' : 'Draft',
       nodes: [], // Will be loaded when flow is selected
-      logicBlocks: [] // Will be loaded when flow is selected
+      logicBlocks: [], // Will be loaded when flow is selected
+      iconUrl: flowRecord.icon_url || undefined
     }))
 
     // Update cache
@@ -306,7 +309,8 @@ export async function createFlow(title: string): Promise<Flow | null> {
       dateCreated: new Date(flowRecord.created_at).toISOString().split('T')[0],
       status: 'Draft',
       nodes: flowRecord.flow_data.nodes || [],
-      logicBlocks: flowRecord.flow_data.logicBlocks || []
+      logicBlocks: flowRecord.flow_data.logicBlocks || [],
+      iconUrl: flowRecord.icon_url || undefined
     }
   } catch (error) {
     console.error('Error creating flow:', error)

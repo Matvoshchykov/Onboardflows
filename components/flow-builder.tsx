@@ -33,6 +33,7 @@ export type Flow = {
   status: "Live" | "Draft" | "Archived"
   nodes: FlowNode[]
   logicBlocks?: LogicBlock[]
+  iconUrl?: string
 }
 
 type FlowBuilderProps = {
@@ -241,9 +242,9 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
       {showChatModal && (
         <ChatModal 
           onClose={() => setShowChatModal(false)}
-          onCreateFlow={async (goal: string) => {
+          onCreateFlow={async (name: string) => {
             try {
-              const newFlow = await createFlow(goal)
+              const newFlow = await createFlow(name)
               if (newFlow) {
                 setFlows([...flows, newFlow])
                 setSelectedFlow(newFlow)

@@ -467,7 +467,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
       setLogicBlockPortPositions({})
       return
     }
-
+    
     const updates: Record<string, { input?: PortPoint; outputs: Array<PortPoint | undefined> }> = {}
 
     logicBlocks.forEach((block) => {
@@ -481,7 +481,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
       if (inputElement) {
         const rect = inputElement.getBoundingClientRect()
         inputPoint = screenToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2)
-      } else {
+                } else {
         const logicHeight = logicBlockSizes[block.id] ?? 160
         inputPoint = {
           x: block.position.x,
@@ -1456,13 +1456,13 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
       newConnections[index] = ""
       console.log('[DELETE] Logic block', sourceId, 'connections:', sourceLogic.connections, '→', newConnections)
     
-      const updatedLogicBlocks = logicBlocks.map(block => {
-        if (block.id === sourceId) {
+    const updatedLogicBlocks = logicBlocks.map(block => {
+      if (block.id === sourceId) {
           return { ...block, connections: newConnections }
-        }
-        return block
-      })
-      handleLogicBlocksUpdate(updatedLogicBlocks)
+      }
+      return block
+    })
+    handleLogicBlocksUpdate(updatedLogicBlocks)
       return
     }
     
@@ -1510,7 +1510,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
   }
 
   // Get the color of the incoming connection (if any) for a given flow node
-const getIncomingColorForNode = (nodeId: string): string | null => {
+  const getIncomingColorForNode = (nodeId: string): string | null => {
     // From another flow node → always green
     const hasFlowIncoming = flow.nodes.some(n => n.connections.includes(nodeId))
     if (hasFlowIncoming) return "#10b981"
@@ -1535,9 +1535,9 @@ const getIncomingColorForNode = (nodeId: string): string | null => {
 
   // Show analytics view if in analytics mode
   if (viewMode === "analytics" && flow) {
-    return (
-      <>
-        <header className="bg-card px-2 sm:px-4 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 border-b border-border shadow-neumorphic-subtle">
+  return (
+    <>
+        <header className="bg-card px-2 sm:px-4 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 border-b border-border shadow-neumorphic-subtle relative">
           <div className="flex items-center gap-3">
             <input
               type="text"
@@ -1551,24 +1551,22 @@ const getIncomingColorForNode = (nodeId: string): string | null => {
               className="text-lg font-bold bg-card shadow-neumorphic-inset rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 text-foreground placeholder:text-muted-foreground"
             />
           </div>
-          <div className="flex items-center gap-4">
-            {/* Mode Toggle Buttons */}
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => setViewMode("create")}
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors relative pb-1"
-              >
-                Flow Creation
-                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-foreground transition-all" style={{ width: '0' }} />
-              </button>
-              <button
-                onClick={() => setViewMode("analytics")}
-                className="text-sm text-foreground font-medium relative pb-1"
-              >
-                Data Analytics
-                <span className="absolute bottom-0 left-0 w-full h-0.5 bg-foreground" />
-              </button>
-            </div>
+          {/* Mode Toggle Buttons - Top Center */}
+          <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 z-20">
+            <button
+              onClick={() => setViewMode("create")}
+              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors relative pb-0.5"
+            >
+              Flow Creation
+              <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-muted-foreground transition-all" style={{ width: '0' }} />
+            </button>
+            <button
+              onClick={() => setViewMode("analytics")}
+              className="text-[10px] text-foreground relative pb-0.5"
+            >
+              Data Analytics
+              <span className="absolute bottom-0 left-0 w-full h-[1px] bg-muted-foreground" />
+            </button>
           </div>
         </header>
         <FlowAnalytics flow={flow} />
@@ -1578,7 +1576,7 @@ const getIncomingColorForNode = (nodeId: string): string | null => {
 
   return (
     <>
-      <header className="bg-card px-2 sm:px-4 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 border-b border-border shadow-neumorphic-subtle">
+        <header className="bg-card px-2 sm:px-4 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 border-b border-border shadow-neumorphic-subtle relative">
         <div className="flex items-center gap-3">
           <input
             type="text"
@@ -1591,93 +1589,49 @@ const getIncomingColorForNode = (nodeId: string): string | null => {
             }}
             className="text-lg font-bold bg-card shadow-neumorphic-inset rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 text-foreground placeholder:text-muted-foreground"
           />
-          <div className="relative group">
-            <button 
-              onClick={() => setShowPlanModal(true)}
-              className="bg-[#3b82f6] shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all duration-300 flex items-center justify-center overflow-hidden group"
-              style={{ 
-                backgroundColor: '#3b82f6',
-                width: '27.2px',
-                height: '27.2px',
-                borderRadius: '50%'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.width = '110px'
-                e.currentTarget.style.borderRadius = '14px'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.width = '27.2px'
-                e.currentTarget.style.borderRadius = '50%'
-              }}
-            >
-              {/* Crown when NOT hovered - centered in circle */}
-              <Crown 
-                className="text-white transition-all duration-300 flex-shrink-0 group-hover:opacity-0 group-hover:scale-0 absolute" 
-                style={{ 
-                  width: '13.6px',
-                  height: '13.6px',
-                  left: '50%',
-                  top: '50%',
-                  transform: 'translateX(-50%) translateY(-50%)',
-                  opacity: 1,
-                  transitionDelay: '0ms'
-                }}
-              />
-              {/* Upgrade text and crown when hovered - centered and well-sized */}
-              <div className="flex items-center justify-center gap-1.5 opacity-0 scale-0 group-hover:opacity-100 group-hover:scale-100 transition-all duration-300" style={{
-                transitionDelay: '100ms'
-              }}>
-                <Crown className="text-white flex-shrink-0" style={{ 
-                  width: '14px',
-                  height: '14px'
-                }} />
-                <span className="text-white text-sm font-medium whitespace-nowrap">
-                  Upgrade
-                </span>
-              </div>
-            </button>
-          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3" style={{ fontSize: isMobile ? '0.5rem' : '0.5625rem' }}>
-          {/* Mode Toggle Buttons */}
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setViewMode("create")}
-              className="text-sm text-foreground font-medium relative pb-1"
-            >
-              Flow Creation
-              <span className="absolute bottom-0 left-0 w-full h-0.5 bg-foreground" />
-            </button>
-            <button
-              onClick={() => setViewMode("analytics")}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors relative pb-1"
-            >
-              Data Analytics
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-foreground transition-all" style={{ width: '0' }} />
-            </button>
-          </div>
+        {/* Mode Toggle Buttons - Top Center */}
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 z-20">
+          <button
+            onClick={() => setViewMode("create")}
+            className="text-[10px] text-foreground relative pb-0.5"
+          >
+            Flow Creation
+            <span className="absolute bottom-0 left-0 w-full h-[1px] bg-muted-foreground" />
+          </button>
+          <button
+            onClick={() => setViewMode("analytics")}
+            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors relative pb-0.5"
+          >
+            Data Analytics
+            <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-muted-foreground transition-all" style={{ width: '0' }} />
+          </button>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3" style={{ fontSize: isMobile ? '0.5rem' : '0.5625rem' }}>
           <div className="flex items-center gap-1 sm:gap-2">
-            {currentPlan === "free" ? (
+          {currentPlan === "free" ? (
               <span className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap">
                 {isMobile ? `${planUsage.flows}/${planLimits.flows}` : `Free Plan • ${planUsage.flows}/${planLimits.flows} flows • ${planUsage.blocks}/${planLimits.blocks} blocks`}
               </span>
-            ) : (
+          ) : (
               <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
-                <div className="flex items-center gap-1">
-                  <Crown className="w-2.5 h-2.5 text-[#3b82f6]" />
+              <div className="flex items-center gap-1">
+                <Crown className="w-2.5 h-2.5 text-[#3b82f6]" />
                   <span className="font-medium text-foreground text-xs sm:text-sm whitespace-nowrap">
                     {currentPlan === "premium-monthly" ? (isMobile ? "Premium M" : "Premium Monthly") : (isMobile ? "Premium Y" : "Premium Yearly")}
-                  </span>
-                </div>
-                <span className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap">
-                  {planUsage.flows}/{planLimits.flows} {isMobile ? '' : 'flows'} • {planUsage.blocks}/{planLimits.blocks} {isMobile ? '' : 'blocks'}
                 </span>
               </div>
+                <span className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap">
+                  {planUsage.flows}/{planLimits.flows} {isMobile ? '' : 'flows'} • {planUsage.blocks}/{planLimits.blocks} {isMobile ? '' : 'blocks'}
+              </span>
+            </div>
             )}
             <span className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap">
               • {accessLevel === "owner" ? "Owner" : "Customer"}
             </span>
           </div>
+        </div>
           {/* Save Changes Button - Moved to header */}
           {onSaveToDatabase && flow && (
             <button
@@ -1737,7 +1691,7 @@ const getIncomingColorForNode = (nodeId: string): string | null => {
       <div className="flex flex-1 overflow-hidden">
         <div
           ref={canvasRef}
-          className={`flex-1 bg-background relative overflow-hidden touch-none ${
+            className={`flex-1 bg-background relative overflow-hidden touch-none ${
             isPanning ? 'cursor-grabbing' : draggingNodeId || draggingLogicId ? 'cursor-grabbing' : 'cursor-grab'
           }`}
           style={{
@@ -1750,10 +1704,10 @@ const getIncomingColorForNode = (nodeId: string): string | null => {
           onMouseUp={handleCanvasMouseUp}
           onMouseLeave={handleCanvasMouseUp}
           onWheel={handleWheel}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-        >
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
           {/* Mobile Controls - Floating buttons */}
           {isMobile && (
             <div className="absolute bottom-4 right-4 z-50 flex flex-col gap-2">

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ChevronLeft, ChevronRight, Plus, Folder, FileText, TrendingUp, Moon, Sun, ShoppingBag, Play } from 'lucide-react'
+import { Plus, FileText, Moon, Sun, Play } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { useTheme } from "./theme-provider"
 import type { Flow } from "./flow-builder"
@@ -18,6 +18,7 @@ type SidebarProps = {
 }
 
 export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, isCollapsed, onToggleCollapse, onGoLive, isLive = false }: SidebarProps) {
+  // Sidebar is always expanded now (no collapse functionality)
   const [expandedFolders, setExpandedFolders] = useState<string[]>(["indicators"])
   const [showNewIndicatorPopup, setShowNewIndicatorPopup] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -53,33 +54,14 @@ export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, isCol
   
   return (
     <>
-      {/* Mobile backdrop */}
-      {isMobile && !isCollapsed && (
-        <div
-          className="fixed inset-0 bg-black/50 z-20 transition-opacity"
-          onClick={onToggleCollapse}
-          aria-hidden="true"
-        />
-      )}
       <div
         className={cn(
           "relative flex h-screen flex-col bg-neutral-50 dark:bg-neutral-900 transition-all duration-300 ease-in-out border-r border-neutral-200 dark:border-neutral-800 z-30",
           isMobile 
-            ? (isCollapsed ? "w-0 overflow-hidden" : "w-full sm:w-80 absolute inset-y-0 left-0 shadow-lg")
-            : (isCollapsed ? "w-16" : "w-80")
+            ? "w-16 absolute inset-y-0 left-0 shadow-lg"
+            : "w-16"
         )}
       >
-      <button
-        onClick={onToggleCollapse}
-        className="absolute top-1/2 -translate-y-1/2 -right-3 z-20 rounded-lg bg-neutral-50/70 dark:bg-neutral-900/70 backdrop-blur-sm p-1.5 sm:p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center touch-manipulation shadow-[3px_3px_6px_rgba(0,0,0,0.08),-3px_-3px_6px_rgba(255,255,255,0.9)] dark:shadow-[3px_3px_6px_rgba(0,0,0,0.35),-3px_-3px_6px_rgba(255,255,255,0.02)] transition-all hover:bg-neutral-50 hover:dark:bg-neutral-900 active:shadow-neumorphic-pressed"
-        aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-      >
-        {isCollapsed ? (
-          <ChevronRight className="h-4 w-4 text-neutral-600 dark:text-neutral-400" />
-        ) : (
-          <ChevronLeft className="h-4 w-4 text-neutral-600 dark:text-neutral-400" />
-        )}
-      </button>
 
       {showNewIndicatorPopup && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-neutral-50 dark:bg-neutral-900 px-6 py-4 shadow-[8px_8px_16px_rgba(0,0,0,0.2),-8px_-8px_16px_rgba(255,255,255,0.9)] dark:shadow-[8px_8px_16px_rgba(0,0,0,0.5),-8px_-8px_16px_rgba(255,255,255,0.05)] border border-neutral-200 dark:border-neutral-800">
@@ -89,114 +71,78 @@ export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, isCol
 
 
       <div className="px-3 pb-3 space-y-3" style={{ marginTop: '10px' }}>
-        {isCollapsed ? (
-          <>
-            <button 
-              onClick={handleNewFlow}
-              className="w-full rounded-xl p-3 sm:p-2.5 min-h-[44px] shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed transition-all duration-300 bg-primary text-primary-foreground touch-manipulation"
-              style={{ marginTop: '15px' }}
-              aria-label="Create new flow"
-            >
-              <Plus className="h-5 w-5 sm:h-4 sm:w-4 mx-auto" />
-            </button>
-            <button 
-              onClick={onGoLive}
-              className="w-full rounded-xl p-3 sm:p-2.5 min-h-[44px] shadow-[6px_6px_12px_rgba(0,0,0,0.2),-2px_-2px_6px_rgba(255,255,255,0.05)] dark:shadow-[6px_6px_12px_rgba(0,0,0,0.4),-2px_-2px_6px_rgba(255,255,255,0.1)] transition-all hover:shadow-[3px_3px_6px_rgba(0,0,0,0.15),-1px_-1px_3px_rgba(255,255,255,0.03)] dark:hover:shadow-[3px_3px_6px_rgba(0,0,0,0.3),-1px_-1px_3px_rgba(255,255,255,0.05)] active:shadow-neumorphic-pressed touch-manipulation group relative"
-              style={{ 
-                backgroundColor: isLive ? '#22c55e' : 'white',
-                color: isLive ? 'white' : '#6b7280'
-              }}
-              title="Launch the onboarding flow to their community"
-              aria-label={isLive ? "Stop flow" : "Launch flow"}
-            >
-              <Play className={`h-5 w-5 sm:h-4 sm:w-4 mx-auto ${isLive ? 'text-white' : 'text-neutral-600 dark:text-neutral-400'}`} />
-            </button>
-          </>
-        ) : (
-          <>
-            <button 
-              onClick={handleNewFlow}
-              className="w-full rounded-xl py-3 sm:py-2.5 text-sm font-semibold min-h-[44px] shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed transition-all duration-300 bg-primary text-primary-foreground touch-manipulation"
-            >
-              New Flow
-            </button>
-            <button 
-              onClick={onGoLive}
-              className="w-full rounded-xl py-3 sm:py-2.5 text-sm font-semibold min-h-[44px] shadow-[6px_6px_12px_rgba(0,0,0,0.25),-2px_-2px_6px_rgba(255,255,255,0.1)] dark:shadow-[6px_6px_12px_rgba(0,0,0,0.5),-2px_-2px_8px_rgba(255,255,255,0.15)] transition-all hover:shadow-[3px_3px_6px_rgba(0,0,0,0.2),-1px_-1px_3px_rgba(255,255,255,0.05)] dark:hover:shadow-[3px_3px_6px_rgba(0,0,0,0.4),-1px_-1px_3px_rgba(255,255,255,0.1)] active:shadow-neumorphic-pressed touch-manipulation flex items-center justify-center gap-2 group relative"
-              style={{ 
-                backgroundColor: isLive ? '#22c55e' : 'white',
-                color: isLive ? 'white' : '#6b7280'
-              }}
-              title="Launch the onboarding flow to their community"
-            >
-              <Play className="h-4 w-4" />
-              {!isCollapsed && <span>{isLive ? 'Flow is Live' : 'Go Live'}</span>}
-            </button>
-          </>
-        )}
+        <button 
+          onClick={handleNewFlow}
+          className="w-full rounded-2xl p-3 min-h-[44px] shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed transition-all duration-300 bg-primary text-primary-foreground touch-manipulation relative overflow-hidden group flex items-center justify-center"
+          style={{ 
+            borderRadius: '16px',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.2), 0 4px 8px rgba(0,0,0,0.1)'
+          }}
+          title="Create new flow"
+        >
+          <Plus className="h-5 w-5 relative z-10" style={{ 
+            filter: 'drop-shadow(0 1px 2px rgba(255,255,255,0.5))'
+          }} />
+          <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" style={{
+            borderRadius: '16px'
+          }} />
+        </button>
+        <button 
+          onClick={onGoLive}
+          className="w-full rounded-2xl p-3 min-h-[44px] shadow-[6px_6px_12px_rgba(0,0,0,0.25),-2px_-2px_6px_rgba(255,255,255,0.1)] dark:shadow-[6px_6px_12px_rgba(0,0,0,0.5),-2px_-2px_8px_rgba(255,255,255,0.15)] transition-all hover:shadow-[3px_3px_6px_rgba(0,0,0,0.2),-1px_-1px_3px_rgba(255,255,255,0.05)] dark:hover:shadow-[3px_3px_6px_rgba(0,0,0,0.4),-1px_-1px_3px_rgba(255,255,255,0.1)] active:shadow-neumorphic-pressed touch-manipulation flex items-center justify-center group relative overflow-hidden"
+          style={{ 
+            backgroundColor: isLive ? '#22c55e' : 'white',
+            color: isLive ? 'white' : '#6b7280',
+            borderRadius: '16px',
+            boxShadow: isLive ? 'inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 8px rgba(0,0,0,0.15)' : 'inset 0 1px 0 rgba(255,255,255,0.2), 0 4px 8px rgba(0,0,0,0.1)'
+          }}
+          title={isLive ? "Flow is Live" : "Launch the onboarding flow"}
+        >
+          <Play className="h-5 w-5 relative z-10" style={{ 
+            filter: isLive ? 'drop-shadow(0 1px 2px rgba(255,255,255,0.5))' : 'none'
+          }} />
+          <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" style={{
+            borderRadius: '16px'
+          }} />
+        </button>
       </div>
 
-      {!isCollapsed && (
-        <div className="flex-1 overflow-y-auto px-3">
-          <div className="mb-6">
-            <h3 className="mb-3 px-2 text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-600">Recent Flows</h3>
-            <div className="space-y-2">
-              {flows.map((flow) => (
-                <div
-                  key={flow.id}
-                  onClick={() => onSelectFlow(flow)}
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl bg-neutral-50 dark:bg-neutral-900 px-3 py-2.5 shadow-[4px_4px_8px_rgba(0,0,0,0.1),-4px_-4px_8px_rgba(255,255,255,0.9)] dark:shadow-[4px_4px_8px_rgba(0,0,0,0.4),-4px_-4px_8px_rgba(255,255,255,0.02)] transition-all hover:shadow-[2px_2px_4px_rgba(0,0,0,0.05),-2px_-2px_4px_rgba(255,255,255,0.8)] dark:hover:shadow-[2px_2px_4px_rgba(0,0,0,0.3),-2px_-2px_4px_rgba(255,255,255,0.01)] cursor-pointer",
-                    selectedFlow?.id === flow.id && "shadow-[inset_4px_4px_8px_rgba(0,0,0,0.1),inset_-4px_-4px_8px_rgba(255,255,255,0.9)] dark:shadow-[inset_4px_4px_8px_rgba(0,0,0,0.4),inset_-4px_-4px_8px_rgba(255,255,255,0.02)]"
-                  )}
-                >
-                  <div className={cn(
-                    "rounded-lg p-1.5 shadow-[2px_2px_4px_rgba(0,0,0,0.15)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.3)]",
-                    "bg-neutral-300 dark:bg-neutral-700"
-                  )}>
-                    <FileText className="h-3.5 w-3.5 text-neutral-700 dark:text-neutral-300" />
-                  </div>
-                  <div className="flex-1 overflow-hidden">
-                    <p className="truncate text-sm font-medium text-neutral-900 dark:text-neutral-100">{flow.title}</p>
-                    <p className="text-xs text-neutral-500 dark:text-neutral-600">{flow.dateCreated}</p>
-                  </div>
-                </div>
-              ))}
+      <div className="flex-1 px-3 py-3 space-y-2">
+        {flows.map((flow) => (
+          <button
+            key={flow.id}
+            onClick={() => onSelectFlow(flow)}
+            className={cn(
+              "w-full rounded-xl p-2 min-h-[44px] shadow-[4px_4px_8px_rgba(0,0,0,0.1),-4px_-4px_8px_rgba(255,255,255,0.9)] dark:shadow-[4px_4px_8px_rgba(0,0,0,0.4),-4px_-4px_8px_rgba(255,255,255,0.02)] transition-all hover:shadow-[2px_2px_4px_rgba(0,0,0,0.05),-2px_-2px_4px_rgba(255,255,255,0.8)] dark:hover:shadow-[2px_2px_4px_rgba(0,0,0,0.3),-2px_-2px_4px_rgba(255,255,255,0.01)] cursor-pointer flex items-center justify-center group relative",
+              selectedFlow?.id === flow.id && "shadow-[inset_4px_4px_8px_rgba(0,0,0,0.1),inset_-4px_-4px_8px_rgba(255,255,255,0.9)] dark:shadow-[inset_4px_4px_8px_rgba(0,0,0,0.4),inset_-4px_-4px_8px_rgba(255,255,255,0.02)]"
+            )}
+          >
+            <div className={cn(
+              "rounded-lg shadow-[2px_2px_4px_rgba(0,0,0,0.15)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.3)]",
+              "bg-neutral-300 dark:bg-neutral-700 p-2"
+            )}>
+              <FileText className="h-4 w-4 text-neutral-700 dark:text-neutral-300" />
             </div>
-          </div>
-        </div>
-      )}
+            {/* Tooltip on hover */}
+            <div className="absolute left-full ml-2 px-2 py-1 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+              {flow.title}
+            </div>
+          </button>
+        ))}
+      </div>
 
       <div className="px-3 pb-3 mt-auto">
-        {isCollapsed ? (
-          <button
-            onClick={toggleTheme}
-            className="w-full rounded-lg bg-neutral-50 dark:bg-neutral-900 p-2 shadow-[3px_3px_6px_rgba(0,0,0,0.08),-3px_-3px_6px_rgba(255,255,255,0.9)] dark:shadow-[3px_3px_6px_rgba(0,0,0,0.35),-3px_-3px_6px_rgba(255,255,255,0.02)] transition-all hover:shadow-[2px_2px_4px_rgba(0,0,0,0.05),-2px_-2px_4px_rgba(255,255,255,0.8)] dark:hover:shadow-[2px_2px_4px_rgba(0,0,0,0.25),-2px_-2px_4px_rgba(255,255,255,0.01)]"
-          >
-            {mounted && theme === "dark" ? (
-              <Sun className="h-4 w-4 text-neutral-600 dark:text-neutral-400 mx-auto" />
-            ) : (
-              <Moon className="h-4 w-4 text-neutral-600 dark:text-neutral-400 mx-auto" />
-            )}
-          </button>
-        ) : (
-          <button
-            onClick={toggleTheme}
-            className="w-full rounded-lg bg-neutral-50 dark:bg-neutral-900 py-2.5 px-3 shadow-[3px_3px_6px_rgba(0,0,0,0.08),-3px_-3px_6px_rgba(255,255,255,0.9)] dark:shadow-[3px_3px_6px_rgba(0,0,0,0.35),-3px_-3px_6px_rgba(255,255,255,0.02)] transition-all hover:shadow-[2px_2px_4px_rgba(0,0,0,0.05),-2px_-2px_4px_rgba(255,255,255,0.8)] dark:hover:shadow-[2px_2px_4px_rgba(0,0,0,0.25),-2px_-2px_4px_rgba(255,255,255,0.01)] flex items-center justify-center gap-2"
-          >
-            {mounted && theme === "dark" ? (
-              <>
-                <Sun className="h-4 w-4 text-neutral-600 dark:text-neutral-400" />
-                <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400">Light Mode</span>
-              </>
-            ) : (
-              <>
-                <Moon className="h-4 w-4 text-neutral-600 dark:text-neutral-400" />
-                <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400">Dark Mode</span>
-              </>
-            )}
-          </button>
-        )}
+        <button
+          onClick={toggleTheme}
+          className="w-full rounded-lg bg-neutral-50 dark:bg-neutral-900 p-2 min-h-[44px] shadow-[3px_3px_6px_rgba(0,0,0,0.08),-3px_-3px_6px_rgba(255,255,255,0.9)] dark:shadow-[3px_3px_6px_rgba(0,0,0,0.35),-3px_-3px_6px_rgba(255,255,255,0.02)] transition-all hover:shadow-[2px_2px_4px_rgba(0,0,0,0.05),-2px_-2px_4px_rgba(255,255,255,0.8)] dark:hover:shadow-[2px_2px_4px_rgba(0,0,0,0.25),-2px_-2px_4px_rgba(255,255,255,0.01)] flex items-center justify-center"
+          title={mounted && theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+        >
+          {mounted && theme === "dark" ? (
+            <Sun className="h-5 w-5 text-neutral-600 dark:text-neutral-400" />
+          ) : (
+            <Moon className="h-5 w-5 text-neutral-600 dark:text-neutral-400" />
+          )}
+        </button>
       </div>
       </div>
     </>

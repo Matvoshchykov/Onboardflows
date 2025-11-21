@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Download, TrendingUp, Users, CheckCircle2, Clock, TrendingDown, BarChart3, PieChart, Activity } from "lucide-react"
+import { Download, TrendingUp, Users, CheckCircle2, Clock, TrendingDown, PieChart, Activity } from "lucide-react"
 import { getFlowAnalytics, type AnalyticsData, type CompletedSessionData } from "@/lib/db/analytics"
 import type { Flow } from "./flow-builder"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, LineChart, Line, Legend } from "recharts"
+import { ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from "recharts"
 
 type FlowAnalyticsProps = {
   flow: Flow
@@ -28,6 +28,16 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [userNicknames, setUserNicknames] = useState<Record<string, string>>({})
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window || navigator.maxTouchPoints > 0)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   useEffect(() => {
     async function loadAnalytics() {
@@ -60,49 +70,6 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
     }
     loadAnalytics()
   }, [flow.id, flow.nodes])
-
-  const exportToCSV = () => {
-    if (!analytics || analytics.sessions.length === 0) return
-
-    const headers = ['User', 'Started At', 'Completed At', 'Duration (seconds)', 'Path Taken', 'Answers']
-    
-    const rows = analytics.sessions.map(session => {
-      const userDisplay = userNicknames[session.userId] || session.userId.slice(0, 8)
-      const pathString = session.path.map(p => p.nodeTitle).join(' → ')
-      const answersString = session.responses.map(r => {
-        const answerValue = Array.isArray(r.answer) 
-          ? r.answer.join(', ') 
-          : typeof r.answer === 'object' 
-            ? JSON.stringify(r.answer) 
-            : String(r.answer)
-        return `${r.nodeTitle}: ${answerValue}`
-      }).join(' | ')
-      
-      return [
-        userDisplay,
-        new Date(session.startedAt).toLocaleString(),
-        new Date(session.completedAt).toLocaleString(),
-        session.duration.toString(),
-        pathString,
-        answersString
-      ]
-    })
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    ].join('\n')
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    link.setAttribute('href', url)
-    link.setAttribute('download', `flow-analytics-${flow.id}-${new Date().toISOString().split('T')[0]}.csv`)
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
 
   // Prepare chart data
   const nodeVisitChartData = useMemo(() => {
@@ -153,21 +120,70 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
     )
   }
 
+  const exportToCSV = () => {
+    if (!analytics || analytics.sessions.length === 0) return
+
+    const headers = ['User', 'Started At', 'Completed At', 'Duration (seconds)', 'Path Taken', 'Answers']
+    
+    const rows = analytics.sessions.map(session => {
+      const userDisplay = userNicknames[session.userId] || session.userId.slice(0, 8)
+      const pathString = session.path.map(p => p.nodeTitle).join(' → ')
+      const answersString = session.responses.map(r => {
+        const answerValue = Array.isArray(r.answer) 
+          ? r.answer.join(', ') 
+          : typeof r.answer === 'object' 
+            ? JSON.stringify(r.answer) 
+            : String(r.answer)
+        return `${r.nodeTitle}: ${answerValue}`
+      }).join(' | ')
+      
+      return [
+        userDisplay,
+        new Date(session.startedAt).toLocaleString(),
+        new Date(session.completedAt).toLocaleString(),
+        session.duration.toString(),
+        pathString,
+        answersString
+      ]
+    })
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `flow-analytics-${flow.id}-${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   return (
-    <div className="h-full w-full bg-background overflow-y-auto p-4">
-      <div className="max-w-7xl mx-auto space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground">Flow Analytics</h2>
-          <button
-            onClick={exportToCSV}
-            disabled={analytics.sessions.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Export CSV
-          </button>
-        </div>
+    <div className="h-full w-full bg-background overflow-y-auto p-4 relative">
+      {/* Export Button - Top Right, aligned with toggle buttons in header */}
+      <button
+        onClick={exportToCSV}
+        disabled={!analytics || analytics.sessions.length === 0}
+        className="fixed right-4 z-50 font-medium transition-all duration-300 flex items-center justify-center shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed bg-primary text-primary-foreground touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{
+          top: 'calc(3.5rem + 8px - 50px)',
+          minWidth: isMobile ? '100px' : '140px',
+          minHeight: isMobile ? '44px' : '32px',
+          padding: isMobile ? '0 16px' : '0 12px',
+          fontSize: isMobile ? '0.75rem' : '0.827rem',
+          borderRadius: '10px'
+        }}
+      >
+        <Download className={isMobile ? 'w-4 h-4 mr-2' : 'w-4 h-4 mr-1.5'} />
+        Export CSV
+      </button>
+      
+      <div className="max-w-7xl mx-auto space-y-4 pt-8">
 
         {/* Stats Cards - Smaller */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -217,63 +233,101 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {/* Completion Pie Chart */}
             <div className="bg-card rounded-lg p-4 shadow-neumorphic-raised">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-1">
                 <PieChart className="w-4 h-4 text-muted-foreground" />
                 <h3 className="text-xs font-semibold text-foreground">Completion Overview</h3>
               </div>
-              <ResponsiveContainer width="100%" height={180}>
-                <RechartsPieChart>
-                  <Pie
-                    data={completionChartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={40}
-                    outerRadius={70}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {completionChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </RechartsPieChart>
-              </ResponsiveContainer>
+              <div className="flex gap-4 items-center mt-[10px]">
+                <div className="flex-shrink-0 flex flex-col justify-center gap-2">
+                  {completionChartData.map((entry, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <div 
+                        className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
+                        style={{ backgroundColor: entry.fill }}
+                      />
+                      <span className="text-[10px] text-foreground whitespace-nowrap">
+                        {entry.name}: {entry.value} ({analytics.totalSessions > 0 ? Math.round((entry.value / analytics.totalSessions) * 100) : 0}%)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <ResponsiveContainer width="100%" height={180}>
+                  <RechartsPieChart>
+                    <Pie
+                      data={completionChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={70}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {completionChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                  </RechartsPieChart>
+                </ResponsiveContainer>
+              </div>
             </div>
 
-            {/* Node Visit Chart */}
+            {/* Top Visited Nodes - List View */}
             {nodeVisitChartData.length > 0 && (
               <div className="bg-card rounded-lg p-4 shadow-neumorphic-raised">
                 <div className="flex items-center gap-2 mb-3">
-                  <BarChart3 className="w-4 h-4 text-muted-foreground" />
+                  <Activity className="w-4 h-4 text-muted-foreground" />
                   <h3 className="text-xs font-semibold text-foreground">Top Visited Nodes</h3>
                 </div>
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={nodeVisitChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                    <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                    <Tooltip contentStyle={{ fontSize: '11px', backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} />
-                    <Bar dataKey="visits" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <div className="space-y-2">
+                  {nodeVisitChartData.map((node, index) => {
+                    const percentage = analytics.completedSessions > 0 
+                      ? Math.round((node.visits / analytics.completedSessions) * 100)
+                      : 0
+                    const colorIndex = index % CHART_COLORS.length
+                    return (
+                      <div key={index} className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] font-medium text-foreground truncate" title={node.name.length > 30 ? node.name : undefined}>
+                              {node.name.length > 30 ? node.name.slice(0, 30) + '...' : node.name}
+                            </span>
+                            <span className="text-[10px] font-semibold text-muted-foreground ml-2">{node.visits}</span>
+                          </div>
+                          <div className="w-full bg-muted/30 rounded-full h-1.5 overflow-hidden">
+                            <div 
+                              className="h-full rounded-full transition-all"
+                              style={{ 
+                                width: `${percentage}%`,
+                                backgroundColor: CHART_COLORS[colorIndex]
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between mt-0.5">
+                            <span className="text-[9px] text-muted-foreground">{formatDuration(node.avgTime)} avg</span>
+                            <span className="text-[9px] text-muted-foreground">{percentage}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )}
           </div>
         )}
 
-        {/* Compact Sessions Table */}
+        {/* Compact Sessions Table - One line per row */}
         {analytics.sessions.length > 0 ? (
-          <div className="bg-card rounded-lg shadow-neumorphic-raised overflow-hidden">
+          <div className="bg-card rounded-xl shadow-neumorphic-raised overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
+              <table className="w-full text-[11px]">
                 <thead className="bg-muted/30 border-b border-border">
                   <tr>
-                    <th className="px-3 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wider">User</th>
-                    <th className="px-3 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Started</th>
-                    <th className="px-3 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Duration</th>
-                    <th className="px-3 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Path</th>
-                    <th className="px-3 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Answers</th>
+                    <th className="px-2 py-1.5 text-left text-[9px] font-medium text-muted-foreground uppercase tracking-wider">User</th>
+                    <th className="px-2 py-1.5 text-left text-[9px] font-medium text-muted-foreground uppercase tracking-wider">Started</th>
+                    <th className="px-2 py-1.5 text-left text-[9px] font-medium text-muted-foreground uppercase tracking-wider">Duration</th>
+                    <th className="px-2 py-1.5 text-left text-[9px] font-medium text-muted-foreground uppercase tracking-wider">Path</th>
+                    <th className="px-2 py-1.5 text-left text-[9px] font-medium text-muted-foreground uppercase tracking-wider">Answers</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -281,49 +335,51 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
                     const userDisplay = userNicknames[session.userId] || session.userId.slice(0, 8)
                     return (
                       <tr key={session.sessionId} className={idx % 2 === 0 ? 'bg-card' : 'bg-muted/10 hover:bg-muted/20'}>
-                        <td className="px-3 py-2 text-xs text-foreground font-medium">{userDisplay}</td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                        <td className="px-2 py-1 text-[10px] text-foreground font-medium whitespace-nowrap">{userDisplay}</td>
+                        <td className="px-2 py-1 text-[10px] text-muted-foreground whitespace-nowrap">
                           {new Date(session.startedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                         </td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                        <td className="px-2 py-1 text-[10px] text-muted-foreground whitespace-nowrap">
                           {formatDuration(session.duration)}
                         </td>
-                        <td className="px-3 py-2 text-xs">
-                          <div className="flex flex-wrap gap-0.5">
+                        <td className="px-2 py-1 text-[10px]">
+                          <div className="flex items-center gap-0.5 flex-wrap">
                             {session.path.map((p, i) => {
                               const colorIndex = i % CONNECTION_COLORS.length
                               return (
                                 <span key={i} className="inline-flex items-center gap-0.5">
                                   <span 
-                                    className="px-1.5 py-0.5 rounded text-[10px] font-medium text-white" 
+                                    className="px-1 py-0.5 rounded text-[9px] font-medium text-white" 
                                     style={{ backgroundColor: CONNECTION_COLORS[colorIndex] }}
+                                    title={p.nodeTitle}
                                   >
-                                    {p.nodeTitle.length > 15 ? p.nodeTitle.slice(0, 15) + '...' : p.nodeTitle}
+                                    {p.nodeTitle.length > 10 ? p.nodeTitle.slice(0, 10) + '...' : p.nodeTitle}
                                   </span>
-                                  {i < session.path.length - 1 && <span className="text-muted-foreground">→</span>}
+                                  {i < session.path.length - 1 && <span className="text-muted-foreground text-[8px]">→</span>}
                                 </span>
                               )
                             })}
                           </div>
                         </td>
-                        <td className="px-3 py-2 text-xs text-foreground max-w-md">
-                          <div className="space-y-0.5">
-                            {session.responses.slice(0, 3).map((r, i) => {
+                        <td className="px-2 py-1 text-[10px] text-foreground">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {session.responses.slice(0, 5).map((r, i) => {
                               const answerValue = Array.isArray(r.answer)
                                 ? r.answer.join(', ')
                                 : typeof r.answer === 'object'
                                   ? JSON.stringify(r.answer)
                                   : String(r.answer)
-                              const truncatedAnswer = answerValue.length > 30 ? answerValue.slice(0, 30) + '...' : answerValue
+                              const truncatedAnswer = answerValue.length > 20 ? answerValue.slice(0, 20) + '...' : answerValue
+                              const truncatedNode = r.nodeTitle.length > 8 ? r.nodeTitle.slice(0, 8) + '...' : r.nodeTitle
                               return (
-                                <div key={i} className="text-[10px]">
-                                  <span className="font-medium text-muted-foreground">{r.nodeTitle}:</span>{' '}
+                                <span key={i} className="text-[9px]">
+                                  <span className="font-medium text-muted-foreground">{truncatedNode}:</span>{' '}
                                   <span className="text-foreground">{truncatedAnswer}</span>
-                                </div>
+                                </span>
                               )
                             })}
-                            {session.responses.length > 3 && (
-                              <div className="text-[10px] text-muted-foreground">+{session.responses.length - 3} more</div>
+                            {session.responses.length > 5 && (
+                              <span className="text-[9px] text-muted-foreground">+{session.responses.length - 5}</span>
                             )}
                           </div>
                         </td>
