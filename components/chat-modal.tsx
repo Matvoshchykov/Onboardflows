@@ -27,15 +27,16 @@ export function ChatModal({ onClose, onCreateFlow }: ChatModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm">
+    <div 
+      className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm"
+      onClick={(e) => {
+        // Close modal when clicking outside the card
+        if (e.target === e.currentTarget) {
+          onClose()
+        }
+      }}
+    >
       <div className="bg-card rounded-lg p-6 w-full max-w-sm border border-border relative">
-        {/* Small X exit button */}
-        <button
-          onClick={onClose}
-          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-card hover:bg-muted transition-colors flex items-center justify-center border border-border"
-        >
-          <X className="w-3 h-3 text-muted-foreground" />
-        </button>
         
         {/* Flow Name Input */}
         <div className="mb-4">

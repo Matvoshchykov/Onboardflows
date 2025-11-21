@@ -238,8 +238,8 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
                 <PieChart className="w-4 h-4 text-muted-foreground" />
                 <h3 className="text-xs font-semibold text-foreground">Completion Overview</h3>
               </div>
-              <div className="flex gap-4 items-center mt-[-60px]">
-                <div className="flex-shrink-0 flex flex-col justify-center gap-2">
+              <div className="flex flex-col items-center mt-[-60px]">
+                <div className="flex-shrink-0 flex flex-col justify-center gap-2 mb-4">
                   {completionChartData.map((entry, index) => (
                     <div key={index} className="flex items-center gap-2">
                       <div 
@@ -252,23 +252,25 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
                     </div>
                   ))}
                 </div>
-                <ResponsiveContainer width="100%" height={180}>
-                  <RechartsPieChart>
-                    <Pie
-                      data={completionChartData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={40}
-                      outerRadius={70}
-                      paddingAngle={2}
-                      dataKey="value"
-                    >
-                      {completionChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                  </RechartsPieChart>
-                </ResponsiveContainer>
+                <div className="w-full flex justify-center">
+                  <ResponsiveContainer width="100%" height={180}>
+                    <RechartsPieChart>
+                      <Pie
+                        data={completionChartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={40}
+                        outerRadius={70}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        {completionChartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                    </RechartsPieChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
 
@@ -287,24 +289,6 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
                     <Activity className="w-4 h-4 text-muted-foreground" />
                     <h3 className="text-xs font-semibold text-foreground">Top Visited Nodes</h3>
                   </div>
-                  {/* Previous button - left extremity */}
-                  {hasPrevious && (
-                    <button
-                      onClick={() => setNodeVisitPage(prev => Math.max(0, prev - 1))}
-                      className="absolute left-4 top-4 text-[10px] text-neutral-900 dark:text-neutral-100 underline hover:opacity-80 transition-opacity cursor-pointer z-10"
-                    >
-                      Previous
-                    </button>
-                  )}
-                  {/* Next button - right extremity */}
-                  {hasMore && (
-                    <button
-                      onClick={() => setNodeVisitPage(prev => prev + 1)}
-                      className="absolute right-4 top-4 text-[10px] text-neutral-900 dark:text-neutral-100 underline hover:opacity-80 transition-opacity cursor-pointer z-10"
-                    >
-                      Next
-                    </button>
-                  )}
                   <div className="space-y-2">
                     {displayedNodes.map((node, displayIndex) => {
                       const actualIndex = startIndex + displayIndex
@@ -339,6 +323,25 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
                       )
                     })}
                   </div>
+                  {/* Previous and Next buttons at bottom with space */}
+                  {(hasMore || hasPrevious) && (
+                    <div className="flex justify-between items-center mt-4 pt-3 border-t border-border">
+                      <button
+                        onClick={() => setNodeVisitPage(prev => Math.max(0, prev - 1))}
+                        disabled={!hasPrevious}
+                        className="text-[10px] text-neutral-900 dark:text-neutral-100 underline hover:opacity-80 transition-opacity cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:no-underline"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        onClick={() => setNodeVisitPage(prev => prev + 1)}
+                        disabled={!hasMore}
+                        className="text-[10px] text-neutral-900 dark:text-neutral-100 underline hover:opacity-80 transition-opacity cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:no-underline"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             })()}
