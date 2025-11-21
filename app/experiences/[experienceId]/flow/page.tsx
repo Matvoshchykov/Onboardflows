@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, Check } from "lucide-react"
 import type { FlowNode, Flow } from "@/components/flow-builder"
 import type { LogicBlock } from "@/components/flow-canvas"
 import type { PageComponent } from "@/components/page-editor"
@@ -333,8 +333,11 @@ export default function OnboardingFlowView() {
   const hasPrev = getPrevNode() !== null
   const hasNext = getNextNode() !== null
 
+  const isLastPage = !hasNext
+  const canProceed = !needsAnswer || currentAnswer !== null
+
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center relative py-8 px-4">
+    <div className="min-h-screen bg-background flex items-center justify-center relative py-4 sm:py-8 px-4 overflow-hidden">
       {/* Access Level Display */}
       <div className="absolute top-4 right-4 z-20">
         <span className="text-xs text-muted-foreground bg-card px-3 py-1.5 rounded-lg shadow-neumorphic-raised">
@@ -342,43 +345,64 @@ export default function OnboardingFlowView() {
         </span>
       </div>
       
-      {/* Left Arrow */}
+      {/* Left Arrow - Blue */}
       <button
         onClick={handlePrev}
         disabled={!hasPrev}
-        className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 p-2 sm:p-3 rounded-full bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed text-foreground"
+        className="fixed left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{ backgroundColor: '#3B82F6' }}
       >
-        <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+        <ChevronLeft className="w-5 h-5 text-white" />
       </button>
       
-      {/* Right Arrow */}
-      <button
-        onClick={handleNext}
-        disabled={!hasNext || (needsAnswer && currentAnswer === null)}
-        className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 p-2 sm:p-3 rounded-full bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed text-foreground"
-      >
-        <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
-      </button>
+      {/* Right Arrow - Green or Checkmark */}
+      {isLastPage ? (
+        <button
+          onClick={handleNext}
+          disabled={!canProceed}
+          className="fixed right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ backgroundColor: '#10b981' }}
+        >
+          <Check className="w-5 h-5 text-white" />
+        </button>
+      ) : (
+        <button
+          onClick={handleNext}
+          disabled={!hasNext || !canProceed}
+          className="fixed right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ backgroundColor: '#10b981' }}
+        >
+          <ChevronRight className="w-5 h-5 text-white" />
+        </button>
+      )}
       
-      <div className="w-full max-w-2xl mx-auto flex flex-col items-center justify-center px-2 sm:px-4">
-        <PagePreview
-          components={components}
-          viewMode="mobile"
-          selectedComponent={null}
-          onSelectComponent={() => {}}
-          onDeleteComponent={() => {}}
-        />
-        
-        {needsAnswer && (
-          <div className="mt-6 w-full">
-            {/* Render interactive question component */}
-            <InteractiveQuestionComponent
-              component={questionComponent}
-              value={currentAnswer}
-              onChange={handleAnswerChange}
+      <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 flex flex-col items-center justify-center min-h-full">
+        <div className="w-full space-y-4 sm:space-y-6" style={{ maxWidth: '840px' }}>
+          {/* Display non-question components */}
+          {components.length > 0 && (
+            <PagePreview
+              components={components}
+              viewMode="desktop"
+              selectedComponent={null}
+              onSelectComponent={() => {}}
+              onDeleteComponent={() => {}}
+              previewMode={true}
             />
-          </div>
-        )}
+          )}
+          
+          {/* Display question component */}
+          {needsAnswer && (
+            <div className="w-full">
+              <div className="relative group rounded-xl p-4 sm:p-6 transition-all bg-card shadow-neumorphic-raised min-h-[150px] sm:min-h-[200px] flex flex-col justify-center">
+                <InteractiveQuestionComponent
+                  component={questionComponent}
+                  value={currentAnswer}
+                  onChange={handleAnswerChange}
+                />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -398,44 +422,61 @@ function InteractiveQuestionComponent({
   switch (component.type) {
     case "multiple-choice":
       return (
-        <div className="space-y-2">
-          {(config.options || ["Option A", "Option B", "Option C"]).map((option: string, idx: number) => (
-            <label key={idx} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all">
-              <input
-                type="radio"
-                name="multiple-choice"
-                value={option}
-                checked={value === option}
-                onChange={(e) => onChange(e.target.value)}
-                className="w-4 h-4 accent-primary"
-              />
-              <span className="text-sm flex-1">{option}</span>
-            </label>
-          ))}
+        <div>
+          <h3 className="text-sm font-medium mb-4">{config.title || "Select your answer"}</h3>
+          <div className="space-y-2">
+            {(config.options || ["Option A", "Option B", "Option C"]).map((option: string, idx: number) => (
+              <button
+                key={idx}
+                onClick={() => onChange(option)}
+                className="w-full flex items-center gap-3 p-3 rounded-lg cursor-pointer bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-left"
+              >
+                <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                  value === option 
+                    ? 'border-[#22c55e] bg-[#22c55e]' 
+                    : 'border-muted-foreground/30 bg-transparent'
+                }`}>
+                  {value === option && <Check className="w-3 h-3 text-white" />}
+                </div>
+                <span className="text-sm flex-1">{option}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )
 
     case "checkbox-multi":
       const selectedValues = Array.isArray(value) ? value : []
       return (
-        <div className="space-y-2">
-          {(config.options || ["Interest A", "Interest B", "Interest C"]).map((option: string, idx: number) => (
-            <label key={idx} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all">
-              <input
-                type="checkbox"
-                checked={selectedValues.includes(option)}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    onChange([...selectedValues, option])
-                  } else {
-                    onChange(selectedValues.filter((v: string) => v !== option))
-                  }
-                }}
-                className="w-4 h-4 accent-primary rounded"
-              />
-              <span className="text-sm flex-1">{option}</span>
-            </label>
-          ))}
+        <div>
+          <h3 className="text-sm font-medium mb-4">{config.title || "Select all that apply"}</h3>
+          <div className="space-y-2">
+            {(config.options || ["Interest A", "Interest B", "Interest C"]).map((option: string, idx: number) => {
+              const isSelected = selectedValues.includes(option)
+              return (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    if (isSelected) {
+                      onChange(selectedValues.filter((v: string) => v !== option))
+                    } else {
+                      onChange([...selectedValues, option])
+                    }
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg cursor-pointer bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-left"
+                >
+                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                    isSelected 
+                      ? 'border-[#22c55e] bg-[#22c55e]' 
+                      : 'border-muted-foreground/30 bg-transparent'
+                  }`}>
+                    {isSelected && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                  <span className="text-sm flex-1">{option}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
       )
 

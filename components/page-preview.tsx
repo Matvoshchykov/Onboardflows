@@ -502,27 +502,27 @@ export function ComponentRenderer({
             {filePreview || config.fileOriginal || config.fileUrl ? (
               <div className="space-y-2 w-full">
                 {isImage ? (
-                  <div className="w-full">
+                  <div className="w-full -mx-4 sm:-mx-6">
                     <img
                       src={filePreview || config.fileOriginal || config.fileUrl}
                       alt={uploadedFileName || "Uploaded image"}
-                      className="w-full h-auto max-h-[400px] sm:max-h-[500px] object-contain rounded-lg mx-auto"
+                      className="w-full h-auto max-h-[50vh] sm:max-h-[60vh] object-contain rounded-lg"
                     />
                     {uploadedFileName && (
-                      <p className="text-xs text-muted-foreground mt-2 text-center truncate px-2">
+                      <p className="text-xs text-muted-foreground mt-2 text-center truncate px-4 sm:px-6">
                         {uploadedFileName}
                       </p>
                     )}
                   </div>
                 ) : isVideo ? (
-                  <div className="w-full">
+                  <div className="w-full -mx-4 sm:-mx-6">
                     <video
                       src={filePreview || config.fileOriginal || config.fileUrl}
                       controls
-                      className="w-full h-auto max-h-[400px] sm:max-h-[500px] rounded-lg mx-auto"
+                      className="w-full h-auto max-h-[50vh] sm:max-h-[60vh] rounded-lg"
                     />
                     {uploadedFileName && (
-                      <p className="text-xs text-muted-foreground mt-2 text-center truncate px-2">
+                      <p className="text-xs text-muted-foreground mt-2 text-center truncate px-4 sm:px-6">
                         {uploadedFileName}
                       </p>
                     )}
