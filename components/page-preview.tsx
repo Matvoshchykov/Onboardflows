@@ -17,6 +17,7 @@ type PagePreviewProps = {
   onDeleteComponent: (id: string) => void
   onUpdateComponent?: (id: string, config: Record<string, any>) => void
   previewMode?: boolean
+  isMobile?: boolean
 }
 
 export function PagePreview({ 
@@ -26,7 +27,8 @@ export function PagePreview({
   onSelectComponent, 
   onDeleteComponent,
   onUpdateComponent,
-  previewMode = false
+  previewMode = false,
+  isMobile = false
 }: PagePreviewProps) {
   return (
     <div className="w-full">
@@ -45,19 +47,20 @@ export function PagePreview({
               <div
                 key={component.id}
                 data-preview-component={index === 0 ? 'first' : undefined}
-                onClick={previewMode ? undefined : () => onSelectComponent(component)}
+                onClick={previewMode || isMobile ? undefined : () => onSelectComponent(component)}
                 className={`relative group rounded-xl p-4 sm:p-6 transition-all ${
-                  previewMode ? '' : 'cursor-pointer'
+                  previewMode || isMobile ? '' : 'cursor-pointer'
                 } ${
                   selectedComponent?.id === component.id
                     ? "bg-card shadow-neumorphic-pressed ring-2 ring-primary/20"
                     : "bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed"
                 } w-full min-h-[150px] sm:min-h-[200px] flex flex-col justify-center overflow-visible`}
-                style={{ maxWidth: '840px' }}
+                style={{ maxWidth: '840px', pointerEvents: isMobile && previewMode ? 'none' : 'auto', gap: isMobile ? '0' : undefined }}
               >
                 <ComponentRenderer 
                   component={component} 
                   onUpdateComponent={previewMode ? undefined : (onUpdateComponent ? (config) => onUpdateComponent(component.id, config) : undefined)}
+                  isMobile={isMobile}
                 />
                 
                 {/* Only show edit/delete buttons if not in preview mode */}
@@ -202,10 +205,12 @@ function EditableText({
 
 export function ComponentRenderer({ 
   component, 
-  onUpdateComponent 
+  onUpdateComponent,
+  isMobile = false
 }: { 
   component: PageComponent
   onUpdateComponent?: (config: Record<string, any>) => void
+  isMobile?: boolean
 }) {
   const config = component.config
 
@@ -502,27 +507,35 @@ export function ComponentRenderer({
             {filePreview || config.fileOriginal || config.fileUrl ? (
               <div className="space-y-2 w-full">
                 {isImage ? (
-                  <div className="w-full -mx-4 sm:-mx-6">
+                  <div className={`w-full ${isMobile ? 'p-0' : '-mx-4 sm:-mx-6'}`} style={isMobile ? { aspectRatio: '16/9' } : {}}>
                     <img
                       src={filePreview || config.fileOriginal || config.fileUrl}
                       alt={uploadedFileName || "Uploaded image"}
-                      className="w-full h-auto max-h-[50vh] sm:max-h-[60vh] object-contain rounded-lg"
+                      className={`w-full h-full object-contain rounded-lg ${isMobile ? '' : 'h-auto'}`}
+                      style={isMobile ? {} : {
+                        maxHeight: 'calc(50vh - 100px)',
+                      }}
                     />
                     {uploadedFileName && (
-                      <p className="text-xs text-muted-foreground mt-2 text-center truncate px-4 sm:px-6">
+                      <p className={`text-xs text-muted-foreground mt-2 text-center truncate ${isMobile ? 'px-0' : 'px-4 sm:px-6'}`}>
                         {uploadedFileName}
                       </p>
                     )}
                   </div>
                 ) : isVideo ? (
-                  <div className="w-full -mx-4 sm:-mx-6">
-                    <video
-                      src={filePreview || config.fileOriginal || config.fileUrl}
-                      controls
-                      className="w-full h-auto max-h-[50vh] sm:max-h-[60vh] rounded-lg"
-                    />
+                  <div className={`w-full ${isMobile ? 'p-0' : '-mx-4 sm:-mx-6'}`} style={isMobile ? { aspectRatio: '16/9' } : {}}>
+                    <div className="w-full h-full" style={isMobile ? { aspectRatio: '16/9' } : {}}>
+                      <video
+                        src={filePreview || config.fileOriginal || config.fileUrl}
+                        controls
+                        className="w-full h-full rounded-lg object-contain"
+                        style={isMobile ? {} : {
+                          maxHeight: 'calc(50vh - 100px)'
+                        }}
+                      />
+                    </div>
                     {uploadedFileName && (
-                      <p className="text-xs text-muted-foreground mt-2 text-center truncate px-4 sm:px-6">
+                      <p className={`text-xs text-muted-foreground mt-2 text-center truncate ${isMobile ? 'px-0' : 'px-4 sm:px-6'}`}>
                         {uploadedFileName}
                       </p>
                     )}

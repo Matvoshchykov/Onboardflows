@@ -3495,7 +3495,7 @@ function PreviewModal({
           </button>
         )}
         
-        <div className="w-full max-w-6xl mx-auto px-6 flex flex-col items-center justify-center min-h-full" style={{ paddingTop: '20px', paddingBottom: '20px' }}>
+        <div className="w-full max-w-6xl mx-auto px-6 flex flex-col items-center justify-center min-h-full" style={{ paddingTop: '80px', paddingBottom: '80px' }}>
           <div className="w-full space-y-6" style={{ transform: 'scale(1.25)', maxWidth: '840px' }}>
             {/* Only show non-question components in PagePreview */}
             {nonQuestionComponents.length > 0 && (

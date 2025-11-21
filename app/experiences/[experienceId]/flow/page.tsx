@@ -8,6 +8,10 @@ import type { LogicBlock } from "@/components/flow-canvas"
 import type { PageComponent } from "@/components/page-editor"
 import { PagePreview } from "@/components/page-preview"
 import { FlowLoading } from "@/components/flow-loading"
+import { FlowSuccess } from "@/components/flow-success"
+import { startFlowSession, updateSessionStep, completeFlowSession } from "@/lib/db/sessions"
+import { saveResponse } from "@/lib/db/responses"
+import { trackPathNode } from "@/lib/db/paths"
 
 export default function OnboardingFlowView() {
   const params = useParams()
@@ -19,21 +23,43 @@ export default function OnboardingFlowView() {
   const [currentAnswer, setCurrentAnswer] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [accessLevel, setAccessLevel] = useState<"owner" | "customer">("customer")
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [showSuccess, setShowSuccess] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
 
-  // Load access level
+  // Detect mobile
   useEffect(() => {
-    async function loadAccessLevel() {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window || navigator.maxTouchPoints > 0)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  // Load user ID and access level
+  useEffect(() => {
+    async function loadUserData() {
       try {
-        const response = await fetch(`/api/get-access-level?experienceId=${experienceId}`)
-        const data = await response.json()
-        if (data.accessLevel && (data.accessLevel === "owner" || data.accessLevel === "customer")) {
-          setAccessLevel(data.accessLevel)
+        // Load user ID
+        const userIdResponse = await fetch('/api/get-user-id')
+        const userIdData = await userIdResponse.json()
+        if (userIdData.userId) {
+          setUserId(userIdData.userId)
+        }
+        
+        // Load access level
+        const accessResponse = await fetch(`/api/get-access-level?experienceId=${experienceId}`)
+        const accessData = await accessResponse.json()
+        if (accessData.accessLevel && (accessData.accessLevel === "owner" || accessData.accessLevel === "customer")) {
+          setAccessLevel(accessData.accessLevel)
         }
       } catch (error) {
-        console.error('Error loading access level:', error)
+        console.error('Error loading user data:', error)
       }
     }
-    loadAccessLevel()
+    loadUserData()
   }, [experienceId])
 
   // Load flow data - in a real app, this would fetch from your data source
@@ -394,14 +420,84 @@ export default function OnboardingFlowView() {
     setCurrentAnswer(value)
   }
 
-  const handleNext = () => {
+  // Start session when flow loads
+  useEffect(() => {
+    async function initializeSession() {
+      if (!flow || !userId || sessionId) return
+      
+      try {
+        // Start session if flow is active
+        const { startFlowSession } = await import('@/lib/db/sessions')
+        const session = await startFlowSession(userId, flow.id)
+        if (session) {
+          setSessionId(session.id)
+          // Track first node visit
+          if (currentNodeId) {
+            const { trackPathNode } = await import('@/lib/db/paths')
+            await trackPathNode(session.id, currentNodeId, 0)
+          }
+        }
+      } catch (error) {
+        console.error('Error starting session:', error)
+      }
+    }
+    if (flow && userId && currentNodeId && !sessionId) {
+      initializeSession()
+    }
+  }, [flow, userId, currentNodeId, sessionId])
+
+  // Track path and save answers when moving to next node
+  useEffect(() => {
+    async function trackNavigation() {
+      if (!sessionId || !currentNodeId || !flow) return
+      
+      try {
+        // Find current node index in path
+        const nodeIndex = flow.nodes.findIndex(n => n.id === currentNodeId)
+        if (nodeIndex >= 0) {
+          const { trackPathNode } = await import('@/lib/db/paths')
+          const { updateSessionStep } = await import('@/lib/db/sessions')
+          await trackPathNode(sessionId, currentNodeId, nodeIndex)
+          await updateSessionStep(sessionId, nodeIndex)
+        }
+        
+        // Save current answer if exists
+        const currentNode = getCurrentNode()
+        if (currentNode && currentAnswer !== null && currentAnswer !== undefined) {
+          const allComponents = normalizePageComponents(currentNode.pageComponents)
+          const questionComponent = allComponents.find(
+            comp => ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider", "long-answer"].includes(comp.type)
+          )
+          if (questionComponent) {
+            const { saveResponse } = await import('@/lib/db/responses')
+            await saveResponse(sessionId, currentNodeId, questionComponent.type, currentAnswer)
+          }
+        }
+      } catch (error) {
+        console.error('Error tracking navigation:', error)
+      }
+    }
+    if (currentNodeId && sessionId) {
+      trackNavigation()
+    }
+  }, [currentNodeId, sessionId, currentAnswer, flow])
+
+  const handleNext = async () => {
     const nextNode = getNextNode(currentAnswer)
     if (nextNode) {
       setCurrentNodeId(nextNode.id)
       setCurrentAnswer(null)
     } else {
-      // Flow complete
-      router.push(`/experiences/${experienceId}/complete`)
+      // Flow complete - show success message and complete session
+      if (sessionId) {
+        try {
+          const { completeFlowSession } = await import('@/lib/db/sessions')
+          await completeFlowSession(sessionId)
+        } catch (error) {
+          console.error('Error completing session:', error)
+        }
+      }
+      setShowSuccess(true)
     }
   }
 
@@ -460,6 +556,11 @@ export default function OnboardingFlowView() {
   const isLastPage = !hasNext
   const canProceed = !needsAnswer || currentAnswer !== null
 
+  // Show success message when flow is complete
+  if (showSuccess) {
+    return <FlowSuccess />
+  }
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center relative py-4 sm:py-8 px-4 overflow-hidden">
       {/* Access Level Display */}
@@ -506,11 +607,12 @@ export default function OnboardingFlowView() {
           {components.length > 0 && (
             <PagePreview
               components={components}
-              viewMode="desktop"
+              viewMode={isMobile ? "mobile" : "desktop"}
               selectedComponent={null}
               onSelectComponent={() => {}}
               onDeleteComponent={() => {}}
               previewMode={true}
+              isMobile={isMobile}
             />
           )}
           
