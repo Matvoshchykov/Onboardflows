@@ -366,16 +366,15 @@ export async function toggleFlowActive(flowId: string, active: boolean): Promise
       console.log('Deactivated other flows:', deactivateData)
     }
 
-    // Use upsert to ensure the update happens even if there are conflicts
+    // Use update (not upsert) since we're only changing the active status
+    // Upsert would require all NOT NULL fields like 'title' which we don't have here
     const { error, data } = await supabase
       .from('flows')
-      .upsert({ 
-        id: flowId,
+      .update({ 
         active,
         updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'id'
       })
+      .eq('id', flowId)
       .select()
 
     if (error) {
