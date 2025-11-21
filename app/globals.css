@@ -1,15 +1,159 @@
-@layer theme, base, frosted_ui, components, utilities;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/preflight.css" layer(base);
-@import "tailwindcss/utilities.css" layer(utilities);
-@import "@whop/react/styles.css" layer(frosted_ui);
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
 
-/* biome-ignore lint/suspicious/noUnknownAtRules: this rule is imported from whop */
-@config '../tailwind.config.ts';
+@layer base {
+  :root {
+    --font-sans: 'Inter', sans-serif;
+    
+    /* Updated to use neutral-50 base with NO pure white/black */
+    --background: 220 14% 96%; /* neutral-50 */
+    --foreground: 220 9% 10%; /* neutral-900 but not pure black */
+    --card: 220 14% 96%; /* Same as background for neumorphic effect */
+    --card-foreground: 220 9% 10%;
+    --popover: 220 14% 96%;
+    --popover-foreground: 220 9% 10%;
+    --primary: 220 9% 25%; /* neutral-800 for buttons */
+    --primary-foreground: 220 14% 96%; /* light neutral */
+    --secondary: 220 13% 91%; /* neutral-100 */
+    --secondary-foreground: 220 9% 25%;
+    --muted: 220 13% 91%;
+    --muted-foreground: 220 9% 46%; /* neutral-600 */
+    --accent: 220 9% 25%; /* Removed green, using neutral */
+    --accent-foreground: 220 14% 96%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 220 14% 96%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 220 9% 25%;
+    --radius: 0.75rem;
+  }
 
-body {
-	background: var(--background);
-	color: var(--foreground);
-	font-family: Arial, Helvetica, sans-serif;
+  .dark {
+    /* Dark mode using neutral-900 base, NOT pure black */
+    --background: 220 9% 9%; /* neutral-900 */
+    --foreground: 220 14% 96%; /* neutral-100, not pure white */
+    --card: 220 9% 9%; /* Same as background */
+    --card-foreground: 220 14% 96%;
+    --popover: 220 9% 9%;
+    --popover-foreground: 220 14% 96%;
+    --primary: 220 14% 83%; /* neutral-200 for dark mode buttons */
+    --primary-foreground: 220 9% 10%;
+    --secondary: 220 9% 18%; /* neutral-800 */
+    --secondary-foreground: 220 14% 83%;
+    --muted: 220 9% 18%;
+    --muted-foreground: 220 9% 55%; /* neutral-400 */
+    --accent: 220 14% 83%; /* Removed green, using neutral */
+    --accent-foreground: 220 9% 10%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 220 14% 96%;
+    --border: 220 9% 18%;
+    --input: 220 9% 18%;
+    --ring: 220 14% 83%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    @apply transition-colors duration-300;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+  }
+  
+  /* Allow text selection in input fields and textareas */
+  input, textarea, [contenteditable="true"] {
+    user-select: text;
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+  }
+}
+
+/* Updated neumorphic shadows to match exact specifications */
+@layer utilities {
+  /* Raised elements - buttons, cards */
+  .shadow-neumorphic-raised {
+    box-shadow: 6px 6px 12px rgba(0, 0, 0, 0.1), -2px -2px 6px rgba(255, 255, 255, 0.9);
+  }
+  
+  /* Pressed hover state */
+  .shadow-neumorphic-pressed {
+    box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.05), -2px -2px 4px rgba(255, 255, 255, 0.8);
+  }
+  
+  /* Inset elements - inputs, text areas */
+  .shadow-neumorphic-inset {
+    box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.1), inset -4px -4px 8px rgba(255, 255, 255, 0.9);
+  }
+  
+  /* Subtle raised - list items */
+  .shadow-neumorphic-subtle {
+    box-shadow: 4px 4px 8px rgba(0, 0, 0, 0.1), -4px -4px 8px rgba(255, 255, 255, 0.9);
+  }
+  
+  /* Dark mode shadows */
+  .dark .shadow-neumorphic-raised {
+    box-shadow: 6px 6px 12px rgba(0, 0, 0, 0.4), -2px -2px 8px rgba(255, 255, 255, 0.02);
+  }
+  
+  .dark .shadow-neumorphic-pressed {
+    box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3), -2px -2px 4px rgba(255, 255, 255, 0.01);
+  }
+  
+  .dark .shadow-neumorphic-inset {
+    box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.4), inset -4px -4px 8px rgba(255, 255, 255, 0.02);
+  }
+  
+  .dark .shadow-neumorphic-subtle {
+    box-shadow: 4px 4px 8px rgba(0, 0, 0, 0.4), -4px -4px 8px rgba(255, 255, 255, 0.02);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Hide scrollbar utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
 }

@@ -1,4 +1,3 @@
-import { waitUntil } from "@vercel/functions";
 import type { Payment } from "@whop/sdk/resources.js";
 import type { NextRequest } from "next/server";
 import { whopsdk } from "@/lib/whop-sdk";
@@ -11,7 +10,8 @@ export async function POST(request: NextRequest): Promise<Response> {
 
 	// Handle the webhook event
 	if (webhookData.type === "payment.succeeded") {
-		waitUntil(handlePaymentSucceeded(webhookData.data));
+		// Fire and forget - don't wait for the handler to complete
+		handlePaymentSucceeded(webhookData.data).catch(console.error);
 	}
 
 	// Make sure to return a 2xx status code quickly. Otherwise the webhook will be retried.
