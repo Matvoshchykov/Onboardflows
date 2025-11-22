@@ -10,34 +10,36 @@ export default async function FlowLayout({
 	children: React.ReactNode;
 }) {
 	const { experienceId } = await params;
-	
-	try {
-		// Verify user token - throws on validation failure
-		const { userId } = await whopsdk.verifyUserToken(await headers());
-		
-		// Check access to the experience
-		const access = await whopsdk.users.checkAccess(experienceId, { id: userId });
+	const { userId } = await whopsdk.verifyUserToken(await headers());
+	const access = await whopsdk.users.checkAccess(experienceId, { id: userId });
 
-		if (!access.has_access) {
-			redirect(`/experiences/${experienceId}`);
-		}
-
-		// If user is admin (team member), redirect them to creation dashboard
-		if (access.access_level === "admin") {
-			redirect(`/experiences/${experienceId}`);
-		}
-
-		// If customer, allow access to flow
-		if (access.access_level === "customer") {
-			return <>{children}</>;
-		}
-
-		// Fallback - redirect if access level is unexpected
-		redirect(`/experiences/${experienceId}`);
-	} catch (error) {
-		// verifyUserToken throws on validation failure
-		console.error("Auth error in flow layout:", error);
+	if (!access.has_access) {
 		redirect(`/experiences/${experienceId}`);
 	}
+
+	// If user is admin (team member), redirect them to creation dashboard
+	if (access.access_level === "admin") {
+		redirect(`/experiences/${experienceId}`);
+	}
+
+	// If customer, allow access to flow
+	if (access.access_level === "customer") {
+		return (
+			<>
+				<div className="bg-muted/50 border-b border-border px-4 py-2 text-sm">
+					<div className="flex items-center gap-4">
+						<span className="text-muted-foreground">User ID:</span>
+						<span className="font-mono">{userId}</span>
+						<span className="text-muted-foreground">Access Level:</span>
+						<span className="font-semibold capitalize">{access.access_level}</span>
+					</div>
+				</div>
+				{children}
+			</>
+		);
+	}
+
+	// Fallback - redirect if access level is unexpected
+	redirect(`/experiences/${experienceId}`);
 }
 
