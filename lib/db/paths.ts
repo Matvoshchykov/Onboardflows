@@ -77,4 +77,26 @@ export async function getSessionPath(sessionId: string): Promise<FlowPath[]> {
   }
 }
 
+/**
+ * Delete all path entries for a specific node
+ */
+export async function deleteNodePaths(nodeId: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('flow_paths')
+      .delete()
+      .eq('node_id', nodeId)
+
+    if (error) {
+      console.error('Error deleting node paths:', error)
+      return false
+    }
+
+    return true
+  } catch (error) {
+    console.error('Error deleting node paths:', error)
+    return false
+  }
+}
+
 

@@ -27,6 +27,8 @@ export default function OnboardingFlowView() {
   const [userId, setUserId] = useState<string | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const [watchedVideos, setWatchedVideos] = useState<Set<string>>(new Set())
+  const [videoViewingTimes, setVideoViewingTimes] = useState<Record<string, number>>({})
 
   // Detect mobile
   useEffect(() => {
@@ -487,6 +489,7 @@ export default function OnboardingFlowView() {
     if (nextNode) {
       setCurrentNodeId(nextNode.id)
       setCurrentAnswer(null)
+      setWatchedVideos(new Set()) // Reset watched videos for new node
     } else {
       // Flow complete - show success message and complete session
       if (sessionId) {
@@ -553,8 +556,45 @@ export default function OnboardingFlowView() {
   const hasPrev = getPrevNode() !== null
   const hasNext = getNextNode() !== null
 
+  // Check if all required videos are watched
+  const requiredVideos = allComponents.filter(
+    comp => comp.type === "video-step" && comp.config?.requiredToWatch
+  )
+  const allRequiredVideosWatched = requiredVideos.every(
+    comp => watchedVideos.has(comp.id)
+  )
+
   const isLastPage = !hasNext
-  const canProceed = !needsAnswer || currentAnswer !== null
+  const canProceed = (!needsAnswer || currentAnswer !== null) && allRequiredVideosWatched
+
+  const handleVideoWatched = (componentId: string, watched: boolean) => {
+    if (watched) {
+      setWatchedVideos(prev => new Set([...prev, componentId]))
+    }
+  }
+
+  const handleVideoTimeUpdate = async (componentId: string, time: number) => {
+    setVideoViewingTimes(prev => ({ ...prev, [componentId]: time }))
+    
+    // Save video viewing time to database (throttle to avoid too many DB calls)
+    if (sessionId && currentNodeId && time > 0) {
+      // Only save every 5 seconds to reduce DB load
+      const lastSavedTime = videoViewingTimes[componentId] || 0
+      if (Math.abs(time - lastSavedTime) >= 5) {
+        try {
+          // Store video viewing time in responses table
+          const { saveResponse } = await import('@/lib/db/responses')
+          await saveResponse(sessionId, currentNodeId, 'video-step', { 
+            componentId, 
+            viewingTime: time,
+            timestamp: new Date().toISOString()
+          })
+        } catch (error) {
+          console.error('Error saving video viewing time:', error)
+        }
+      }
+    }
+  }
 
   // Show success message when flow is complete
   if (showSuccess) {
@@ -602,7 +642,7 @@ export default function OnboardingFlowView() {
       )}
       
       <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 flex flex-col items-center justify-center min-h-full">
-        <div className="w-full space-y-4 sm:space-y-6" style={{ maxWidth: '840px' }}>
+        <div className="w-full flex flex-col" style={{ maxWidth: '840px', gap: '10px' }}>
           {/* Display non-question components */}
           {components.length > 0 && (
             <PagePreview
@@ -613,13 +653,15 @@ export default function OnboardingFlowView() {
               onDeleteComponent={() => {}}
               previewMode={true}
               isMobile={isMobile}
+              onVideoWatched={handleVideoWatched}
+              onVideoTimeUpdate={handleVideoTimeUpdate}
             />
           )}
           
           {/* Display question component */}
           {needsAnswer && (
             <div className="w-full">
-              <div className="relative group rounded-xl p-4 sm:p-6 transition-all bg-card shadow-neumorphic-raised min-h-[150px] sm:min-h-[200px] flex flex-col justify-center">
+              <div className="relative group rounded-xl p-4 sm:p-6 transition-all bg-card shadow-neumorphic-raised flex flex-col justify-center">
                 <InteractiveQuestionComponent
                   component={questionComponent}
                   value={currentAnswer}

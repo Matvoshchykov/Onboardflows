@@ -133,7 +133,7 @@ export function fileToDataURL(file: File): Promise<string> {
 }
 
 /**
- * Extract the first frame from a video as an image
+ * Extract the first frame from a video as an image in 16:9 aspect ratio
  * @param videoFile - The video file
  * @returns A File object containing the thumbnail image, or null if extraction fails
  */
@@ -150,17 +150,22 @@ export async function extractVideoThumbnail(videoFile: File): Promise<File | nul
 
     video.preload = 'metadata'
     video.onloadedmetadata = () => {
-      // Set canvas size to video dimensions (or max 1920x1080)
-      const maxWidth = 1920
-      const maxHeight = 1080
-      let width = video.videoWidth
-      let height = video.videoHeight
-
-      // Scale down if needed
-      if (width > maxWidth || height > maxHeight) {
-        const ratio = Math.min(maxWidth / width, maxHeight / height)
-        width = width * ratio
-        height = height * ratio
+      // Target 16:9 aspect ratio
+      const targetAspect = 16 / 9
+      const videoAspect = video.videoWidth / video.videoHeight
+      
+      let width: number
+      let height: number
+      
+      // Calculate dimensions to fit 16:9
+      if (videoAspect > targetAspect) {
+        // Video is wider than 16:9, fit to height
+        height = Math.min(video.videoHeight, 1080)
+        width = height * targetAspect
+      } else {
+        // Video is taller than 16:9, fit to width
+        width = Math.min(video.videoWidth, 1920)
+        height = width / targetAspect
       }
 
       canvas.width = width
@@ -171,8 +176,29 @@ export async function extractVideoThumbnail(videoFile: File): Promise<File | nul
     }
 
     video.onseeked = () => {
-      // Draw the first frame to canvas
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      // Draw the first frame to canvas, cropping to 16:9
+      const sourceWidth = video.videoWidth
+      const sourceHeight = video.videoHeight
+      const sourceAspect = sourceWidth / sourceHeight
+      const targetAspect = 16 / 9
+      
+      let sx = 0
+      let sy = 0
+      let sw = sourceWidth
+      let sh = sourceHeight
+      
+      // Crop source to 16:9
+      if (sourceAspect > targetAspect) {
+        // Source is wider, crop width
+        sw = sourceHeight * targetAspect
+        sx = (sourceWidth - sw) / 2
+      } else {
+        // Source is taller, crop height
+        sh = sourceWidth / targetAspect
+        sy = (sourceHeight - sh) / 2
+      }
+      
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
 
       // Convert to blob
       canvas.toBlob(
@@ -190,7 +216,7 @@ export async function extractVideoThumbnail(videoFile: File): Promise<File | nul
           }
         },
         'image/jpeg',
-        0.9 // Start with high quality
+        0.85 // Good quality for thumbnail
       )
     }
 
@@ -202,6 +228,119 @@ export async function extractVideoThumbnail(videoFile: File): Promise<File | nul
     const url = URL.createObjectURL(videoFile)
     video.src = url
   })
+}
+
+/**
+ * Convert an image to 16:9 aspect ratio
+ * @param file - The image file
+ * @returns A File object with 16:9 aspect ratio
+ */
+export async function convertImageTo16x9(file: File): Promise<File> {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+        
+        if (!ctx) {
+          resolve(file)
+          return
+        }
+        
+        // Target 16:9 aspect ratio
+        const targetAspect = 16 / 9
+        const sourceAspect = img.width / img.height
+        
+        let width: number
+        let height: number
+        let sx = 0
+        let sy = 0
+        let sw = img.width
+        let sh = img.height
+        
+        // Calculate dimensions
+        if (sourceAspect > targetAspect) {
+          // Image is wider than 16:9, crop width
+          height = img.height
+          width = height * targetAspect
+          sw = width
+          sx = (img.width - width) / 2
+        } else {
+          // Image is taller than 16:9, crop height
+          width = img.width
+          height = width / targetAspect
+          sh = height
+          sy = (img.height - height) / 2
+        }
+        
+        // Limit max dimensions
+        const maxWidth = 1920
+        const maxHeight = 1080
+        if (width > maxWidth || height > maxHeight) {
+          const ratio = Math.min(maxWidth / width, maxHeight / height)
+          width = width * ratio
+          height = height * ratio
+          sw = sw * ratio
+          sh = sh * ratio
+        }
+        
+        canvas.width = width
+        canvas.height = height
+        
+        // Draw cropped image
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, width, height)
+        
+        // Convert to blob
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const convertedFile = new File(
+                [blob],
+                file.name,
+                { type: 'image/jpeg', lastModified: Date.now() }
+              )
+              resolve(convertedFile)
+            } else {
+              resolve(file)
+            }
+          },
+          'image/jpeg',
+          0.9
+        )
+      }
+      img.onerror = () => resolve(file)
+      img.src = e.target?.result as string
+    }
+    reader.onerror = () => resolve(file)
+    reader.readAsDataURL(file)
+  })
+}
+
+/**
+ * Compress a video file to reduce storage size
+ * @param videoFile - The video file to compress
+ * @param maxSizeMB - Maximum size in MB (default: 10MB)
+ * @returns Compressed video File or original if compression fails
+ */
+export async function compressVideo(videoFile: File, maxSizeMB: number = 10): Promise<File> {
+  // For now, return original file
+  // Browser-based video compression is complex and requires MediaRecorder API
+  // which has limited codec support. For production, consider server-side compression.
+  
+  // If file is already small enough, return as-is
+  const maxSizeBytes = maxSizeMB * 1024 * 1024
+  if (videoFile.size <= maxSizeBytes) {
+    return videoFile
+  }
+  
+  // Note: Client-side video compression is limited
+  // Consider using a service like Cloudflare Stream, AWS MediaConvert, or similar
+  // for production video compression
+  
+  console.warn('Video compression not fully implemented. File size:', (videoFile.size / 1024 / 1024).toFixed(2), 'MB')
+  return videoFile
 }
 
 /**

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Download, TrendingUp, Users, CheckCircle2, Clock, TrendingDown, PieChart, Activity } from "lucide-react"
+import { Download, TrendingUp, Users, CheckCircle2, Clock, TrendingDown, PieChart, Activity, Video } from "lucide-react"
 import { getFlowAnalytics, type AnalyticsData, type CompletedSessionData } from "@/lib/db/analytics"
 import type { Flow } from "./flow-builder"
 import { ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from "recharts"
@@ -22,7 +22,14 @@ const CONNECTION_COLORS = [
   "#14b8a6", // teal
 ]
 
-const CHART_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"]
+const CHART_COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#14b8a6"]
+
+// Get color for a node based on its index in the flow
+const getNodeColor = (nodeId: string, flowNodes: Array<{ id: string; title: string }>): string => {
+  const nodeIndex = flowNodes.findIndex(n => n.id === nodeId)
+  if (nodeIndex === -1) return CHART_COLORS[0]
+  return CHART_COLORS[nodeIndex % CHART_COLORS.length]
+}
 
 export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
@@ -72,18 +79,21 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
     loadAnalytics()
   }, [flow.id, flow.nodes])
 
-  // Prepare chart data
+  // Prepare chart data - filter out deleted nodes
   const nodeVisitChartData = useMemo(() => {
     if (!analytics?.nodeVisitStats) return []
+    const existingNodeIds = new Set(flow.nodes.map(n => n.id))
     return Object.entries(analytics.nodeVisitStats)
+      .filter(([nodeId]) => existingNodeIds.has(nodeId)) // Only include nodes that still exist
       .map(([nodeId, stats]) => ({
+        nodeId,
         name: stats.nodeTitle.length > 20 ? stats.nodeTitle.slice(0, 20) + '...' : stats.nodeTitle,
         visits: stats.visitCount,
         avgTime: stats.avgTimeSpent
       }))
       .sort((a, b) => b.visits - a.visits)
       .slice(0, 10)
-  }, [analytics])
+  }, [analytics, flow.nodes])
 
   const completionChartData = useMemo(() => {
     if (!analytics) return []
@@ -332,12 +342,17 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
                       const percentage = analytics.completedSessions > 0 
                         ? Math.round((node.visits / analytics.completedSessions) * 100)
                         : 0
-                      const colorIndex = actualIndex % CHART_COLORS.length
+                      // Get color based on node ID to match flow canvas colors
+                      const nodeColor = getNodeColor(node.nodeId, flow.nodes)
                       return (
                         <div key={actualIndex} className="flex items-center gap-2">
                           <div className="flex-1">
                             <div className="flex items-center justify-between mb-1">
-                              <span className="text-[10px] font-medium text-foreground truncate" title={node.name.length > 30 ? node.name : undefined}>
+                              <span 
+                                className="text-[10px] font-medium truncate" 
+                                style={{ color: nodeColor }}
+                                title={node.name.length > 30 ? node.name : undefined}
+                              >
                                 {node.name.length > 30 ? node.name.slice(0, 30) + '...' : node.name}
                               </span>
                               <span className="text-[10px] font-semibold text-muted-foreground ml-2">{node.visits}</span>
@@ -347,7 +362,7 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
                                 className="h-full rounded-full transition-all"
                                 style={{ 
                                   width: `${percentage}%`,
-                                  backgroundColor: CHART_COLORS[colorIndex]
+                                  backgroundColor: nodeColor
                                 }}
                               />
                             </div>
@@ -382,6 +397,47 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
                 </div>
               )
             })()}
+          </div>
+        )}
+
+        {/* Video Viewing Stats */}
+        {analytics.videoViewingStats && Object.keys(analytics.videoViewingStats).length > 0 && (
+          <div className="bg-card rounded-lg p-4 shadow-neumorphic-raised">
+            <div className="flex items-center gap-2 mb-3">
+              <Video className="w-4 h-4 text-muted-foreground" />
+              <h3 className="text-xs font-semibold text-foreground">Video Viewing Statistics</h3>
+            </div>
+            <div className="space-y-2">
+              {Object.entries(analytics.videoViewingStats).map(([componentId, stats]) => (
+                <div key={componentId} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-medium text-foreground">
+                        {stats.componentTitle || 'Video'}
+                      </span>
+                      <span className="text-[10px] font-semibold text-muted-foreground ml-2">
+                        {stats.viewCount} {stats.viewCount === 1 ? 'view' : 'views'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] text-muted-foreground">Avg viewing time:</span>
+                      <span className="text-[9px] font-medium text-foreground">
+                        {formatDuration(stats.avgViewingTime)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* Show message if no video stats but videos exist */}
+        {(!analytics.videoViewingStats || Object.keys(analytics.videoViewingStats).length === 0) && (
+          <div className="bg-card rounded-lg p-4 shadow-neumorphic-raised text-center">
+            <Video className="w-6 h-6 text-muted-foreground mx-auto mb-2 opacity-50" />
+            <p className="text-[10px] text-muted-foreground">No video viewing data yet</p>
+            <p className="text-[9px] text-muted-foreground mt-1">Video statistics will appear here once users watch videos in the flow</p>
           </div>
         )}
 

@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Trash2, Edit3, Plus, X, Image as ImageIcon, Video, Upload, File, Check } from 'lucide-react'
+import { Trash2, Edit3, Plus, X, Image as ImageIcon, Video, Upload, File, Check, Download, AlignLeft, AlignCenter, AlignRight, ChevronLeft } from 'lucide-react'
 import type { PageComponent } from "./page-editor"
 import { useTheme } from "./theme-provider"
-import { uploadFileToStorage, compressImageUnder1MB, extractVideoThumbnail, fileToDataURL, deleteFileFromStorage } from "@/lib/utils"
+import { uploadFileToStorage, compressImageUnder1MB, extractVideoThumbnail, deleteFileFromStorage, convertImageTo16x9, compressVideo } from "@/lib/utils"
 
 // No animation needed - browser's default caret blinking only affects the caret itself
 const blinkAnimation = ``
@@ -18,6 +18,8 @@ type PagePreviewProps = {
   onUpdateComponent?: (id: string, config: Record<string, any>) => void
   previewMode?: boolean
   isMobile?: boolean
+  onVideoWatched?: (componentId: string, watched: boolean) => void
+  onVideoTimeUpdate?: (componentId: string, time: number) => void
 }
 
 export function PagePreview({ 
@@ -28,7 +30,9 @@ export function PagePreview({
   onDeleteComponent,
   onUpdateComponent,
   previewMode = false,
-  isMobile = false
+  isMobile = false,
+  onVideoWatched,
+  onVideoTimeUpdate
 }: PagePreviewProps) {
   return (
     <div className="w-full">
@@ -37,7 +41,7 @@ export function PagePreview({
           viewMode === "desktop" ? "w-full" : "w-full max-w-md mx-auto"
         }`}
       >
-        <div className={`space-y-4 sm:space-y-6 flex flex-col items-center ${previewMode ? 'pt-5 pb-5' : ''} ${components.length === 1 || components.length === 2 ? '' : ''}`}>
+        <div className={`flex flex-col items-center ${previewMode ? 'pt-5 pb-5' : ''} ${components.length === 1 || components.length === 2 ? '' : ''}`} style={{ gap: previewMode ? '10px' : '1rem' }}>
           {components.length === 0 ? (
             <div className="flex items-center justify-center h-64 text-muted-foreground">
               Drag components here to build your page
@@ -54,13 +58,16 @@ export function PagePreview({
                   selectedComponent?.id === component.id
                     ? "bg-card shadow-neumorphic-pressed ring-2 ring-primary/20"
                     : "bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed"
-                } w-full min-h-[150px] sm:min-h-[200px] flex flex-col justify-center overflow-visible`}
+                } w-full flex flex-col justify-center overflow-visible`}
                 style={{ maxWidth: '840px', pointerEvents: isMobile && previewMode ? 'none' : 'auto', gap: isMobile ? '0' : undefined }}
               >
                 <ComponentRenderer 
                   component={component} 
                   onUpdateComponent={previewMode ? undefined : (onUpdateComponent ? (config) => onUpdateComponent(component.id, config) : undefined)}
                   isMobile={isMobile}
+                  isPreviewMode={previewMode}
+                  onVideoWatched={onVideoWatched}
+                  onVideoTimeUpdate={onVideoTimeUpdate}
                 />
                 
                 {/* Only show edit/delete buttons if not in preview mode */}
@@ -206,12 +213,19 @@ function EditableText({
 export function ComponentRenderer({ 
   component, 
   onUpdateComponent,
-  isMobile = false
+  isMobile = false,
+  isPreviewMode = false,
+  onVideoWatched,
+  onVideoTimeUpdate
 }: { 
   component: PageComponent
   onUpdateComponent?: (config: Record<string, any>) => void
   isMobile?: boolean
+  isPreviewMode?: boolean
+  onVideoWatched?: (componentId: string, watched: boolean) => void
+  onVideoTimeUpdate?: (componentId: string, time: number) => void
 }) {
+  const { theme } = useTheme()
   const config = component.config
 
   const updateConfig = (updates: Record<string, any>) => {
@@ -370,6 +384,9 @@ export function ComponentRenderer({
       const [uploading, setUploading] = useState(false)
       const [uploadedFileName, setUploadedFileName] = useState<string | null>(config.fileName || null)
       
+      // In preview mode (real onboarding), show files as downloadable list
+      const isPreviewMode = !onUpdateComponent
+      
       const handleFileDrop = async (e: React.DragEvent) => {
         e.preventDefault()
         if (!onUpdateComponent) return
@@ -387,29 +404,33 @@ export function ComponentRenderer({
         await handleFileUpload(file)
       }
       
+      // Helper to filter out data URLs - only allow HTTP/HTTPS URLs (storage URLs)
+      const isValidStorageUrl = (url: string | null | undefined): boolean => {
+        if (!url) return false
+        // Only allow HTTP/HTTPS URLs (storage URLs), reject data URLs
+        return typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))
+      }
+      
       const handleFileUpload = async (file: File) => {
         setUploading(true)
         try {
-          // Check if it's an image - compress and store original
+          // Check if it's an image - compress and upload
           if (file.type.startsWith('image/')) {
             // Compress image to under 1MB for bucket storage
             const compressedFile = await compressImageUnder1MB(file)
             
-            // Upload compressed version to bucket
-            const thumbnailUrl = await uploadFileToStorage(compressedFile, 'uploads', 'files', false)
+            // Upload compressed version to bucket (ONLY store storage URL, never data URL)
+            const fileStorageUrl = await uploadFileToStorage(compressedFile, 'uploads', 'files', false)
             
-            // Convert original to data URL for high-quality display
-            const originalDataUrl = await fileToDataURL(file)
-            
-            if (thumbnailUrl) {
-              setFilePreview(originalDataUrl) // Show original in preview
+            if (fileStorageUrl) {
+              setFilePreview(fileStorageUrl) // Show storage URL in preview
               setUploadedFileName(file.name)
               if (onUpdateComponent) {
                 updateConfig({ 
-                  fileUrl: thumbnailUrl, // Compressed thumbnail in bucket
-                  fileOriginal: originalDataUrl, // Original for display
+                  fileUrl: fileStorageUrl, // Storage URL only - minimizes database payload size
                   fileName: file.name, 
                   fileType: file.type 
+                  // Note: Removed fileOriginal to minimize payload size - use fileUrl instead
                 })
               }
             }
@@ -428,18 +449,18 @@ export function ComponentRenderer({
             // Upload compressed thumbnail to bucket
             const thumbnailUrl = await uploadFileToStorage(compressedThumbnail, 'uploads', 'files', false)
             
-            // Convert original video to data URL for high-quality display
-            const originalVideoDataUrl = await fileToDataURL(file)
+            // Upload original video to storage (ALWAYS use storage, never data URL)
+            const videoStorageUrl = await uploadFileToStorage(file, 'uploads', 'files', false)
             
-            if (thumbnailUrl) {
-              setFilePreview(originalVideoDataUrl) // Show original video in preview
+            if (thumbnailUrl && videoStorageUrl) {
+              setFilePreview(videoStorageUrl) // Show video storage URL in preview
               setUploadedFileName(file.name)
               if (onUpdateComponent) {
                 updateConfig({ 
-                  fileUrl: thumbnailUrl, // Compressed thumbnail in bucket
-                  fileOriginal: originalVideoDataUrl, // Original video for display
+                  fileUrl: videoStorageUrl, // Storage URL only - minimizes database payload size
                   fileName: file.name,
                   fileType: file.type
+                  // Note: Removed fileOriginal to minimize payload size - use fileUrl instead
                 })
               }
             }
@@ -462,22 +483,24 @@ export function ComponentRenderer({
         }
       }
       
-      // Load file preview from config on mount (prefer original over thumbnail)
+      // Load file preview from config on mount - only use storage URLs, filter out data URLs
       useEffect(() => {
         if (!filePreview) {
-          const original = config.fileOriginal || null
+          // Prefer fileUrl, fallback to fileOriginal (but only if it's a storage URL)
           const url = config.fileUrl || null
+          const original = config.fileOriginal || null
           const fileName = config.fileName || null
           
-          if (original) {
-            setFilePreview(original)
-            setUploadedFileName(fileName)
-          } else if (url) {
+          // Only use valid storage URLs, filter out data URLs
+          if (isValidStorageUrl(url)) {
             setFilePreview(url)
+            setUploadedFileName(fileName)
+          } else if (isValidStorageUrl(original)) {
+            setFilePreview(original)
             setUploadedFileName(fileName)
           }
         }
-      }, [config.fileUrl || null, config.fileOriginal || null, config.fileName || null, filePreview])
+      }, [config.fileUrl, config.fileOriginal, config.fileName, filePreview])
       
       const isImage = uploadedFileName && /\.(jpg|jpeg|png|gif|webp)$/i.test(uploadedFileName)
       const isVideo = uploadedFileName && /\.(mp4|webm|ogg|mov)$/i.test(uploadedFileName)
@@ -497,95 +520,152 @@ export function ComponentRenderer({
             )}
           </label>
           <div
-            className={`border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary transition-colors ${
+            className={`rounded-xl p-6 text-center transition-colors border-2 border-white ${
               onUpdateComponent ? 'cursor-pointer' : ''
-            } ${uploading ? 'opacity-50' : ''}`}
+            } ${uploading ? 'opacity-50' : ''} bg-[hsl(220,9%,10%)]`}
             onDrop={onUpdateComponent ? handleFileDrop : undefined}
             onDragOver={onUpdateComponent ? (e) => e.preventDefault() : undefined}
             onClick={onUpdateComponent ? () => fileInputRef.current?.click() : undefined}
           >
-            {filePreview || config.fileOriginal || config.fileUrl ? (
+            {(filePreview || config.fileUrl) && isValidStorageUrl(filePreview || config.fileUrl) ? (
               <div className="space-y-2 w-full">
-                {isImage ? (
-                  <div className={`w-full ${isMobile ? 'p-0' : '-mx-4 sm:-mx-6'}`} style={isMobile ? { aspectRatio: '16/9' } : {}}>
-                    <img
-                      src={filePreview || config.fileOriginal || config.fileUrl}
-                      alt={uploadedFileName || "Uploaded image"}
-                      className={`w-full h-full object-contain rounded-lg ${isMobile ? '' : 'h-auto'}`}
-                      style={isMobile ? {} : {
-                        maxHeight: 'calc(50vh - 100px)',
-                      }}
-                    />
-                    {uploadedFileName && (
-                      <p className={`text-xs text-muted-foreground mt-2 text-center truncate ${isMobile ? 'px-0' : 'px-4 sm:px-6'}`}>
-                        {uploadedFileName}
-                      </p>
-                    )}
-                  </div>
-                ) : isVideo ? (
-                  <div className={`w-full ${isMobile ? 'p-0' : '-mx-4 sm:-mx-6'}`} style={isMobile ? { aspectRatio: '16/9' } : {}}>
-                    <div className="w-full h-full" style={isMobile ? { aspectRatio: '16/9' } : {}}>
-                      <video
-                        src={filePreview || config.fileOriginal || config.fileUrl}
-                        controls
-                        className="w-full h-full rounded-lg object-contain"
-                        style={isMobile ? {} : {
-                          maxHeight: 'calc(50vh - 100px)'
-                        }}
-                      />
+                {isPreviewMode ? (
+                  // Real onboarding: sleek download bar darker than surrounding
+                  <div className="w-full">
+                    <div 
+                      className={`flex items-center justify-between p-4 rounded-xl transition-all hover:shadow-lg ${
+                        theme === 'dark' 
+                          ? 'bg-[hsl(220,9%,6%)]' 
+                          : 'bg-[hsl(220,13%,88%)]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <File className={`w-5 h-5 flex-shrink-0 ${
+                          theme === 'dark' 
+                            ? 'text-[hsl(220,14%,96%)]' 
+                            : 'text-[hsl(220,9%,10%)]'
+                        }`} />
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium truncate ${
+                            theme === 'dark' 
+                              ? 'text-[hsl(220,14%,96%)]' 
+                              : 'text-[hsl(220,9%,10%)]'
+                          }`}>
+                            {uploadedFileName || "Download file"}
+                          </p>
+                          {config.fileType && (
+                            <p className={`text-xs ${
+                              theme === 'dark' 
+                                ? 'text-[hsl(220,14%,83%)]' 
+                                : 'text-[hsl(220,9%,25%)]'
+                            }`}>
+                              {config.fileType}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <a
+                        href={config.fileUrl || filePreview || '#'}
+                        download={uploadedFileName || 'file'}
+                        className={`flex items-center justify-center w-8 h-8 transition-colors ${
+                          theme === 'dark' 
+                            ? 'text-[hsl(220,14%,96%)] hover:text-[hsl(220,14%,83%)]' 
+                            : 'text-[hsl(220,9%,10%)] hover:text-[hsl(220,9%,25%)]'
+                        }`}
+                      >
+                        <Download className="w-5 h-5" />
+                      </a>
                     </div>
-                    {uploadedFileName && (
-                      <p className={`text-xs text-muted-foreground mt-2 text-center truncate ${isMobile ? 'px-0' : 'px-4 sm:px-6'}`}>
-                        {uploadedFileName}
-                      </p>
-                    )}
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center gap-2">
-                    <File className="w-12 h-12 text-muted-foreground" />
-                    <p className="text-xs text-muted-foreground truncate max-w-full px-2">{uploadedFileName}</p>
+                  // Component editor: sleek download bar darker than surrounding
+                  <div className="w-full">
+                    <div 
+                      className={`flex items-center justify-between p-4 rounded-xl transition-all hover:shadow-lg ${
+                        theme === 'dark' 
+                          ? 'bg-[hsl(220,9%,6%)]' 
+                          : 'bg-[hsl(220,13%,88%)]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <File className={`w-5 h-5 flex-shrink-0 ${
+                          theme === 'dark' 
+                            ? 'text-[hsl(220,14%,96%)]' 
+                            : 'text-[hsl(220,9%,10%)]'
+                        }`} />
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium truncate ${
+                            theme === 'dark' 
+                              ? 'text-[hsl(220,14%,96%)]' 
+                              : 'text-[hsl(220,9%,10%)]'
+                          }`}>
+                            {uploadedFileName || "Download file"}
+                          </p>
+                          {config.fileType && (
+                            <p className={`text-xs ${
+                              theme === 'dark' 
+                                ? 'text-[hsl(220,14%,83%)]' 
+                                : 'text-[hsl(220,9%,25%)]'
+                            }`}>
+                              {config.fileType}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <a
+                        href={config.fileUrl || filePreview || '#'}
+                        download={uploadedFileName || 'file'}
+                        className={`flex items-center justify-center w-8 h-8 transition-colors ${
+                          theme === 'dark' 
+                            ? 'text-[hsl(220,14%,96%)] hover:text-[hsl(220,14%,83%)]' 
+                            : 'text-[hsl(220,9%,10%)] hover:text-[hsl(220,9%,25%)]'
+                        }`}
+                      >
+                        <Download className="w-5 h-5" />
+                      </a>
+                    </div>
+                    {onUpdateComponent !== undefined && (
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          // Delete file from storage if it exists
+                          if (config.fileUrl && typeof config.fileUrl === 'string' && config.fileUrl.startsWith('http')) {
+                            await deleteFileFromStorage(config.fileUrl, 'uploads')
+                          }
+                          setFilePreview(null)
+                          setUploadedFileName(null)
+                          updateConfig({ fileUrl: null, fileName: null, fileType: null })
+                          if (fileInputRef.current) {
+                            fileInputRef.current.value = ''
+                          }
+                        }}
+                        className="text-xs text-destructive hover:underline mt-2"
+                      >
+                        Remove file
+                      </button>
+                    )}
                   </div>
-                )}
-                {onUpdateComponent && (
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation()
-                      // Delete file from storage if it exists
-                      if (config.fileUrl && typeof config.fileUrl === 'string' && config.fileUrl.startsWith('http')) {
-                        await deleteFileFromStorage(config.fileUrl, 'uploads')
-                      }
-                      setFilePreview(null)
-                      setUploadedFileName(null)
-                      updateConfig({ fileUrl: null, fileOriginal: null, fileName: null, fileType: null })
-                      if (fileInputRef.current) {
-                        fileInputRef.current.value = ''
-                      }
-                    }}
-                    className="text-xs text-destructive hover:underline"
-                  >
-                    Remove file
-                  </button>
                 )}
               </div>
             ) : (
               <>
                 {uploading ? (
                   <div className="flex flex-col items-center gap-2">
-                    <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                    <p className="text-xs text-muted-foreground">Uploading...</p>
+                    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <p className="text-xs text-white">Uploading...</p>
                   </div>
                 ) : (
                   <>
-                    <Upload className="w-6 h-6 mx-auto mb-1.5 text-muted-foreground" />
-                    <p className="text-xs text-muted-foreground">
+                    <Upload className="w-6 h-6 mx-auto mb-1.5 text-white" />
+                    <p className="text-xs text-white">
                       Click to upload or drag and drop
                     </p>
-                    <p className="text-[10px] text-muted-foreground mt-1">
+                    <p className="text-[10px] text-white/80 mt-1">
                       {onUpdateComponent ? (
                         <EditableText
                           value={config.acceptedTypes || "PDF, DOC, DOCX, Images, Videos (max 10MB)"}
                           onChange={(value) => updateConfig({ acceptedTypes: value })}
-                          className="text-[10px] text-muted-foreground"
+                          className="text-[10px] text-white/80"
                           placeholder="PDF, DOC, DOCX, Images, Videos (max 10MB)"
                         />
                       ) : (
@@ -612,8 +692,54 @@ export function ComponentRenderer({
 
     case "video-step": {
       const videoInputRef = useRef<HTMLInputElement>(null)
-      const [videoPreview, setVideoPreview] = useState<string | null>(config.videoUrl || null)
+      const [videoPreview, setVideoPreview] = useState<string | null>(null)
       const [uploadingVideo, setUploadingVideo] = useState(false)
+      
+      // Helper to filter out data URLs - only allow HTTP/HTTPS URLs (storage URLs)
+      const isValidStorageUrl = (url: string | null | undefined): boolean => {
+        if (!url) return false
+        // Only allow HTTP/HTTPS URLs (storage URLs), reject data URLs
+        return typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))
+      }
+      
+      // Helper to check if URL is a video file (not a thumbnail image)
+      const isVideoUrl = (url: string | null | undefined): boolean => {
+        if (!url || !isValidStorageUrl(url)) return false
+        // Check if URL ends with video extension or contains /videos/ folder (not /images/)
+        const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv', '.m4v']
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
+        const lowerUrl = url.toLowerCase()
+        
+        // Reject if it's clearly an image
+        if (imageExtensions.some(ext => lowerUrl.endsWith(ext))) return false
+        if (lowerUrl.includes('/images/')) return false
+        
+        // Accept if it has video extension or is in /videos/ folder
+        return videoExtensions.some(ext => lowerUrl.endsWith(ext)) || lowerUrl.includes('/videos/')
+      }
+      
+      // Get video source - always use storage URL, never data URL
+      const getVideoSource = (): string | null => {
+        if (onUpdateComponent) {
+          // Component editor: show thumbnail (videoUrl - can be image)
+          const url = config.videoUrl || null
+          return isValidStorageUrl(url) ? url : null
+        } else {
+          // Preview/onboarding: show video (MUST be video URL, not thumbnail image)
+          const original = config.videoOriginal || null
+          const url = config.videoUrl || null
+          
+          // In preview mode, ONLY use video URLs (not image thumbnails)
+          // Prefer videoOriginal, but only if it's actually a video file
+          if (isValidStorageUrl(original) && isVideoUrl(original)) return original
+          // Fallback to videoUrl only if it's actually a video (not a thumbnail)
+          if (isValidStorageUrl(url) && isVideoUrl(url)) return url
+          // If videoOriginal exists but is an image (old data), don't use videoUrl thumbnail
+          return null
+        }
+      }
+      
+      const videoSource = getVideoSource()
       
       const handleVideoDrop = async (e: React.DragEvent) => {
         e.preventDefault()
@@ -635,8 +761,11 @@ export function ComponentRenderer({
       const handleVideoUpload = async (file: File) => {
         setUploadingVideo(true)
         try {
-          // Extract thumbnail from video
-          const thumbnail = await extractVideoThumbnail(file)
+          // Compress video to reduce storage size
+          const compressedVideo = await compressVideo(file, 10) // Max 10MB
+          
+          // Extract thumbnail from video (16:9)
+          const thumbnail = await extractVideoThumbnail(compressedVideo)
           if (!thumbnail) {
             console.error('Failed to extract video thumbnail')
             setUploadingVideo(false)
@@ -649,17 +778,25 @@ export function ComponentRenderer({
           // Upload compressed thumbnail to bucket
           const thumbnailUrl = await uploadFileToStorage(compressedThumbnail, 'uploads', 'images', false)
           
-          // Convert original video to data URL for high-quality display
-          const originalVideoDataUrl = await fileToDataURL(file)
+          // Upload compressed video to storage (ALWAYS use storage, never data URL)
+          const videoStorageUrl = await uploadFileToStorage(compressedVideo, 'uploads', 'videos', false)
           
-          if (thumbnailUrl) {
-            setVideoPreview(originalVideoDataUrl) // Show original video in preview
+          if (thumbnailUrl && videoStorageUrl) {
+            // In component editor, show thumbnail; in preview/onboarding, show video
             if (onUpdateComponent) {
+              setVideoPreview(thumbnailUrl) // Show thumbnail in editor
+            } else {
+              setVideoPreview(videoStorageUrl) // Show video in preview
+            }
+            
+            if (onUpdateComponent) {
+              // ONLY store storage URLs, never data URLs - minimizes database payload size
               updateConfig({ 
-                videoUrl: thumbnailUrl, // Compressed thumbnail in bucket
-                videoOriginal: originalVideoDataUrl, // Original video for display
+                videoUrl: thumbnailUrl, // Compressed thumbnail in bucket (for editor)
+                videoOriginal: videoStorageUrl, // Compressed video URL in storage (for onboarding)
                 videoFile: file.name,
                 videoType: file.type
+                // Note: Removed any data URL fields to minimize payload size
               })
             }
           }
@@ -670,19 +807,31 @@ export function ComponentRenderer({
         }
       }
       
-      // Load video preview from config on mount (prefer original over thumbnail)
+      // Load video preview from config on mount - only use storage URLs, filter out data URLs
       useEffect(() => {
-        if (!videoPreview) {
+        if (onUpdateComponent) {
+          // Component editor: show thumbnail (can be image)
+          const url = config.videoUrl || null
+          if (isValidStorageUrl(url)) {
+            setVideoPreview(url)
+          } else {
+            setVideoPreview(null)
+          }
+        } else {
+          // Preview/onboarding: show video (MUST be video URL, not thumbnail image)
           const original = config.videoOriginal || null
           const url = config.videoUrl || null
           
-          if (original) {
+          // Only use valid video URLs, never image thumbnails
+          if (isValidStorageUrl(original) && isVideoUrl(original)) {
             setVideoPreview(original)
-          } else if (url) {
+          } else if (isValidStorageUrl(url) && isVideoUrl(url)) {
             setVideoPreview(url)
+          } else {
+            setVideoPreview(null)
           }
         }
-      }, [config.videoUrl || null, config.videoOriginal || null, videoPreview])
+      }, [config.videoUrl, config.videoOriginal, onUpdateComponent])
       
       return (
         <div>
@@ -708,17 +857,79 @@ export function ComponentRenderer({
             onDragOver={onUpdateComponent ? (e) => e.preventDefault() : undefined}
             onClick={onUpdateComponent ? () => videoInputRef.current?.click() : undefined}
           >
-            {videoPreview || config.videoOriginal || config.videoUrl ? (
-              <video
-                src={videoPreview || config.videoOriginal || config.videoUrl}
-                controls
-                className={`w-full rounded-xl ${
-                  onUpdateComponent 
-                    ? 'h-full object-contain' 
-                    : 'h-auto max-h-[600px] object-contain'
-                }`}
-                style={{ maxWidth: '100%' }}
-              />
+            {videoSource ? (
+              onUpdateComponent ? (
+                // Component editor: show thumbnail image
+                <img
+                  src={videoSource}
+                  alt="Video thumbnail"
+                  className="w-full h-full object-cover rounded-xl"
+                  onError={(e) => {
+                    console.error('Thumbnail load error:', videoSource)
+                    setVideoPreview(null)
+                  }}
+                />
+              ) : (
+                // Preview/onboarding: show video
+                <video
+                  key={videoSource}
+                  src={videoSource}
+                  controls
+                  preload="metadata"
+                  className={`w-full rounded-xl ${
+                    isPreviewMode
+                      ? 'h-full object-cover aspect-video'
+                      : 'h-auto max-h-[600px] object-contain'
+                  }`}
+                  style={{ maxWidth: '100%' }}
+                  onTimeUpdate={(e) => {
+                    const video = e.currentTarget
+                    const currentTime = video.currentTime
+                    const duration = video.duration
+                    if (onVideoTimeUpdate && duration > 0) {
+                      onVideoTimeUpdate(component.id, currentTime)
+                    }
+                    // Check if video is watched entirely (within 0.5 seconds of end)
+                    if (config.requiredToWatch && duration > 0 && currentTime >= duration - 0.5) {
+                      if (onVideoWatched) {
+                        onVideoWatched(component.id, true)
+                      }
+                    }
+                  }}
+                  onEnded={() => {
+                    if (onVideoWatched) {
+                      onVideoWatched(component.id, true)
+                    }
+                  }}
+                  onError={(e) => {
+                    console.error('Video load error - source:', videoSource)
+                    const video = e.currentTarget
+                    // Try fallback storage URLs (never data URLs, and must be video files)
+                    const fallbackOriginal = config.videoOriginal || null
+                    const fallbackUrl = config.videoUrl || null
+                    
+                    // Only try fallback if it's a valid video URL (not a thumbnail image)
+                    if (isValidStorageUrl(fallbackOriginal) && isVideoUrl(fallbackOriginal) && video.src !== fallbackOriginal) {
+                      console.log('Trying fallback videoOriginal:', fallbackOriginal)
+                      video.src = fallbackOriginal
+                      setVideoPreview(fallbackOriginal)
+                    } else if (isValidStorageUrl(fallbackUrl) && isVideoUrl(fallbackUrl) && video.src !== fallbackUrl) {
+                      console.log('Trying fallback videoUrl:', fallbackUrl)
+                      video.src = fallbackUrl
+                      setVideoPreview(fallbackUrl)
+                    } else {
+                      console.error('No valid video source available - videoOriginal might be missing or thumbnail URL is being used')
+                      setVideoPreview(null)
+                    }
+                  }}
+                  onLoadStart={() => {
+                    console.log('Video loading started:', videoSource)
+                  }}
+                  onCanPlay={() => {
+                    console.log('Video can play:', videoSource)
+                  }}
+                />
+              )
             ) : (
               <>
                 {uploadingVideo ? (
@@ -758,14 +969,51 @@ export function ComponentRenderer({
               config.description || "This video is required to continue"
             )}
           </p>
+          {onUpdateComponent && (
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  updateConfig({ requiredToWatch: !(config.requiredToWatch || false) })
+                }}
+                className={`flex items-center justify-center w-5 h-5 rounded transition-all ${
+                  config.requiredToWatch 
+                    ? 'bg-[#10b981] text-white' 
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+                title={config.requiredToWatch ? "Video required - click to disable" : "Click to require video"}
+              >
+                {config.requiredToWatch && (
+                  <Check className="w-3.5 h-3.5" />
+                )}
+              </button>
+              <span className="text-[10px] text-muted-foreground">
+                Require video to be watched fully
+              </span>
+            </div>
+          )}
+          {!onUpdateComponent && config.requiredToWatch && (
+            <p className="text-[10px] text-muted-foreground mt-2 italic">
+              This video must be watched fully to continue
+            </p>
+          )}
         </div>
       )
     }
 
-    case "text-instruction":
+    case "text-instruction": {
+      const [showAlignmentMenu, setShowAlignmentMenu] = useState(false)
+      const alignment = config.textAlign || "left"
+      const alignmentClasses = {
+        left: "text-left",
+        center: "text-center",
+        right: "text-right"
+      }
+      
       return (
-        <div>
-          <h3 className="text-xs font-medium mb-2">
+        <div className="relative group w-full">
+          <h3 className={`text-xs font-medium mb-2 ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}>
             {onUpdateComponent ? (
               <EditableText
                 value={config.title || "Welcome to our onboarding"}
@@ -777,7 +1025,7 @@ export function ComponentRenderer({
               config.title || "Welcome to our onboarding"
             )}
           </h3>
-          <p className="text-xs text-muted-foreground leading-relaxed">
+          <p className={`text-xs text-muted-foreground leading-relaxed ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}>
             {onUpdateComponent ? (
               <EditableText
                 value={config.text || "This is a text instruction block. Use it for guidance, onboarding steps, expectations, disclaimers, etc."}
@@ -790,8 +1038,56 @@ export function ComponentRenderer({
               config.text || "This is a text instruction block. Use it for guidance, onboarding steps, expectations, disclaimers, etc."
             )}
           </p>
+          {onUpdateComponent && (
+            <div className="absolute right-0 top-0 flex items-center">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowAlignmentMenu(!showAlignmentMenu)
+                }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-muted rounded"
+              >
+                <ChevronLeft className={`w-3 h-3 transition-transform ${showAlignmentMenu ? 'rotate-90' : '-rotate-90'}`} />
+              </button>
+              {showAlignmentMenu && (
+                <div className="absolute right-6 top-0 bg-card border border-border rounded-lg shadow-lg p-1 flex flex-col gap-1 z-10">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      updateConfig({ textAlign: "left" })
+                      setShowAlignmentMenu(false)
+                    }}
+                    className={`p-2 hover:bg-muted rounded flex items-center gap-2 ${alignment === "left" ? "bg-muted" : ""}`}
+                  >
+                    <AlignLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      updateConfig({ textAlign: "center" })
+                      setShowAlignmentMenu(false)
+                    }}
+                    className={`p-2 hover:bg-muted rounded flex items-center gap-2 ${alignment === "center" ? "bg-muted" : ""}`}
+                  >
+                    <AlignCenter className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      updateConfig({ textAlign: "right" })
+                      setShowAlignmentMenu(false)
+                    }}
+                    className={`p-2 hover:bg-muted rounded flex items-center gap-2 ${alignment === "right" ? "bg-muted" : ""}`}
+                  >
+                    <AlignRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )
+    }
 
       case "multiple-choice":
       const options = config.options || ["Option A", "Option B", "Option C"]
@@ -963,10 +1259,18 @@ export function ComponentRenderer({
         </div>
       )
 
-    case "header":
+    case "header": {
+      const [showAlignmentMenu, setShowAlignmentMenu] = useState(false)
+      const alignment = config.textAlign || "left"
+      const alignmentClasses = {
+        left: "text-left",
+        center: "text-center",
+        right: "text-right"
+      }
+      
       return (
-        <div>
-          <h2 className="text-lg font-bold">
+        <div className="relative group w-full">
+          <h2 className={`text-lg font-bold ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}>
             {onUpdateComponent ? (
               <EditableText
                 value={config.title || "Header Title"}
@@ -978,10 +1282,61 @@ export function ComponentRenderer({
               config.title || "Header Title"
             )}
           </h2>
+          {onUpdateComponent && (
+            <div className="absolute right-0 top-0 flex items-center">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowAlignmentMenu(!showAlignmentMenu)
+                }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-muted rounded"
+              >
+                <ChevronLeft className={`w-3 h-3 transition-transform ${showAlignmentMenu ? 'rotate-90' : '-rotate-90'}`} />
+              </button>
+              {showAlignmentMenu && (
+                <div className="absolute right-6 top-0 bg-card border border-border rounded-lg shadow-lg p-1 flex flex-col gap-1 z-10">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      updateConfig({ textAlign: "left" })
+                      setShowAlignmentMenu(false)
+                    }}
+                    className={`p-2 hover:bg-muted rounded flex items-center gap-2 ${alignment === "left" ? "bg-muted" : ""}`}
+                  >
+                    <AlignLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      updateConfig({ textAlign: "center" })
+                      setShowAlignmentMenu(false)
+                    }}
+                    className={`p-2 hover:bg-muted rounded flex items-center gap-2 ${alignment === "center" ? "bg-muted" : ""}`}
+                  >
+                    <AlignCenter className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      updateConfig({ textAlign: "right" })
+                      setShowAlignmentMenu(false)
+                    }}
+                    className={`p-2 hover:bg-muted rounded flex items-center gap-2 ${alignment === "right" ? "bg-muted" : ""}`}
+                  >
+                    <AlignRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )
+    }
 
     case "link-button":
+      const linkUrl = config.url || "#"
+      const isValidUrl = linkUrl && linkUrl !== "#" && (linkUrl.startsWith('http://') || linkUrl.startsWith('https://'))
+      
       return (
         <div className="flex flex-col items-center">
           {onUpdateComponent && (
@@ -995,23 +1350,47 @@ export function ComponentRenderer({
               />
             </div>
           )}
-          <a
-            href={config.url || "#"}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block px-4 py-2 rounded-xl bg-primary text-primary-foreground shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-xs font-medium"
-          >
-            {onUpdateComponent ? (
-              <EditableText
-                value={config.label || "Click here"}
-                onChange={(value) => updateConfig({ label: value })}
-                className="text-xs font-medium"
-                placeholder="Click here"
-              />
-            ) : (
-              config.label || "Click here"
-            )}
-          </a>
+          {isValidUrl ? (
+            <a
+              href={linkUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block px-4 py-2 rounded-xl bg-primary text-primary-foreground shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-xs font-medium cursor-pointer"
+              onClick={(e) => {
+                // Ensure navigation happens
+                if (linkUrl && linkUrl !== "#") {
+                  window.open(linkUrl, '_blank', 'noopener,noreferrer')
+                }
+              }}
+            >
+              {onUpdateComponent ? (
+                <EditableText
+                  value={config.label || "Click here"}
+                  onChange={(value) => updateConfig({ label: value })}
+                  className="text-xs font-medium"
+                  placeholder="Click here"
+                />
+              ) : (
+                config.label || "Click here"
+              )}
+            </a>
+          ) : (
+            <button
+              disabled={!isValidUrl}
+              className="inline-block px-4 py-2 rounded-xl bg-primary text-primary-foreground shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {onUpdateComponent ? (
+                <EditableText
+                  value={config.label || "Click here"}
+                  onChange={(value) => updateConfig({ label: value })}
+                  className="text-xs font-medium"
+                  placeholder="Click here"
+                />
+              ) : (
+                config.label || "Click here"
+              )}
+            </button>
+          )}
         </div>
       )
 
@@ -1037,26 +1416,33 @@ export function ComponentRenderer({
         }
       }
       
+      // Helper to filter out data URLs - only allow HTTP/HTTPS URLs (storage URLs)
+      const isValidStorageUrl = (url: string | null | undefined): boolean => {
+        if (!url) return false
+        // Only allow HTTP/HTTPS URLs (storage URLs), reject data URLs
+        return typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))
+      }
+      
       const handleImageUpload = async (file: File) => {
         setUploadingImage(true)
         try {
+          // Convert to 16:9 aspect ratio
+          const convertedFile = await convertImageTo16x9(file)
+          
           // Compress image to under 1MB for bucket storage
-          const compressedFile = await compressImageUnder1MB(file)
+          const compressedFile = await compressImageUnder1MB(convertedFile)
           
-          // Upload compressed version to bucket
-          const thumbnailUrl = await uploadFileToStorage(compressedFile, 'uploads', 'images', false)
+          // Upload compressed version to bucket (ONLY store storage URL, never data URL)
+          const imageStorageUrl = await uploadFileToStorage(compressedFile, 'uploads', 'images', false)
           
-          // Convert original to data URL for high-quality display
-          const originalDataUrl = await fileToDataURL(file)
-          
-          if (thumbnailUrl) {
-            setImagePreview(originalDataUrl) // Show original in preview
+          if (imageStorageUrl) {
+            setImagePreview(imageStorageUrl) // Show storage URL in preview
             if (onUpdateComponent) {
               updateConfig({ 
-                imageUrl: thumbnailUrl, // Compressed thumbnail in bucket
-                imageOriginal: originalDataUrl, // Original for display
+                imageUrl: imageStorageUrl, // Storage URL only - minimizes database payload size
                 imageFile: file.name, 
                 imageType: file.type 
+                // Note: Removed imageOriginal to minimize payload size - use imageUrl instead
               })
             }
           }
@@ -1067,19 +1453,21 @@ export function ComponentRenderer({
         }
       }
       
-      // Load image preview from config on mount (prefer original over thumbnail)
+      // Load image preview from config on mount - only use storage URLs, filter out data URLs
       useEffect(() => {
         if (!imagePreview) {
-          const original = config.imageOriginal || null
+          // Prefer imageUrl, fallback to imageOriginal (but only if it's a storage URL)
           const url = config.imageUrl || null
+          const original = config.imageOriginal || null
           
-          if (original) {
-            setImagePreview(original)
-          } else if (url) {
+          // Only use valid storage URLs, filter out data URLs
+          if (isValidStorageUrl(url)) {
             setImagePreview(url)
+          } else if (isValidStorageUrl(original)) {
+            setImagePreview(original)
           }
         }
-      }, [config.imageUrl || null, config.imageOriginal || null, imagePreview])
+      }, [config.imageUrl, config.imageOriginal, imagePreview])
       
       return (
         <div>
@@ -1099,22 +1487,28 @@ export function ComponentRenderer({
             className={`w-full bg-muted rounded-xl flex items-center justify-center shadow-neumorphic-inset ${
               onUpdateComponent ? 'cursor-pointer hover:bg-muted/70' : ''
             } transition-colors relative ${uploadingImage ? 'opacity-50' : ''} ${
-              onUpdateComponent ? 'aspect-video overflow-hidden' : 'min-h-[300px]'
+              onUpdateComponent || isPreviewMode ? 'aspect-video overflow-hidden' : 'min-h-[300px]'
             }`}
             onDrop={onUpdateComponent ? handleImageDrop : undefined}
             onDragOver={onUpdateComponent ? (e) => e.preventDefault() : undefined}
             onClick={onUpdateComponent ? () => imageInputRef.current?.click() : undefined}
           >
-            {imagePreview || config.imageOriginal || config.imageUrl || config.url ? (
+            {imagePreview ? (
               <img
-                src={imagePreview || config.imageOriginal || config.imageUrl || config.url}
+                src={imagePreview}
                 alt={config.alt || "Image"}
                 className={`w-full rounded-xl ${
                   onUpdateComponent 
                     ? 'h-full object-cover' 
-                    : 'h-auto max-h-[600px] object-contain'
+                    : isPreviewMode
+                      ? 'h-full object-cover aspect-video'
+                      : 'h-auto max-h-[600px] object-contain'
                 }`}
                 style={{ maxWidth: '100%' }}
+                onError={(e) => {
+                  console.error('Image load error:', imagePreview)
+                  setImagePreview(null)
+                }}
               />
             ) : (
               <>

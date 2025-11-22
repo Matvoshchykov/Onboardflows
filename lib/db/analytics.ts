@@ -13,6 +13,7 @@ export interface AnalyticsData {
   pathAnalytics: PathAnalytics
   answerDistribution: AnswerDistribution
   nodeVisitStats: NodeVisitStats
+  videoViewingStats: VideoViewingStats
 }
 
 export interface PathAnalytics {
@@ -33,6 +34,15 @@ export interface NodeVisitStats {
     nodeTitle: string
     visitCount: number
     avgTimeSpent: number // in seconds
+  }
+}
+
+export interface VideoViewingStats {
+  [componentId: string]: {
+    componentTitle: string
+    viewCount: number
+    avgViewingTime: number // in seconds
+    totalViewingTime: number // in seconds
   }
 }
 
@@ -83,7 +93,8 @@ export async function getFlowAnalytics(flowId: string, flowNodes: Array<{ id: st
           pathFrequency: new Map()
         },
         answerDistribution: {},
-        nodeVisitStats: {}
+        nodeVisitStats: {},
+        videoViewingStats: {}
       }
     }
 
@@ -249,6 +260,46 @@ export async function getFlowAnalytics(flowId: string, flowNodes: Array<{ id: st
       }
     })
 
+    // Calculate video viewing stats
+    const videoViewingMap: Map<string, { count: number; totalTime: number; title: string }> = new Map()
+    responseData.forEach(r => {
+      if (r.question_type === 'video-step' && r.answer) {
+        try {
+          // Handle both object and parsed JSON string
+          let answer: any = r.answer
+          if (typeof answer === 'string') {
+            answer = JSON.parse(answer)
+          }
+          
+          if (answer && typeof answer === 'object') {
+            const componentId = answer.componentId || answer.component_id || r.node_id
+            const viewingTime = answer.viewingTime || answer.viewing_time || 0
+            
+            if (componentId && typeof viewingTime === 'number' && viewingTime > 0) {
+              const existing = videoViewingMap.get(componentId) || { count: 0, totalTime: 0, title: 'Video' }
+              videoViewingMap.set(componentId, {
+                count: existing.count + 1,
+                totalTime: existing.totalTime + viewingTime,
+                title: existing.title
+              })
+            }
+          }
+        } catch (e) {
+          // Skip invalid JSON
+        }
+      }
+    })
+
+    const videoViewingStats: VideoViewingStats = {}
+    videoViewingMap.forEach((stats, componentId) => {
+      videoViewingStats[componentId] = {
+        componentTitle: stats.title,
+        viewCount: stats.count,
+        avgViewingTime: Math.round(stats.totalTime / stats.count),
+        totalViewingTime: Math.round(stats.totalTime)
+      }
+    })
+
     return {
       totalSessions,
       completedSessions,
@@ -261,7 +312,8 @@ export async function getFlowAnalytics(flowId: string, flowNodes: Array<{ id: st
         pathFrequency: pathFrequencyMap
       },
       answerDistribution: answerDistMap,
-      nodeVisitStats
+      nodeVisitStats,
+      videoViewingStats
     }
   } catch (error) {
     console.error('Error getting flow analytics:', error)
@@ -277,7 +329,8 @@ export async function getFlowAnalytics(flowId: string, flowNodes: Array<{ id: st
           pathFrequency: new Map()
         },
         answerDistribution: {},
-        nodeVisitStats: {}
+        nodeVisitStats: {},
+        videoViewingStats: {}
       }
   }
 }

@@ -17,11 +17,30 @@ import { saveResponse } from "@/lib/db/responses"
 import { trackPathNode } from "@/lib/db/paths"
 import { supabase } from "@/lib/supabase"
 import { deleteComponentFiles } from "@/lib/utils"
+import { deleteNodeResponses } from "@/lib/db/responses"
+import { deleteNodePaths } from "@/lib/db/paths"
 import { useRouter } from "next/navigation"
 import { PlanSelectionModal } from "./plan-selection-modal"
 import { UploadFlowModal } from "./upload-flow-modal"
 
 type PortPoint = { x: number; y: number }
+
+// Flow block colors - same as analytics for consistency
+const FLOW_BLOCK_COLORS = [
+  "#10b981", // green
+  "#3b82f6", // blue
+  "#f59e0b", // amber
+  "#ef4444", // red
+  "#8b5cf6", // purple
+  "#ec4899", // pink
+  "#06b6d4", // cyan
+  "#14b8a6", // teal
+]
+
+// Get unique color for a flow block based on its index
+const getFlowBlockColor = (index: number): string => {
+  return FLOW_BLOCK_COLORS[index % FLOW_BLOCK_COLORS.length]
+}
 
 export type LogicBlock = {
   id: string
@@ -111,6 +130,13 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
   const [isSaving, setIsSaving] = useState(false)
   const [showPlanModal, setShowPlanModal] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
+  const [editingNodeTitle, setEditingNodeTitle] = useState<string | null>(null)
+  const [editingNodeTitleValue, setEditingNodeTitleValue] = useState<string>("")
+  const [deleteHistory, setDeleteHistory] = useState<Array<{ nodeId: string; component: PageComponent; index: number }>>([])
+  const deleteHistoryRef = useRef<Array<{ nodeId: string; component: PageComponent; index: number }>>([])
+  const flowRef = useRef<Flow | null>(flow)
+  const onUpdateFlowRef = useRef(onUpdateFlow)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<{ nodeId: string; nodeTitle: string } | null>(null)
   
   // Mobile touch gesture state
   const [isMobile, setIsMobile] = useState(false)
@@ -170,6 +196,19 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
       hasCenteredFlowRef.current = null
     }
   }, [flow?.logicBlocks, flow?.id])
+
+  // Keep refs in sync with state for undo handler
+  useEffect(() => {
+    deleteHistoryRef.current = deleteHistory
+  }, [deleteHistory])
+
+  useEffect(() => {
+    flowRef.current = flow
+  }, [flow])
+
+  useEffect(() => {
+    onUpdateFlowRef.current = onUpdateFlow
+  }, [onUpdateFlow])
 
   // Initialize lastSavedFlow when flow loads
   useEffect(() => {
@@ -414,25 +453,8 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
         if (selectedNodeId && flow) {
           const nodeToDelete = flow.nodes.find(n => n.id === selectedNodeId)
           if (nodeToDelete) {
-            // Remove all connections TO this node from other flow nodes
-            const updatedNodes = flow.nodes
-              .filter(n => n.id !== selectedNodeId)
-              .map(n => ({
-                ...n,
-                connections: n.connections.filter(id => id !== selectedNodeId)
-              }))
-            // Remove all connections TO this node from logic blocks
-            const updatedLogicBlocks = logicBlocks.map(b => ({
-              ...b,
-              connections: b.connections.filter(id => id !== selectedNodeId)
-            }))
-            handleLogicBlocksUpdate(updatedLogicBlocks)
-            onUpdateFlow({ ...flow, nodes: updatedNodes })
-            // Update lastCreatedBlockId if deleted block was the last created
-            if (lastCreatedBlockId === selectedNodeId) {
-              setLastCreatedBlockId(null)
-            }
-            setSelectedNodeId(null)
+            // Show confirmation popup
+            setShowDeleteConfirm({ nodeId: selectedNodeId, nodeTitle: nodeToDelete.title })
           }
         }
         if (selectedLogicId && flow) {
@@ -518,6 +540,68 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
       return next
     })
   }, [logicBlocks, logicBlockSizes, canvasOffset.x, canvasOffset.y, zoom, screenToWorld])
+
+  // Handle Ctrl+Z for undo - using refs to avoid closure issues
+  // This MUST be before any early returns to maintain hook order
+  useEffect(() => {
+    const handleUndoKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        // Get latest values from refs to avoid closure issues
+        const currentHistory = deleteHistoryRef.current
+        const currentFlow = flowRef.current
+        
+        // Simple check: only skip if in a content textarea (not title inputs)
+        const activeElement = document.activeElement
+        const isInContentTextarea = activeElement && 
+          activeElement.tagName === 'TEXTAREA' &&
+          !(activeElement as HTMLElement).classList.contains('font-semibold') &&
+          !(activeElement as HTMLElement).classList.contains('text-lg')
+        
+        if (currentHistory.length > 0 && currentFlow && !isInContentTextarea) {
+          e.preventDefault()
+          e.stopPropagation()
+          e.stopImmediatePropagation()
+          
+          const lastDelete = currentHistory[currentHistory.length - 1]
+          const node = currentFlow.nodes.find(n => n.id === lastDelete.nodeId)
+          
+          if (node) {
+            const components = normalizePageComponents(node.pageComponents)
+            const componentExists = components.some(comp => comp.id === lastDelete.component.id)
+            
+            if (!componentExists) {
+              const updatedComponents = [
+                ...components.slice(0, lastDelete.index),
+                lastDelete.component,
+                ...components.slice(lastDelete.index)
+              ]
+              
+              const updatedNode: FlowNode = {
+                ...node,
+                pageComponents: updatedComponents,
+                components: updatedComponents.length
+              }
+
+              const updatedFlow: Flow = {
+                ...currentFlow,
+                nodes: currentFlow.nodes.map(n => n.id === lastDelete.nodeId ? updatedNode : n)
+              }
+
+              onUpdateFlowRef.current(updatedFlow)
+              setDeleteHistory(prev => prev.slice(0, -1))
+            } else {
+              setDeleteHistory(prev => prev.slice(0, -1))
+            }
+          } else {
+            setDeleteHistory(prev => prev.slice(0, -1))
+          }
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleUndoKeyDown, true)
+    return () => document.removeEventListener('keydown', handleUndoKeyDown, true)
+  }, []) // Empty array - all values come from refs which are always current
 
   if (!flow) {
     return (
@@ -1179,15 +1263,19 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
 
     const components = normalizePageComponents(node.pageComponents)
     const componentToDelete = components.find(comp => comp.id === componentId)
+    const componentIndex = components.findIndex(comp => comp.id === componentId)
+    
+    if (!componentToDelete) return
+    
+    // Store in history for undo (don't delete files yet - only delete on undo if not restored)
+    setDeleteHistory(prev => [...prev, { nodeId, component: componentToDelete, index: componentIndex }])
     
     // Delete associated files from Supabase Storage before removing component
-    if (componentToDelete) {
       try {
         await deleteComponentFiles(componentToDelete)
       } catch (error) {
         console.error('Error deleting component files:', error)
         // Continue with component deletion even if file deletion fails
-      }
     }
     
     const updatedComponents = components.filter(comp => comp.id !== componentId)
@@ -1594,17 +1682,17 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
           <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 z-20">
             <button
               onClick={() => setViewMode("create")}
-              className="text-[12px] text-muted-foreground hover:text-foreground transition-colors relative pb-0.5"
+              className="text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+              style={{ minWidth: '105px' }}
             >
               Flow Creation
-              <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-muted-foreground transition-all" style={{ width: '0' }} />
             </button>
             <button
               onClick={() => setViewMode("analytics")}
-              className="text-[12px] text-foreground relative pb-0.5"
+              className="text-[12px] text-foreground"
+              style={{ minWidth: '105px' }}
             >
               Data Analytics
-              <span className="absolute bottom-0 left-0 w-full h-[1px] bg-muted-foreground" />
             </button>
           </div>
         </header>
@@ -1663,17 +1751,17 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
         <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 z-20">
           <button
             onClick={() => setViewMode("create")}
-            className="text-[12px] text-foreground relative pb-0.5"
+            className="text-[12px] text-foreground"
+            style={{ minWidth: '105px' }}
           >
             Flow Creation
-            <span className="absolute bottom-0 left-0 w-full h-[1px] bg-muted-foreground" />
           </button>
           <button
             onClick={() => setViewMode("analytics")}
-            className="text-[12px] text-muted-foreground hover:text-foreground transition-colors relative pb-0.5"
+            className="text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+            style={{ minWidth: '105px' }}
           >
             Data Analytics
-            <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-muted-foreground transition-all" style={{ width: '0' }} />
           </button>
         </div>
         <div className="flex items-center gap-3">
@@ -2053,6 +2141,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
               // Pre-calculate expensive operations once per render cycle
               const isConnectedAsTarget = flow.nodes.some(n => n.connections.includes(node.id)) || logicBlocks.some(b => b.connections.includes(node.id))
               const incomingColor = getIncomingColorForNode(node.id)
+              const blockColor = getFlowBlockColor(nodeIndex)
               
               const components = normalizePageComponents(node.pageComponents)
               
@@ -2098,10 +2187,9 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
                       onClick={(e) => {
                         e.stopPropagation()
                         // Find the node in flow.nodes and set preview to show that node
-                        // The PreviewModal will handle building the path correctly
                         const nodeIndex = flow.nodes.findIndex(n => n.id === node.id)
                         if (nodeIndex !== -1) {
-                          setPreviewNodeIndex(0) // Always start at index 0, PreviewModal will find the correct node
+                          setPreviewNodeIndex(nodeIndex) // Start at the clicked node
                           setShowPreview(true)
                         }
                       }}
@@ -2117,13 +2205,62 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
                       </div>
                       <div className="flex-1 pr-8">
                         <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-sm">{node.title}</h3>
+                          <div className="relative flex-1">
+                            <h3 
+                              className="font-semibold text-sm cursor-text hover:opacity-80 transition-opacity"
+                              style={{ color: blockColor, visibility: editingNodeTitle === node.id ? 'hidden' : 'visible' }}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setEditingNodeTitle(node.id)
+                                setEditingNodeTitleValue(node.title)
+                              }}
+                            >
+                              {node.title}
+                            </h3>
+                            {editingNodeTitle === node.id && (
+                              <input
+                                type="text"
+                                value={editingNodeTitleValue}
+                                onChange={(e) => setEditingNodeTitleValue(e.target.value)}
+                                onBlur={() => {
+                                  if (editingNodeTitleValue.trim() && flow) {
+                                    const updatedNodes = flow.nodes.map(n =>
+                                      n.id === node.id ? { ...n, title: editingNodeTitleValue.trim() } : n
+                                    )
+                                    onUpdateFlow({ ...flow, nodes: updatedNodes })
+                                  }
+                                  setEditingNodeTitle(null)
+                                  setEditingNodeTitleValue("")
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    if (editingNodeTitleValue.trim() && flow) {
+                                      const updatedNodes = flow.nodes.map(n =>
+                                        n.id === node.id ? { ...n, title: editingNodeTitleValue.trim() } : n
+                                      )
+                                      onUpdateFlow({ ...flow, nodes: updatedNodes })
+                                    }
+                                    setEditingNodeTitle(null)
+                                    setEditingNodeTitleValue("")
+                                  } else if (e.key === 'Escape') {
+                                    setEditingNodeTitle(null)
+                                    setEditingNodeTitleValue("")
+                                  }
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="font-semibold text-sm bg-transparent border-none focus:outline-none absolute left-0 top-0 w-full caret-current"
+                                style={{ color: blockColor }}
+                                autoFocus
+                              />
+                            )}
+                          </div>
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
                         setShowPlanModal(true)
                       }}
-                      className="flex items-center gap-1 text-[#3b82f6] underline text-sm font-medium hover:text-[#2563eb] transition-colors"
+                      className="flex items-center gap-1 text-[#3b82f6] underline text-sm font-medium hover:text-[#2563eb] transition-colors flex-shrink-0"
                     >
                       <Crown className="w-3 h-3" />
                       Upgrade
@@ -2965,6 +3102,67 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
           }}
         />
       )}
+
+      {/* Delete Node Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowDeleteConfirm(null)}>
+          <div 
+            className="bg-card rounded-xl p-6 max-w-md w-full mx-4 shadow-neumorphic-raised border border-border"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-foreground mb-2">Delete Flow Block</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              This action cannot be undone. The block "<strong>{showDeleteConfirm.nodeTitle}</strong>" and all components and data tied to it will be permanently deleted.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(null)}
+                className="px-4 py-2 rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 transition-colors text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!flow || !showDeleteConfirm) return
+                  
+                  const nodeId = showDeleteConfirm.nodeId
+                  
+                  // Delete associated data
+                  await Promise.all([
+                    deleteNodeResponses(nodeId),
+                    deleteNodePaths(nodeId)
+                  ])
+                  
+                  // Remove all connections TO this node from other flow nodes
+                  const updatedNodes = flow.nodes
+                    .filter(n => n.id !== nodeId)
+                    .map(n => ({
+                      ...n,
+                      connections: n.connections.filter(id => id !== nodeId)
+                    }))
+                  // Remove all connections TO this node from logic blocks
+                  const updatedLogicBlocks = logicBlocks.map(b => ({
+                    ...b,
+                    connections: b.connections.filter(id => id !== nodeId)
+                  }))
+                  handleLogicBlocksUpdate(updatedLogicBlocks)
+                  onUpdateFlow({ ...flow, nodes: updatedNodes })
+                  // Update lastCreatedBlockId if deleted block was the last created
+                  if (lastCreatedBlockId === nodeId) {
+                    setLastCreatedBlockId(null)
+                  }
+                  setSelectedNodeId(null)
+                  setShowDeleteConfirm(null)
+                  toast.success("Flow block deleted")
+                }}
+                className="px-4 py-2 rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors text-sm font-medium"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -2987,20 +3185,9 @@ function PreviewModal({
   setPreviewAnswers: React.Dispatch<React.SetStateAction<Record<string, any>>>
   setShowPreview: React.Dispatch<React.SetStateAction<boolean>>
 }) {
-  // Session tracking state
-  const [sessionId, setSessionId] = useState<string | null>(null)
-  const [userId] = useState<string>(() => {
-    // Generate or get user ID (in production, use actual auth)
-    if (typeof window !== 'undefined') {
-      let uid = localStorage.getItem('user_id')
-      if (!uid) {
-        uid = `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-        localStorage.setItem('user_id', uid)
-      }
-      return uid
-    }
-    return `user-${Date.now()}`
-  })
+  // Don't track sessions in preview mode - preview is for creator testing only
+  // Session tracking removed to prevent preview from counting as real flow sessions
+  const sessionId = null // Always null in preview mode
 
   // Helper function to evaluate logic block (must be defined before getNextNodeFromCurrent)
   const evaluateLogicBlock = (block: LogicBlock, answer: any): string | null => {
@@ -3305,46 +3492,10 @@ function PreviewModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flow?.id]) // Rebuild when flow changes
   
-  // Start session when preview opens (only if flow is active)
-  useEffect(() => {
-    async function initializeSession() {
-      if (!flow) return
-      
-      // Check if flow is active in database
-      const { data: flowData } = await supabase
-        .from('flows')
-        .select('active')
-        .eq('id', flow.id)
-        .single()
-
-      if (flowData?.active) {
-        const session = await startFlowSession(userId, flow.id)
-        if (session) {
-          setSessionId(session.id)
-          // Track first node visit
-          if (pathNodes[0]?.id) {
-            await trackPathNode(session.id, pathNodes[0].id, 0)
-          }
-        }
-      }
-    }
-    
-    if (previewNodeIndex === 0 && !sessionId) {
-      initializeSession()
-    }
-  }, [flow?.id, userId, pathNodes[0]?.id])
-
-  // Track path node visits
-  useEffect(() => {
-    async function trackVisit() {
-      if (!sessionId || !currentPreviewNode) return
-      await trackPathNode(sessionId, currentPreviewNode.id, previewNodeIndex)
-      await updateSessionStep(sessionId, previewNodeIndex)
-    }
-    if (sessionId && currentPreviewNode) {
-      trackVisit()
-    }
-  }, [sessionId, previewNodeIndex, currentPreviewNode?.id])
+  // Don't initialize session in preview mode - preview is for creator testing only
+  // Sessions should only be created in the real onboarding flow (app/experiences/[experienceId]/flow/page.tsx)
+  
+  // Don't track path visits in preview mode - preview is for creator testing only
 
   const previewComponents = normalizePageComponents(currentPreviewNode?.pageComponents)
   const questionComponent = previewComponents.find(
@@ -3399,15 +3550,7 @@ function PreviewModal({
         return updated
       })
       
-      // Save answer to database if session exists
-      if (sessionId && questionComponent) {
-        await saveResponse(
-          sessionId,
-          currentPreviewNode.id,
-          questionComponent.type,
-          freshAnswer
-        )
-      }
+      // Don't save answer in preview mode - preview is for creator testing only
     }
     
     // Get next node based on answer - use saved answer or undefined
@@ -3420,30 +3563,20 @@ function PreviewModal({
       
       if (nextNodeIndex !== -1) {
         // Node already exists in path, just move to that index
-        if (sessionId) {
-          await trackPathNode(sessionId, nextNode.id, nextNodeIndex)
-          await updateSessionStep(sessionId, nextNodeIndex)
-        }
+        // Don't track in preview mode
         setPreviewNodeIndex(nextNodeIndex)
       } else {
         // Node not in path yet, add it and move to it
         const newPath = [...actualPathTaken, nextNode]
         setActualPathTaken(newPath)
       
-      // Track next node visit in database
-      if (sessionId) {
-          await trackPathNode(sessionId, nextNode.id, actualPathTaken.length)
-          await updateSessionStep(sessionId, actualPathTaken.length)
-      }
+      // Don't track next node visit in preview mode
       
       // Move to next index
         setPreviewNodeIndex(actualPathTaken.length)
       }
     } else {
-      // Complete session when flow ends
-      if (sessionId) {
-        await completeFlowSession(sessionId)
-      }
+      // Don't complete session in preview mode
       setShowPreview(false)
     }
   }
@@ -3630,15 +3763,7 @@ function PreviewModal({
                           return updated
                         })
                         
-                        // Save to database if session exists and flow is active
-                        if (sessionId && previewQuestionComponent) {
-                          await saveResponse(
-                            sessionId,
-                            currentPreviewNode.id,
-                            previewQuestionComponent.type,
-                            value
-                          )
-                        }
+                        // Don't save to database in preview mode - preview is for creator testing only
                       }
                     }}
                   />
