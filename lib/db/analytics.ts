@@ -121,7 +121,8 @@ export async function getFlowAnalytics(flowId: string, flowNodes: Array<{ id: st
           pathFrequency: new Map()
         },
         answerDistribution: {},
-        nodeVisitStats: {}
+        nodeVisitStats: {},
+        videoViewingStats: {}
       }
     }
 
