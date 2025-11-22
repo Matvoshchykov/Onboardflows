@@ -51,11 +51,12 @@ export default async function ExperiencePage({
 		);
 	} catch (error) {
 		// verifyUserToken throws on validation failure
+		// Users are always logged in via Whop iframe, so this is an access issue
 		console.error("Auth error:", error);
 		return (
 			<div className="flex flex-col p-8 gap-4">
-				<h1 className="text-9">Authentication failed</h1>
-				<p className="text-3 text-gray-10">Please ensure you are logged in.</p>
+				<h1 className="text-9">Access denied</h1>
+				<p className="text-3 text-gray-10">You do not have access to this experience.</p>
 			</div>
 		);
 	}
