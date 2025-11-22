@@ -8,13 +8,11 @@ export default async function ExperiencePage({
 	params: Promise<{ experienceId: string }>;
 }) {
 	const { experienceId } = await params;
-	const headersList = await headers();
-	
-	let accessLevel: string = "unknown";
 	
 	try {
-		// Ensure the user is logged in on whop.
-		const { userId } = await whopsdk.verifyUserToken(headersList);
+		// Verify user token - throws on validation failure
+		const { userId } = await whopsdk.verifyUserToken(await headers());
+		
 		// Check access to the experience
 		const access = await whopsdk.users.checkAccess(experienceId, { id: userId });
 
@@ -27,27 +25,38 @@ export default async function ExperiencePage({
 			);
 		}
 
-		accessLevel = access.access_level === "admin" ? "owner" : "customer";
-	} catch (error) {
-		// If auth fails, still show UI for development
-		console.error("Auth error:", error);
-		accessLevel = "owner"; // Default to owner for development
-	}
+		// If customer, redirect to flow page
+		if (access.access_level === "customer") {
+			const { redirect } = await import("next/navigation");
+			redirect(`/experiences/${experienceId}/flow`);
+		}
 
-	const isAdmin = accessLevel === "owner";
+		// If admin (team member), show FlowBuilder (creation dashboard)
+		if (access.access_level === "admin") {
+			return (
+				<div className="flex flex-col h-screen">
+					<div className="flex-1 overflow-hidden">
+						<FlowBuilder isAdmin={true} />
+					</div>
+				</div>
+			);
+		}
 
-	// If customer, redirect to flow page
-	if (!isAdmin) {
-		const { redirect } = await import("next/navigation");
-		redirect(`/experiences/${experienceId}/flow`);
-	}
-
-	// If owner, show FlowBuilder (creation dashboard)
-	return (
-		<div className="flex flex-col h-screen">
-			<div className="flex-1 overflow-hidden">
-				<FlowBuilder isAdmin={true} />
+		// Fallback for any other access level
+		return (
+			<div className="flex flex-col p-8 gap-4">
+				<h1 className="text-9">Access denied</h1>
+				<p className="text-3 text-gray-10">Invalid access level.</p>
 			</div>
-		</div>
-	);
+		);
+	} catch (error) {
+		// verifyUserToken throws on validation failure
+		console.error("Auth error:", error);
+		return (
+			<div className="flex flex-col p-8 gap-4">
+				<h1 className="text-9">Authentication failed</h1>
+				<p className="text-3 text-gray-10">Please ensure you are logged in.</p>
+			</div>
+		);
+	}
 }

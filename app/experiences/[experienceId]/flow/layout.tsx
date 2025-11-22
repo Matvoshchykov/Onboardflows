@@ -10,27 +10,33 @@ export default async function FlowLayout({
 	children: React.ReactNode;
 }) {
 	const { experienceId } = await params;
-	const headersList = await headers();
 	
 	try {
-		// Verify user token and check access
-		const { userId } = await whopsdk.verifyUserToken(headersList);
+		// Verify user token - throws on validation failure
+		const { userId } = await whopsdk.verifyUserToken(await headers());
+		
+		// Check access to the experience
 		const access = await whopsdk.users.checkAccess(experienceId, { id: userId });
 
 		if (!access.has_access) {
 			redirect(`/experiences/${experienceId}`);
 		}
 
-		// If user is owner/admin, redirect them to creation dashboard
+		// If user is admin (team member), redirect them to creation dashboard
 		if (access.access_level === "admin") {
 			redirect(`/experiences/${experienceId}`);
 		}
 
 		// If customer, allow access to flow
-		return <>{children}</>;
+		if (access.access_level === "customer") {
+			return <>{children}</>;
+		}
+
+		// Fallback - redirect if access level is unexpected
+		redirect(`/experiences/${experienceId}`);
 	} catch (error) {
+		// verifyUserToken throws on validation failure
 		console.error("Auth error in flow layout:", error);
-		// On error, redirect to main experience page
 		redirect(`/experiences/${experienceId}`);
 	}
 }

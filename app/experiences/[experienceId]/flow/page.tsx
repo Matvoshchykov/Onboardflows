@@ -22,7 +22,6 @@ export default function OnboardingFlowView() {
   const [userAnswers, setUserAnswers] = useState<Record<string, any>>({})
   const [currentAnswer, setCurrentAnswer] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [accessLevel, setAccessLevel] = useState<"owner" | "customer">("customer")
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
@@ -40,7 +39,7 @@ export default function OnboardingFlowView() {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
-  // Load user ID and access level
+  // Load user ID only (access level is checked server-side in layout)
   useEffect(() => {
     async function loadUserData() {
       try {
@@ -50,19 +49,12 @@ export default function OnboardingFlowView() {
         if (userIdData.userId) {
           setUserId(userIdData.userId)
         }
-        
-        // Load access level
-        const accessResponse = await fetch(`/api/get-access-level?experienceId=${experienceId}`)
-        const accessData = await accessResponse.json()
-        if (accessData.accessLevel && (accessData.accessLevel === "owner" || accessData.accessLevel === "customer")) {
-          setAccessLevel(accessData.accessLevel)
-        }
       } catch (error) {
         console.error('Error loading user data:', error)
       }
     }
     loadUserData()
-  }, [experienceId])
+  }, [])
 
   // Load flow data - in a real app, this would fetch from your data source
   useEffect(() => {
