@@ -36,11 +36,17 @@ export default async function ExperiencePage({
 
 	const isAdmin = accessLevel === "owner";
 
-	// Render your FlowBuilder UI with access level
+	// If customer, redirect to flow page
+	if (!isAdmin) {
+		const { redirect } = await import("next/navigation");
+		redirect(`/experiences/${experienceId}/flow`);
+	}
+
+	// If owner, show FlowBuilder (creation dashboard)
 	return (
 		<div className="flex flex-col h-screen">
 			<div className="flex-1 overflow-hidden">
-				<FlowBuilder isAdmin={isAdmin} />
+				<FlowBuilder isAdmin={true} />
 			</div>
 		</div>
 	);

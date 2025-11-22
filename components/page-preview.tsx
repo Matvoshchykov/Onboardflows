@@ -833,7 +833,7 @@ export function ComponentRenderer({
             setVideoPreview(null)
           }
         }
-      }, [config.videoUrl, config.videoOriginal, onUpdateComponent])
+      }, [config.videoUrl, config.videoOriginal, onUpdateComponent, isMobile])
       
       return (
         <div>
@@ -859,26 +859,28 @@ export function ComponentRenderer({
             onDragOver={onUpdateComponent ? (e) => e.preventDefault() : undefined}
             onClick={onUpdateComponent ? () => videoInputRef.current?.click() : undefined}
           >
-            {videoSource ? (
+            {(videoSource || videoPreview) ? (
               onUpdateComponent ? (
                 // Component editor: show thumbnail image
                 <img
-                  src={videoSource}
+                  src={videoSource || videoPreview || ''}
                   alt="Video thumbnail"
                   className="w-full h-full object-cover rounded-xl"
                   onError={(e) => {
-                    console.error('Thumbnail load error:', videoSource)
+                    console.error('Thumbnail load error:', videoSource || videoPreview)
                     setVideoPreview(null)
                   }}
                 />
               ) : (
                 // Preview/onboarding: show video
                 <video
-                  key={videoSource || 'video'}
-                  src={videoSource || ''}
+                  key={videoSource || videoPreview || 'video'}
+                  src={videoSource || videoPreview || ''}
                   controls
-                  preload="metadata"
+                  preload="auto"
                   playsInline
+                  muted={false}
+                  crossOrigin="anonymous"
                   className={`w-full rounded-xl ${
                     isPreviewMode
                       ? 'h-full object-cover aspect-video'
@@ -889,14 +891,20 @@ export function ComponentRenderer({
                     WebkitPlaysinline: 'true',
                     width: '100%',
                     height: 'auto',
-                    display: 'block'
+                    display: 'block',
+                    objectFit: 'contain'
                   } as React.CSSProperties}
-                  onLoadedMetadata={(e) => {
-                    // Force video to load properly on mobile
+                  onLoadedData={(e) => {
+                    // Ensure video is ready on mobile
                     const video = e.currentTarget
-                    if (video.readyState >= 2) {
+                    console.log('Video loaded, readyState:', video.readyState, 'src:', video.src)
+                    // Force play on mobile if needed
+                    if (isMobile && video.readyState >= 2) {
                       video.load()
                     }
+                  }}
+                  onCanPlay={(e) => {
+                    console.log('Video can play, src:', e.currentTarget.src)
                   }}
                   onTimeUpdate={(e) => {
                     const video = e.currentTarget
@@ -918,8 +926,17 @@ export function ComponentRenderer({
                     }
                   }}
                   onError={(e) => {
-                    console.error('Video load error - source:', videoSource)
                     const video = e.currentTarget
+                    console.error('Video load error - source:', videoSource || videoPreview)
+                    console.error('Video error details:', {
+                      error: video.error?.code,
+                      errorMessage: video.error?.message,
+                      networkState: video.networkState,
+                      readyState: video.readyState,
+                      src: video.src,
+                      currentSrc: video.currentSrc
+                    })
+                    
                     // Try fallback storage URLs (never data URLs, and must be video files)
                     const fallbackOriginal = config.videoOriginal || null
                     const fallbackUrl = config.videoUrl || null
@@ -940,9 +957,6 @@ export function ComponentRenderer({
                   }}
                   onLoadStart={() => {
                     console.log('Video loading started:', videoSource)
-                  }}
-                  onCanPlay={() => {
-                    console.log('Video can play:', videoSource)
                   }}
                 />
               )
