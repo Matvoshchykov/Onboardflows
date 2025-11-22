@@ -739,7 +739,9 @@ export function ComponentRenderer({
         }
       }
       
-      const videoSource = getVideoSource()
+      // Use videoPreview state if available, otherwise fallback to getVideoSource()
+      // This ensures state is properly synced, especially on mobile
+      const videoSource = videoPreview || getVideoSource()
       
       const handleVideoDrop = async (e: React.DragEvent) => {
         e.preventDefault()
@@ -872,8 +874,8 @@ export function ComponentRenderer({
               ) : (
                 // Preview/onboarding: show video
                 <video
-                  key={videoSource}
-                  src={videoSource}
+                  key={videoSource || 'video'}
+                  src={videoSource || ''}
                   controls
                   preload="metadata"
                   playsInline
@@ -882,7 +884,20 @@ export function ComponentRenderer({
                       ? 'h-full object-cover aspect-video'
                       : 'h-auto max-h-[600px] object-contain'
                   }`}
-                  style={{ maxWidth: '100%', WebkitPlaysinline: 'true' } as React.CSSProperties}
+                  style={{ 
+                    maxWidth: '100%', 
+                    WebkitPlaysinline: 'true',
+                    width: '100%',
+                    height: 'auto',
+                    display: 'block'
+                  } as React.CSSProperties}
+                  onLoadedMetadata={(e) => {
+                    // Force video to load properly on mobile
+                    const video = e.currentTarget
+                    if (video.readyState >= 2) {
+                      video.load()
+                    }
+                  }}
                   onTimeUpdate={(e) => {
                     const video = e.currentTarget
                     const currentTime = video.currentTime

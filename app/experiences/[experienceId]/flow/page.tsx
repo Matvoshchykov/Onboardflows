@@ -603,13 +603,6 @@ export default function OnboardingFlowView() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center relative py-4 sm:py-8 px-4 overflow-hidden">
-      {/* Access Level Display */}
-      <div className="absolute top-4 right-4 z-20">
-        <span className="text-xs text-muted-foreground bg-card px-3 py-1.5 rounded-lg shadow-neumorphic-raised">
-          {accessLevel === "owner" ? "Owner" : "Customer"}
-        </span>
-      </div>
-      
       {/* Left Arrow - Blue */}
       <button
         onClick={handlePrev}
