@@ -876,12 +876,13 @@ export function ComponentRenderer({
                   src={videoSource}
                   controls
                   preload="metadata"
+                  playsInline
                   className={`w-full rounded-xl ${
                     isPreviewMode
                       ? 'h-full object-cover aspect-video'
                       : 'h-auto max-h-[600px] object-contain'
                   }`}
-                  style={{ maxWidth: '100%' }}
+                  style={{ maxWidth: '100%', WebkitPlaysinline: 'true' } as React.CSSProperties}
                   onTimeUpdate={(e) => {
                     const video = e.currentTarget
                     const currentTime = video.currentTime
@@ -969,35 +970,6 @@ export function ComponentRenderer({
               config.description || "This video is required to continue"
             )}
           </p>
-          {onUpdateComponent && (
-            <div className="mt-3 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  updateConfig({ requiredToWatch: !(config.requiredToWatch || false) })
-                }}
-                className={`flex items-center justify-center w-5 h-5 rounded transition-all ${
-                  config.requiredToWatch 
-                    ? 'bg-[#10b981] text-white' 
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-                title={config.requiredToWatch ? "Video required - click to disable" : "Click to require video"}
-              >
-                {config.requiredToWatch && (
-                  <Check className="w-3.5 h-3.5" />
-                )}
-              </button>
-              <span className="text-[10px] text-muted-foreground">
-                Require video to be watched fully
-              </span>
-            </div>
-          )}
-          {!onUpdateComponent && config.requiredToWatch && (
-            <p className="text-[10px] text-muted-foreground mt-2 italic">
-              This video must be watched fully to continue
-            </p>
-          )}
         </div>
       )
     }
@@ -1238,7 +1210,7 @@ export function ComponentRenderer({
     case "short-answer":
       return (
         <div>
-          <label className="block text-xs font-medium mb-1.5">
+          <label className="block text-xs font-medium mb-0">
             {onUpdateComponent ? (
               <EditableText
                 value={config.label || "What is your name?"}
@@ -1253,7 +1225,7 @@ export function ComponentRenderer({
           <input
             type="text"
             placeholder={config.placeholder || "Type your answer here..."}
-            className="w-full bg-card border-none rounded-xl px-3 py-2 text-xs shadow-neumorphic-inset focus:outline-none"
+            className="w-full bg-card border-none rounded-xl px-3 py-2 text-xs shadow-neumorphic-inset focus:outline-none mt-0"
             readOnly
           />
         </div>
@@ -1357,8 +1329,9 @@ export function ComponentRenderer({
               rel="noopener noreferrer"
               className="inline-block px-4 py-2 rounded-xl bg-primary text-primary-foreground shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-xs font-medium cursor-pointer"
               onClick={(e) => {
-                // Ensure navigation happens
+                // Ensure navigation happens on mobile
                 if (linkUrl && linkUrl !== "#") {
+                  e.preventDefault()
                   window.open(linkUrl, '_blank', 'noopener,noreferrer')
                 }
               }}

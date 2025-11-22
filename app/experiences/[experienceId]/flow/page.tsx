@@ -614,7 +614,11 @@ export default function OnboardingFlowView() {
       <button
         onClick={handlePrev}
         disabled={!hasPrev}
-        className="fixed left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        className={`fixed z-10 p-3 rounded-full shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+          isMobile 
+            ? 'left-4 bottom-4' 
+            : 'left-2 sm:left-4 top-1/2 -translate-y-1/2'
+        }`}
         style={{ backgroundColor: '#3B82F6' }}
       >
         <ChevronLeft className="w-5 h-5 text-white" />
@@ -625,7 +629,11 @@ export default function OnboardingFlowView() {
         <button
           onClick={handleNext}
           disabled={!canProceed}
-          className="fixed right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className={`fixed z-10 p-3 rounded-full shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+            isMobile 
+              ? 'right-4 bottom-4' 
+              : 'right-2 sm:right-4 top-1/2 -translate-y-1/2'
+          }`}
           style={{ backgroundColor: '#10b981' }}
         >
           <Check className="w-5 h-5 text-white" />
@@ -634,7 +642,11 @@ export default function OnboardingFlowView() {
         <button
           onClick={handleNext}
           disabled={!hasNext || !canProceed}
-          className="fixed right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className={`fixed z-10 p-3 rounded-full shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+            isMobile 
+              ? 'right-4 bottom-4' 
+              : 'right-2 sm:right-4 top-1/2 -translate-y-1/2'
+          }`}
           style={{ backgroundColor: '#10b981' }}
         >
           <ChevronRight className="w-5 h-5 text-white" />
