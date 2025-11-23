@@ -560,10 +560,10 @@ export function ComponentRenderer({
                                 : 'text-[hsl(220,9%,25%)]'
                             }`}>
                               {config.fileType}
-                            </p>
-                          )}
-                        </div>
-                      </div>
+                      </p>
+                    )}
+                  </div>
+                    </div>
                       <a
                         href={config.fileUrl || filePreview || '#'}
                         download={uploadedFileName || 'file'}
@@ -608,10 +608,10 @@ export function ComponentRenderer({
                                 : 'text-[hsl(220,9%,25%)]'
                             }`}>
                               {config.fileType}
-                            </p>
-                          )}
-                        </div>
-                      </div>
+                      </p>
+                    )}
+                  </div>
+                  </div>
                       <a
                         href={config.fileUrl || filePreview || '#'}
                         download={uploadedFileName || 'file'}
@@ -625,24 +625,24 @@ export function ComponentRenderer({
                       </a>
                     </div>
                     {onUpdateComponent !== undefined && (
-                      <button
-                        onClick={async (e) => {
-                          e.stopPropagation()
-                          // Delete file from storage if it exists
-                          if (config.fileUrl && typeof config.fileUrl === 'string' && config.fileUrl.startsWith('http')) {
-                            await deleteFileFromStorage(config.fileUrl, 'uploads')
-                          }
-                          setFilePreview(null)
-                          setUploadedFileName(null)
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      // Delete file from storage if it exists
+                      if (config.fileUrl && typeof config.fileUrl === 'string' && config.fileUrl.startsWith('http')) {
+                        await deleteFileFromStorage(config.fileUrl, 'uploads')
+                      }
+                      setFilePreview(null)
+                      setUploadedFileName(null)
                           updateConfig({ fileUrl: null, fileName: null, fileType: null })
-                          if (fileInputRef.current) {
-                            fileInputRef.current.value = ''
-                          }
-                        }}
+                      if (fileInputRef.current) {
+                        fileInputRef.current.value = ''
+                      }
+                    }}
                         className="text-xs text-destructive hover:underline mt-2"
-                      >
-                        Remove file
-                      </button>
+                  >
+                    Remove file
+                  </button>
                     )}
                   </div>
                 )}
@@ -971,20 +971,20 @@ export function ComponentRenderer({
                       }}
                     />
                   ) : (
-                    <video
+              <video
                       key={`${videoUrl || ''}-${isMobile}`}
                       src={videoUrl || ''}
-                      controls
+                controls
                       playsInline
                       webkit-playsinline="true"
                       muted={isMobile}
-                      preload="none"
+                      preload="metadata"
                       autoPlay={false}
-                      className={`w-full rounded-xl ${
+                className={`w-full rounded-xl ${
                         isPreviewMode
                           ? 'h-full object-cover aspect-video'
-                          : 'h-auto max-h-[600px] object-contain'
-                      }`}
+                    : 'h-auto max-h-[600px] object-contain'
+                }`}
                       style={{ 
                         maxWidth: '100%',
                         width: '100%',
@@ -1088,12 +1088,21 @@ export function ComponentRenderer({
                               break
                             case 2:
                               console.error('[Video Debug] Error: Network error - check CORS/URL accessibility')
+                              console.error('[Video Debug] iOS Fix: Ensure Supabase Storage bucket has CORS headers:')
+                              console.error('[Video Debug] - Access-Control-Allow-Origin: *')
+                              console.error('[Video Debug] - Access-Control-Allow-Methods: GET, HEAD, OPTIONS')
+                              console.error('[Video Debug] - Accept-Ranges: bytes (for range requests)')
                               break
                             case 3:
                               console.error('[Video Debug] Error: Decode failed - codec not supported')
+                              console.error('[Video Debug] iOS Fix: Video must be H.264 + AAC codec in .mp4 container')
+                              console.error('[Video Debug] - Current file may be H.265, VP9, AV1, or WebM')
+                              console.error('[Video Debug] - Re-encode to H.264 + AAC for iOS compatibility')
                               break
                             case 4:
                               console.error('[Video Debug] Error: Source not supported - format/codec issue')
+                              console.error('[Video Debug] iOS Fix: Check MIME type is video/mp4 (not application/octet-stream)')
+                              console.error('[Video Debug] - Verify Supabase Storage returns Content-Type: video/mp4')
                               break
                           }
                         }
@@ -1181,17 +1190,17 @@ export function ComponentRenderer({
         <div className="relative group w-full">
           {hasTitle && (
             <h3 className={`text-xs font-medium mb-2 ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}>
-              {onUpdateComponent ? (
-                <EditableText
-                  value={config.title || "Welcome to our onboarding"}
-                  onChange={(value) => updateConfig({ title: value })}
-                  className="text-xs font-medium"
-                  placeholder="Welcome to our onboarding"
-                />
-              ) : (
+            {onUpdateComponent ? (
+              <EditableText
+                value={config.title || "Welcome to our onboarding"}
+                onChange={(value) => updateConfig({ title: value })}
+                className="text-xs font-medium"
+                placeholder="Welcome to our onboarding"
+              />
+            ) : (
                 config.title
-              )}
-            </h3>
+            )}
+          </h3>
           )}
           <p className={`text-xs text-muted-foreground leading-relaxed ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}>
             {onUpdateComponent ? (
@@ -1517,22 +1526,22 @@ export function ComponentRenderer({
                   className="w-full bg-card border-none rounded-xl px-3 py-2 text-xs shadow-neumorphic-inset focus:outline-none min-h-[60px] resize-none"
                 />
               </div>
-              <div className="w-full mb-2">
-                <input
-                  type="url"
-                  value={config.url || ""}
-                  onChange={(e) => updateConfig({ url: e.target.value })}
-                  placeholder="https://example.com"
-                  className="w-full bg-card border-none rounded-xl px-3 py-2 text-xs shadow-neumorphic-inset focus:outline-none"
-                />
-              </div>
+            <div className="w-full mb-2">
+              <input
+                type="url"
+                value={config.url || ""}
+                onChange={(e) => updateConfig({ url: e.target.value })}
+                placeholder="https://example.com"
+                className="w-full bg-card border-none rounded-xl px-3 py-2 text-xs shadow-neumorphic-inset focus:outline-none"
+              />
+            </div>
             </>
           )}
           {isValidUrl ? (
-            <a
+          <a
               href={linkUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+            target="_blank"
+            rel="noopener noreferrer"
               className={`inline-block px-4 py-2 rounded-xl bg-primary text-primary-foreground shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-xs font-medium ${
                 onUpdateComponent ? 'pointer-events-none cursor-default' : 'cursor-pointer'
               }`}
@@ -1548,18 +1557,18 @@ export function ComponentRenderer({
                   window.open(linkUrl, '_blank', 'noopener,noreferrer')
                 }
               }}
-            >
-              {onUpdateComponent ? (
-                <EditableText
-                  value={config.label || "Click here"}
-                  onChange={(value) => updateConfig({ label: value })}
-                  className="text-xs font-medium"
-                  placeholder="Click here"
-                />
-              ) : (
-                config.label || "Click here"
-              )}
-            </a>
+          >
+            {onUpdateComponent ? (
+              <EditableText
+                value={config.label || "Click here"}
+                onChange={(value) => updateConfig({ label: value })}
+                className="text-xs font-medium"
+                placeholder="Click here"
+              />
+            ) : (
+              config.label || "Click here"
+            )}
+          </a>
           ) : (
             <button
               disabled={!isValidUrl}
@@ -1695,7 +1704,7 @@ export function ComponentRenderer({
                     ? 'h-full object-cover' 
                     : isPreviewMode
                       ? 'h-full object-cover aspect-video'
-                      : 'h-auto max-h-[600px] object-contain'
+                    : 'h-auto max-h-[600px] object-contain'
                 }`}
                 style={{ maxWidth: '100%' }}
                 onError={(e) => {

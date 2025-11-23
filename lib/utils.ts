@@ -473,17 +473,44 @@ export async function uploadFileToStorage(
       console.log(`Image compressed: ${(file.size / 1024).toFixed(2)}KB → ${(fileToUpload.size / 1024).toFixed(2)}KB (${sizeReduction}% reduction)`)
     }
 
+    // Determine correct MIME type for iOS compatibility
+    // iOS Safari requires correct Content-Type header (video/mp4, not application/octet-stream)
+    let contentType = fileToUpload.type
+    if (!contentType || contentType === 'application/octet-stream') {
+      // Infer MIME type from file extension
+      const ext = fileToUpload.name.split('.').pop()?.toLowerCase()
+      const mimeTypes: Record<string, string> = {
+        'mp4': 'video/mp4',
+        'webm': 'video/webm',
+        'mov': 'video/quicktime',
+        'avi': 'video/x-msvideo',
+        'm4v': 'video/x-m4v',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'gif': 'image/gif',
+        'webp': 'image/webp'
+      }
+      contentType = ext ? (mimeTypes[ext] || 'application/octet-stream') : 'application/octet-stream'
+    }
+
+    // Log MIME type for debugging iOS video issues
+    if (contentType.startsWith('video/')) {
+      console.log('[Video Upload] MIME type:', contentType, 'for file:', fileToUpload.name)
+    }
+
     // Generate a unique filename
     const fileExt = fileToUpload.name.split('.').pop()
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
     const filePath = folder ? `${folder}/${fileName}` : fileName
 
-    // Upload file to Supabase Storage
+    // Upload file to Supabase Storage with explicit content type for iOS compatibility
     const { data, error } = await supabase.storage
       .from(bucket)
       .upload(filePath, fileToUpload, {
         cacheControl: '3600',
-        upsert: false
+        upsert: false,
+        contentType: contentType // Explicitly set MIME type - critical for iOS Safari
       })
 
     if (error) {
