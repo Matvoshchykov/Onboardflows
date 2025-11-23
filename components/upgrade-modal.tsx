@@ -168,11 +168,21 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
 
       console.log("Opening payment modal with:", { checkoutId, planId: whopPlanId })
 
-      // Open payment modal using Whop iframe SDK
-      const res = await iframeSdk.inAppPurchase({
+      // Open payment modal using Whop iframe SDK with timeout
+      const purchasePromise = iframeSdk.inAppPurchase({
         planId: whopPlanId,
         id: checkoutId,
       })
+
+      // Add timeout to prevent infinite loading (30 seconds)
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error("Payment modal timeout - the payment window may not have opened. Please try again."))
+        }, 30000)
+      })
+
+      // Race between purchase and timeout
+      const res = await Promise.race([purchasePromise, timeoutPromise]) as any
 
       console.log("Payment modal response:", res)
 
@@ -190,7 +200,8 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
       }
     } catch (error) {
       console.error("Error processing payment:", error)
-      toast.error("Failed to process payment. Please try again.")
+      const errorMessage = error instanceof Error ? error.message : "Failed to process payment. Please try again."
+      toast.error(errorMessage)
       setIsProcessing(false)
     }
   }
