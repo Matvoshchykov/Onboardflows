@@ -1674,7 +1674,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
           </div>
           {/* Mode Toggle Buttons - Right side - Fixed position to match create view */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center" style={{ gap: '5px' }}>
+            <div className="flex items-center" style={{ gap: '5px', marginRight: '10px' }}>
               <button
                 onClick={() => setViewMode("create")}
                 className="text-[12px] text-muted-foreground hover:text-foreground transition-colors"
@@ -1749,7 +1749,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
         </div>
         <div className="flex items-center gap-3">
           {/* Mode Toggle Buttons - Right side next to Save Changes */}
-          <div className="flex items-center" style={{ gap: '5px' }}>
+          <div className="flex items-center" style={{ gap: '5px', marginRight: '10px' }}>
             <button
               onClick={() => setViewMode("create")}
               className="text-[12px] text-foreground"

@@ -923,129 +923,25 @@ export function ComponentRenderer({
                   }}
                 />
               ) : (
-                // Preview/onboarding: show video
-                // On mobile, show clickable button to open video in new tab to bypass native video issues
-                isMobile ? (
-                  <div className="w-full h-full relative aspect-video bg-muted/50 rounded-xl flex items-center justify-center">
-                    <a
-                      href={videoSource || videoPreview || '#'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex flex-col items-center gap-3 px-6 py-4 bg-primary text-primary-foreground rounded-xl hover:opacity-90 transition-opacity shadow-lg"
-                      onClick={(e) => {
-                        if (!videoSource && !videoPreview) {
-                          e.preventDefault()
-                          console.error('[Video Debug] No video source available')
-                        } else {
-                          console.log('[Video Debug] Opening video in new tab:', videoSource || videoPreview)
-                        }
-                      }}
-                    >
-                      <Video className="w-8 h-8" />
-                      <span className="text-sm font-medium">Tap to Watch Video</span>
-                      <span className="text-xs opacity-80">Opens in new tab</span>
-                    </a>
-                  </div>
-                ) : (
-                  <video
-                    key={videoSource || videoPreview || 'video'}
-                    src={videoSource || videoPreview || ''}
-                    controls
-                    preload={isMobile ? "none" : "metadata"}
-                    playsInline
-                    webkit-playsinline="true"
-                    muted={false}
-                    // Removed crossOrigin="anonymous" - images don't use it and they work fine on mobile
-                    className={`w-full rounded-xl ${
-                      isPreviewMode
-                        ? 'h-full object-cover aspect-video'
-                        : 'h-auto max-h-[600px] object-contain'
-                    }`}
-                    style={{ 
-                      maxWidth: '100%', 
-                      WebkitPlaysinline: 'true',
-                      width: '100%',
-                      height: 'auto',
-                      display: 'block',
-                      objectFit: 'contain'
-                    } as React.CSSProperties}
-                  onLoadedMetadata={(e) => {
-                    // Force video metadata load on mobile
-                    const video = e.currentTarget
-                    console.log('[Video Debug] onLoadedMetadata', {
-                      readyState: video.readyState,
-                      networkState: video.networkState,
-                      src: video.src,
-                      currentSrc: video.currentSrc,
-                      duration: video.duration,
-                      videoWidth: video.videoWidth,
-                      videoHeight: video.videoHeight,
-                      isMobile,
-                      componentId: component.id
-                    })
-                    if (isMobile) {
-                      console.log('[Video Debug] Mobile detected - forcing video reload')
-                      // On mobile, ensure video is ready to play
-                      video.load()
-                    }
-                  }}
-                  onLoadedData={(e) => {
-                    const video = e.currentTarget
-                    console.log('[Video Debug] onLoadedData', {
-                      readyState: video.readyState,
-                      networkState: video.networkState,
-                      src: video.src,
-                      currentSrc: video.currentSrc,
-                      duration: video.duration,
-                      isMobile,
-                      componentId: component.id
-                    })
-                  }}
-                  onCanPlay={(e) => {
-                    const video = e.currentTarget
-                    console.log('[Video Debug] onCanPlay', {
-                      readyState: video.readyState,
-                      networkState: video.networkState,
-                      src: video.src,
-                      currentSrc: video.currentSrc,
-                      duration: video.duration,
-                      isMobile,
-                      componentId: component.id
-                    })
-                  }}
-                  onPlay={(e) => {
-                    const video = e.currentTarget
-                    console.log('[Video Debug] onPlay', {
-                      src: video.src,
-                      currentTime: video.currentTime,
-                      duration: video.duration,
-                      isMobile,
-                      componentId: component.id
-                    })
-                  }}
-                  onWaiting={(e) => {
-                    const video = e.currentTarget
-                    console.warn('[Video Debug] onWaiting (buffering)', {
-                      src: video.src,
-                      currentTime: video.currentTime,
-                      buffered: video.buffered.length > 0 ? {
-                        start: video.buffered.start(0),
-                        end: video.buffered.end(0)
-                      } : null,
-                      isMobile,
-                      componentId: component.id
-                    })
-                  }}
-                  onStalled={(e) => {
-                    const video = e.currentTarget
-                    console.error('[Video Debug] onStalled (network issue)', {
-                      src: video.src,
-                      networkState: video.networkState,
-                      readyState: video.readyState,
-                      isMobile,
-                      componentId: component.id
-                    })
-                  }}
+                // Preview/onboarding: show video - simplified like images to work on mobile
+                <video
+                  key={videoSource || videoPreview || 'video'}
+                  src={videoSource || videoPreview || ''}
+                  controls
+                  playsInline
+                  preload="none"
+                  className={`w-full rounded-xl ${
+                    isPreviewMode
+                      ? 'h-full object-cover aspect-video'
+                      : 'h-auto max-h-[600px] object-contain'
+                  }`}
+                  style={{ 
+                    maxWidth: '100%',
+                    width: '100%',
+                    height: 'auto',
+                    display: 'block',
+                    objectFit: 'contain'
+                  } as React.CSSProperties}
                   onTimeUpdate={(e) => {
                     const video = e.currentTarget
                     const currentTime = video.currentTime
@@ -1067,69 +963,15 @@ export function ComponentRenderer({
                   }}
                   onError={(e) => {
                     const video = e.currentTarget
-                    const errorDetails = {
+                    console.error('[Video Debug] Video error:', {
                       errorCode: video.error?.code,
                       errorMessage: video.error?.message,
-                      networkState: video.networkState,
-                      readyState: video.readyState,
                       src: video.src,
-                      currentSrc: video.currentSrc,
-                      videoSource,
-                      videoPreview,
-                      configVideoUrl: config.videoUrl,
-                      configVideoOriginal: config.videoOriginal,
-                      isMobile,
-                      isPreviewMode,
-                      componentId: component.id,
-                      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
-                    }
-                    
-                    console.error('[Video Debug] onError - Video failed to load', errorDetails)
-                    
-                    // Log specific error codes
-                    if (video.error) {
-                      switch (video.error.code) {
-                        case 1: // MEDIA_ERR_ABORTED
-                          console.error('[Video Debug] Error: Media aborted by user')
-                          break
-                        case 2: // MEDIA_ERR_NETWORK
-                          console.error('[Video Debug] Error: Network error while loading video')
-                          break
-                        case 3: // MEDIA_ERR_DECODE
-                          console.error('[Video Debug] Error: Video decoding failed (codec issue)')
-                          break
-                        case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
-                          console.error('[Video Debug] Error: Video source not supported (format/codec)')
-                          break
-                        default:
-                          console.error('[Video Debug] Error: Unknown error code', video.error.code)
-                      }
-                    }
-                    
-                    // Try fallback storage URLs (never data URLs, and must be video files)
-                    const fallbackOriginal = config.videoOriginal || null
-                    const fallbackUrl = config.videoUrl || null
-                    
-                    // Only try fallback if it's a valid video URL (not a thumbnail image)
-                    if (isValidStorageUrl(fallbackOriginal) && isVideoUrl(fallbackOriginal) && video.src !== fallbackOriginal) {
-                      console.log('Trying fallback videoOriginal:', fallbackOriginal)
-                      video.src = fallbackOriginal
-                      setVideoPreview(fallbackOriginal)
-                    } else if (isValidStorageUrl(fallbackUrl) && isVideoUrl(fallbackUrl) && video.src !== fallbackUrl) {
-                      console.log('Trying fallback videoUrl:', fallbackUrl)
-                      video.src = fallbackUrl
-                      setVideoPreview(fallbackUrl)
-                    } else {
-                      console.error('No valid video source available - videoOriginal might be missing or thumbnail URL is being used')
-                      setVideoPreview(null)
-                    }
+                      currentSrc: video.currentSrc
+                    })
                   }}
-                   onLoadStart={() => {
-                     console.log('Video loading started:', videoSource)
-                   }}
-                 />
-                )
-               )
+                />
+              )
             ) : (
               <>
                 {uploadingVideo ? (
