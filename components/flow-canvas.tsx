@@ -101,6 +101,8 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
   const [selectedLogicId, setSelectedLogicId] = useState<string | null>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
   const hasCenteredFlowRef = useRef<string | null>(null)
+  const rafRef = useRef<number | null>(null)
+  const lastUpdateTime = useRef<number>(0)
   const [plusClickTimer, setPlusClickTimer] = useState<number | null>(null)
   const [connectingPortIndex, setConnectingPortIndex] = useState<number | undefined>(undefined)
   const [connectionLineStart, setConnectionLineStart] = useState<{ x: number; y: number } | null>(null)
@@ -635,7 +637,26 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
     setPanStart({ x: e.clientX - canvasOffset.x, y: e.clientY - canvasOffset.y })
   }
 
+  // Throttle mouse move with requestAnimationFrame for better performance
+  const THROTTLE_MS = 16 // ~60fps
+
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
+    const now = Date.now()
+    
+    // Throttle updates to prevent excessive CPU load during dragging
+    if (now - lastUpdateTime.current < THROTTLE_MS && (draggingNodeId || draggingLogicId || isPanning)) {
+      if (rafRef.current === null) {
+        rafRef.current = requestAnimationFrame(() => {
+          lastUpdateTime.current = Date.now()
+          rafRef.current = null
+          handleCanvasMouseMove(e)
+        })
+      }
+      return
+    }
+    
+    lastUpdateTime.current = now
+    
     if (draggingVariable) {
       setDragVariablePosition({ x: e.clientX, y: e.clientY })
     }
@@ -1764,33 +1785,8 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
             Data Analytics
           </button>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3" style={{ fontSize: isMobile ? '0.5rem' : '0.5625rem' }}>
-          <div className="flex items-center gap-1 sm:gap-2">
-          {currentPlan === "free" ? (
-              <span className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap">
-                {isMobile ? `${planUsage.flows}/${planLimits.flows}` : `Free Plan • ${planUsage.flows}/${planLimits.flows} flows • ${planUsage.blocks}/${planLimits.blocks} blocks`}
-              </span>
-          ) : (
-              <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
-              <div className="flex items-center gap-1">
-                <Crown className="w-2.5 h-2.5 text-[#3b82f6]" />
-                  <span className="font-medium text-foreground text-xs sm:text-sm whitespace-nowrap">
-                    {currentPlan === "premium-monthly" ? (isMobile ? "Premium M" : "Premium Monthly") : (isMobile ? "Premium Y" : "Premium Yearly")}
-                </span>
-              </div>
-                <span className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap">
-                  {planUsage.flows}/{planLimits.flows} {isMobile ? '' : 'flows'} • {planUsage.blocks}/{planLimits.blocks} {isMobile ? '' : 'blocks'}
-              </span>
-            </div>
-            )}
-            <span className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap">
-              • {accessLevel === "owner" ? "Owner" : "Customer"}
-            </span>
-          </div>
-        </div>
-          {/* Save Changes Button - Moved to header */}
-          {onSaveToDatabase && flow && (
+        {/* Save Changes Button - Moved to header */}
+        {onSaveToDatabase && flow && (
             <button
               onClick={async () => {
                 if (flow && hasUnsavedChanges && !isSaving) {
@@ -1842,7 +1838,6 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
               )}
             </button>
           )}
-        </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">

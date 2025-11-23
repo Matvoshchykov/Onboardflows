@@ -1017,21 +1017,26 @@ export function ComponentRenderer({
         right: "text-right"
       }
       
+      // Only show title if it exists and is not empty
+      const hasTitle = config.title && config.title.trim().length > 0
+      
       return (
         <div className="relative group w-full">
-          <h3 className={`text-xs font-medium mb-2 ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}>
-            {onUpdateComponent ? (
-              <EditableText
-                value={config.title || "Welcome to our onboarding"}
-                onChange={(value) => updateConfig({ title: value })}
-                className="text-xs font-medium"
-                placeholder="Welcome to our onboarding"
-              />
-            ) : (
-              config.title || "Welcome to our onboarding"
-            )}
-          </h3>
-          <p className={`text-xs text-muted-foreground leading-relaxed ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}>
+          {hasTitle && (
+            <h3 className={`text-xs font-medium mb-2 ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}>
+              {onUpdateComponent ? (
+                <EditableText
+                  value={config.title || "Welcome to our onboarding"}
+                  onChange={(value) => updateConfig({ title: value })}
+                  className="text-xs font-medium"
+                  placeholder="Welcome to our onboarding"
+                />
+              ) : (
+                config.title
+              )}
+            </h3>
+          )}
+          <p className={`text-xs text-muted-foreground leading-relaxed ${alignmentClasses[alignment as keyof typeof alignmentClasses]} ${!hasTitle ? '' : ''}`}>
             {onUpdateComponent ? (
               <EditableText
                 value={config.text || "This is a text instruction block. Use it for guidance, onboarding steps, expectations, disclaimers, etc."}
