@@ -1672,22 +1672,28 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
               )}
             </div>
           </div>
-          {/* Mode Toggle Buttons - Right side */}
-          <div className="flex items-center" style={{ gap: '5px' }}>
-            <button
-              onClick={() => setViewMode("create")}
-              className="text-[12px] text-muted-foreground hover:text-foreground transition-colors"
-              style={{ minWidth: '105px' }}
-            >
-              Flow Creation
-            </button>
-            <button
-              onClick={() => setViewMode("analytics")}
-              className="text-[12px] text-foreground"
-              style={{ minWidth: '105px' }}
-            >
-              Data Analytics
-            </button>
+          {/* Mode Toggle Buttons - Right side - Fixed position to match create view */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center" style={{ gap: '5px' }}>
+              <button
+                onClick={() => setViewMode("create")}
+                className="text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+                style={{ minWidth: '105px' }}
+              >
+                Flow Creation
+              </button>
+              <button
+                onClick={() => setViewMode("analytics")}
+                className="text-[12px] text-foreground"
+                style={{ minWidth: '105px' }}
+              >
+                Data Analytics
+              </button>
+            </div>
+            {/* Placeholder for Save Changes button to maintain consistent spacing */}
+            {onSaveToDatabase && flow && (
+              <div style={{ minWidth: '140px', minHeight: '32px' }} />
+            )}
           </div>
         </header>
         <FlowAnalytics flow={flow} />

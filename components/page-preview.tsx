@@ -951,11 +951,11 @@ export function ComponentRenderer({
                     key={videoSource || videoPreview || 'video'}
                     src={videoSource || videoPreview || ''}
                     controls
-                    preload="metadata"
+                    preload={isMobile ? "none" : "metadata"}
                     playsInline
                     webkit-playsinline="true"
                     muted={false}
-                    crossOrigin="anonymous"
+                    // Removed crossOrigin="anonymous" - images don't use it and they work fine on mobile
                     className={`w-full rounded-xl ${
                       isPreviewMode
                         ? 'h-full object-cover aspect-video'
