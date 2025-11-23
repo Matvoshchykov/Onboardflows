@@ -5,102 +5,21 @@ import { upsertUserMembership } from "@/lib/db/memberships";
 
 export async function POST(request: NextRequest): Promise<Response> {
 	try {
-		// Validate the webhook to ensure it's from Whop
+		// 1. Read body as text FIRST
 		const requestBodyText = await request.text();
 		
-		// Get all headers - log everything to debug
-		const allHeaders: Record<string, string> = {};
-		const headerEntries: Array<[string, string]> = [];
-		request.headers.forEach((value, key) => {
-			allHeaders[key] = value;
-			allHeaders[key.toLowerCase()] = value;
-			headerEntries.push([key, value]);
-		});
+		// 2. Convert headers to plain object
+		const headers = Object.fromEntries(request.headers);
 		
-		// Log ALL headers for debugging
-		console.log("[WEBHOOK REQUEST] Received POST request");
-		console.log("[WEBHOOK REQUEST] Body length:", requestBodyText.length);
-		console.log("[WEBHOOK REQUEST] Body content:", requestBodyText);
-		console.log("[WEBHOOK REQUEST] All headers:", JSON.stringify(headerEntries, null, 2));
-		
-		// Check for headers in various formats and locations
-		const webhookSignature = 
-			request.headers.get('webhook-signature') ||
-			request.headers.get('Webhook-Signature') ||
-			request.headers.get('WEBHOOK-SIGNATURE') ||
-			request.headers.get('x-webhook-signature') ||
-			request.headers.get('X-Webhook-Signature') ||
-			allHeaders['webhook-signature'] ||
-			allHeaders['Webhook-Signature'] ||
-			allHeaders['x-webhook-signature'];
-			
-		const webhookTimestamp = 
-			request.headers.get('webhook-timestamp') ||
-			request.headers.get('Webhook-Timestamp') ||
-			request.headers.get('WEBHOOK-TIMESTAMP') ||
-			request.headers.get('x-webhook-timestamp') ||
-			request.headers.get('X-Webhook-Timestamp') ||
-			allHeaders['webhook-timestamp'] ||
-			allHeaders['Webhook-Timestamp'] ||
-			allHeaders['x-webhook-timestamp'];
-		
-		// Check if headers might be in Vercel's special header
-		const vercelScHeaders = request.headers.get('x-vercel-sc-headers');
-		if (vercelScHeaders) {
-			console.log("[WEBHOOK REQUEST] x-vercel-sc-headers found:", vercelScHeaders);
-			try {
-				const scHeaders = JSON.parse(vercelScHeaders);
-				console.log("[WEBHOOK REQUEST] Parsed sc-headers:", JSON.stringify(scHeaders, null, 2));
-				// Merge these headers into our headers object
-				Object.entries(scHeaders).forEach(([key, value]) => {
-					if (typeof value === 'string') {
-						allHeaders[key] = value;
-						allHeaders[key.toLowerCase()] = value;
-					}
-				});
-				// Re-check for webhook headers after merging
-				if (!webhookSignature) {
-					const sig = scHeaders['webhook-signature'] || scHeaders['Webhook-Signature'] || scHeaders['WEBHOOK-SIGNATURE'];
-					if (sig) {
-						console.log("[WEBHOOK REQUEST] Found webhook-signature in x-vercel-sc-headers");
-					}
-				}
-				if (!webhookTimestamp) {
-					const ts = scHeaders['webhook-timestamp'] || scHeaders['Webhook-Timestamp'] || scHeaders['WEBHOOK-TIMESTAMP'];
-					if (ts) {
-						console.log("[WEBHOOK REQUEST] Found webhook-timestamp in x-vercel-sc-headers");
-					}
-				}
-			} catch (e) {
-				console.error("[WEBHOOK REQUEST] Failed to parse x-vercel-sc-headers:", e);
-			}
-		}
-		
-		console.log("[WEBHOOK REQUEST] webhook-signature:", webhookSignature || 'NOT FOUND');
-		console.log("[WEBHOOK REQUEST] webhook-timestamp:", webhookTimestamp || 'NOT FOUND');
-		console.log("[WEBHOOK REQUEST] Has webhook secret:", !!process.env.WHOP_WEBHOOK_SECRET);
-		
-		// If headers are still missing after checking all locations, log error
-		if (!webhookSignature || !webhookTimestamp) {
-			console.error("[WEBHOOK ERROR] Missing signature headers after checking all locations");
-			console.error("[WEBHOOK ERROR] This should not happen - Whop webhooks should include these headers");
-			console.error("[WEBHOOK ERROR] Check Vercel configuration or contact Whop support");
-			return new Response("OK", { status: 200 });
-		}
-		
-		// Headers are present, try to unwrap and verify
+		// 3. Unwrap and validate webhook
 		let webhookData;
 		try {
-			webhookData = whopsdk.webhooks.unwrap(requestBodyText, { headers: allHeaders });
+			webhookData = whopsdk.webhooks.unwrap(requestBodyText, { headers });
 			console.log("[WEBHOOK RECEIVED]", webhookData.type);
 			console.log("[WEBHOOK DATA]", JSON.stringify(webhookData.data, null, 2));
 		} catch (validationError) {
 			console.error("[WEBHOOK VALIDATION ERROR]", validationError);
 			console.error("[WEBHOOK VALIDATION ERROR] Message:", validationError instanceof Error ? validationError.message : String(validationError));
-			console.error("[WEBHOOK VALIDATION ERROR] Headers used:", {
-				'webhook-signature': webhookSignature,
-				'webhook-timestamp': webhookTimestamp
-			});
 			// Return 200 to prevent retries, but log the error
 			return new Response("OK", { status: 200 });
 		}
