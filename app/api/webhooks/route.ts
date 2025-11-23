@@ -4,21 +4,49 @@ import { whopsdk } from "@/lib/whop-sdk";
 import { upsertUserMembership } from "@/lib/db/memberships";
 
 export async function POST(request: NextRequest): Promise<Response> {
-	// Validate the webhook to ensure it's from Whop
-	const requestBodyText = await request.text();
-	const headers = Object.fromEntries(request.headers);
-	const webhookData = whopsdk.webhooks.unwrap(requestBodyText, { headers });
+	try {
+		// Validate the webhook to ensure it's from Whop
+		const requestBodyText = await request.text();
+		const headers = Object.fromEntries(request.headers);
+		
+		console.log("[WEBHOOK REQUEST] Received POST request");
+		console.log("[WEBHOOK REQUEST] Headers:", Object.keys(headers));
+		console.log("[WEBHOOK REQUEST] webhook-signature:", headers['webhook-signature'] || headers['Webhook-Signature'] || 'NOT FOUND');
+		console.log("[WEBHOOK REQUEST] webhook-timestamp:", headers['webhook-timestamp'] || headers['Webhook-Timestamp'] || 'NOT FOUND');
+		
+		let webhookData;
+		try {
+			webhookData = whopsdk.webhooks.unwrap(requestBodyText, { headers });
+			console.log("[WEBHOOK RECEIVED]", webhookData.type);
+			console.log("[WEBHOOK DATA]", JSON.stringify(webhookData.data, null, 2));
+		} catch (validationError) {
+			console.error("[WEBHOOK VALIDATION ERROR]", validationError);
+			console.error("[WEBHOOK VALIDATION ERROR] Message:", validationError instanceof Error ? validationError.message : String(validationError));
+			// Return 200 to prevent retries, but log the error
+			// This might happen with test webhooks or if headers are missing
+			return new Response("OK", { status: 200 });
+		}
 
-	console.log("[WEBHOOK RECEIVED]", webhookData.type, webhookData.data);
+		// Handle the webhook event
+		if (webhookData.type === "payment.succeeded") {
+			console.log("[PAYMENT.SUCCEEDED] Processing payment...");
+			// Fire and forget - don't wait for the handler to complete
+			handlePaymentSucceeded(webhookData.data).catch(console.error);
+		} else {
+			console.log("[WEBHOOK IGNORED] Event type:", webhookData.type);
+		}
 
-	// Handle the webhook event
-	if (webhookData.type === "payment.succeeded") {
-		// Fire and forget - don't wait for the handler to complete
-		handlePaymentSucceeded(webhookData.data).catch(console.error);
+		// Make sure to return a 2xx status code quickly. Otherwise the webhook will be retried.
+		return new Response("OK", { status: 200 });
+	} catch (error) {
+		console.error("[WEBHOOK ERROR]", error);
+		console.error("[WEBHOOK ERROR] Details:", {
+			message: error instanceof Error ? error.message : String(error),
+			stack: error instanceof Error ? error.stack : undefined,
+		});
+		// Return 200 to prevent infinite retries
+		return new Response("OK", { status: 200 });
 	}
-
-	// Make sure to return a 2xx status code quickly. Otherwise the webhook will be retried.
-	return new Response("OK", { status: 200 });
 }
 
 async function handlePaymentSucceeded(payment: Payment) {
