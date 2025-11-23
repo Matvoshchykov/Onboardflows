@@ -184,7 +184,8 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
         }, 1500)
       } else {
         console.error("Payment failed:", res)
-        toast.error(res.message || "Payment was cancelled or failed")
+        const errorMessage = (res as any).message || (res as any).error || "Payment was cancelled or failed"
+        toast.error(errorMessage)
         setIsProcessing(false)
       }
     } catch (error) {
