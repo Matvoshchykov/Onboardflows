@@ -108,15 +108,17 @@ export default function OnboardingFlowView() {
   // Helper function to normalize pageComponents to array format (handles both old and new formats)
   const normalizePageComponents = (pageComponents: any): PageComponent[] => {
     if (!pageComponents) return []
-    // If it's already an array, return it
-    if (Array.isArray(pageComponents)) return pageComponents
+    // If it's already an array, return it sorted by order
+    if (Array.isArray(pageComponents)) {
+      return [...pageComponents].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    }
     // If it's the old object format, convert it to array
     if (typeof pageComponents === 'object') {
       const components: PageComponent[] = []
-      if (pageComponents.textInstruction) components.push(pageComponents.textInstruction)
-      if (pageComponents.displayUpload) components.push(pageComponents.displayUpload)
-      if (pageComponents.question) components.push(pageComponents.question)
-      return components
+      if (pageComponents.textInstruction) components.push({ ...pageComponents.textInstruction, order: 0 })
+      if (pageComponents.displayUpload) components.push({ ...pageComponents.displayUpload, order: 1 })
+      if (pageComponents.question) components.push({ ...pageComponents.question, order: 2 })
+      return components.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     }
     return []
   }
@@ -283,6 +285,31 @@ export default function OnboardingFlowView() {
       }
       return block.connections[1] || block.connections[0] || null
     }
+    
+    if (block.type === "a-b-test") {
+      // Use sessionStorage to persist A/B test decisions per flow session
+      // Key format: `ab-test-${flow.id}-${block.id}-${sessionId || 'preview'}`
+      const sessionKey = sessionId || 'preview'
+      const storageKey = `ab-test-${flow.id}-${block.id}-${sessionKey}`
+      
+      // Check if we already have a decision for this A/B test in this session
+      const storedDecision = sessionStorage.getItem(storageKey)
+      
+      if (storedDecision !== null) {
+        // Use stored decision (persists when going back/forward)
+        const pathIndex = parseInt(storedDecision)
+        return block.connections[pathIndex] || block.connections[0] || null
+      }
+      
+      // Generate new 50/50 random decision
+      const randomValue = Math.random()
+      const pathIndex = randomValue < 0.5 ? 0 : 1
+      
+      // Store decision in sessionStorage for this session
+      sessionStorage.setItem(storageKey, pathIndex.toString())
+      
+      return block.connections[pathIndex] || block.connections[0] || null
+    }
 
     return null
   }
@@ -297,6 +324,18 @@ export default function OnboardingFlowView() {
     )
     
     if (connectedLogicBlock) {
+      // For A/B test, always evaluate even without answer
+      if (connectedLogicBlock.type === "a-b-test") {
+        const targetId = evaluateLogicBlock(connectedLogicBlock, answer)
+        if (targetId) {
+          const targetNode = flow.nodes.find(n => n.id === targetId)
+          if (targetNode) {
+            return targetNode
+          }
+        }
+        return null
+      }
+      
       // If we have an answer, evaluate the logic block
       if (answer !== undefined && answer !== null) {
         const targetId = evaluateLogicBlock(connectedLogicBlock, answer)
@@ -332,6 +371,17 @@ export default function OnboardingFlowView() {
         // If it's a logic block, we need to evaluate it with the answer
         const nextLogicBlock = flow.logicBlocks?.find(lb => lb.id === nextId)
         if (nextLogicBlock) {
+          // For A/B test, always evaluate even without answer
+          if (nextLogicBlock.type === "a-b-test") {
+            const targetId = evaluateLogicBlock(nextLogicBlock, answer)
+            if (targetId) {
+              const targetNode = flow.nodes.find(n => n.id === targetId)
+              if (targetNode) {
+                return targetNode
+              }
+            }
+            return null
+          }
           if (answer !== undefined && answer !== null) {
             const targetId = evaluateLogicBlock(nextLogicBlock, answer)
             if (targetId) {
@@ -379,6 +429,19 @@ export default function OnboardingFlowView() {
       if (!flow || !userId || sessionId) return
       
       try {
+        // Clear any previous A/B test decisions for this flow when starting a new session
+        // This ensures a fresh 50/50 chance on restart
+        if (typeof window !== 'undefined' && flow) {
+          const keysToRemove: string[] = []
+          for (let i = 0; i < sessionStorage.length; i++) {
+            const key = sessionStorage.key(i)
+            if (key && key.startsWith(`ab-test-${flow.id}-`)) {
+              keysToRemove.push(key)
+            }
+          }
+          keysToRemove.forEach(key => sessionStorage.removeItem(key))
+        }
+        
         // Start session if flow is active
         const { startFlowSession } = await import('@/lib/db/sessions')
         const session = await startFlowSession(userId, flow.id)
@@ -399,7 +462,7 @@ export default function OnboardingFlowView() {
     }
   }, [flow, userId, currentNodeId, sessionId])
 
-  // Track path and save answers when moving to next node
+  // Track path when moving to next node (but don't save responses here)
   useEffect(() => {
     async function trackNavigation() {
       if (!sessionId || !currentNodeId || !flow) return
@@ -414,9 +477,22 @@ export default function OnboardingFlowView() {
           await updateSessionStep(sessionId, nodeIndex)
         }
         
-        // Save current answer if exists
+        // REMOVED: Don't save responses here - only save when user clicks Next
+      } catch (error) {
+        console.error('Error tracking navigation:', error)
+      }
+    }
+    if (currentNodeId && sessionId) {
+      trackNavigation()
+    }
+  }, [currentNodeId, sessionId, flow]) // Removed currentAnswer from dependencies
+
+  const handleNext = async () => {
+    // Save the answer before moving to next node
+    if (sessionId && currentNodeId && currentAnswer !== null && currentAnswer !== undefined) {
+      try {
         const currentNode = getCurrentNode()
-        if (currentNode && currentAnswer !== null && currentAnswer !== undefined) {
+        if (currentNode) {
           const allComponents = normalizePageComponents(currentNode.pageComponents)
           const questionComponent = allComponents.find(
             comp => ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider", "long-answer"].includes(comp.type)
@@ -427,15 +503,10 @@ export default function OnboardingFlowView() {
           }
         }
       } catch (error) {
-        console.error('Error tracking navigation:', error)
+        console.error('Error saving response:', error)
       }
     }
-    if (currentNodeId && sessionId) {
-      trackNavigation()
-    }
-  }, [currentNodeId, sessionId, currentAnswer, flow])
-
-  const handleNext = async () => {
+    
     const nextNode = getNextNode(currentAnswer)
     if (nextNode) {
       setCurrentNodeId(nextNode.id)
@@ -468,15 +539,11 @@ export default function OnboardingFlowView() {
   // Components are already in order (top to bottom) in the array
   const allComponents = normalizePageComponents(currentNode.pageComponents)
   
-  // Find question component if any
+  // Find question component if any (for logic purposes)
   const questionComponent = allComponents.find(
     comp => ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(comp.type)
   )
   
-  // Non-question components (displayed in PagePreview)
-  const components = allComponents.filter(
-    comp => !["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(comp.type)
-  )
   const needsAnswer = questionComponent && [
     "multiple-choice",
     "checkbox-multi",
@@ -599,33 +666,40 @@ export default function OnboardingFlowView() {
       
       <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 flex flex-col items-center justify-center min-h-full">
         <div className="w-full flex flex-col" style={{ maxWidth: '840px', gap: '10px' }}>
-          {/* Display non-question components */}
-          {components.length > 0 && (
-            <PagePreview
-              components={components}
-              viewMode={isMobile ? "mobile" : "desktop"}
-              selectedComponent={null}
-              onSelectComponent={() => {}}
-              onDeleteComponent={() => {}}
-              previewMode={true}
-              isMobile={isMobile}
-              onVideoWatched={handleVideoWatched}
-              onVideoTimeUpdate={handleVideoTimeUpdate}
-            />
-          )}
-          
-          {/* Display question component */}
-          {needsAnswer && (
-            <div className="w-full">
-              <div className="relative group rounded-xl p-4 sm:p-6 transition-all bg-card shadow-neumorphic-raised flex flex-col justify-center">
-                <InteractiveQuestionComponent
-                  component={questionComponent}
-                  value={currentAnswer}
-                  onChange={handleAnswerChange}
-                />
-              </div>
-            </div>
-          )}
+          {/* Display ALL components in order */}
+          {allComponents.map((component, index) => {
+            const isQuestion = ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(component.type)
+            
+            if (isQuestion && needsAnswer) {
+              return (
+                <div key={component.id} className="w-full">
+                  <div className="relative group rounded-xl p-4 sm:p-6 transition-all bg-card shadow-neumorphic-raised flex flex-col justify-center">
+                    <InteractiveQuestionComponent
+                      component={component}
+                      value={currentAnswer}
+                      onChange={handleAnswerChange}
+                    />
+                  </div>
+                </div>
+              )
+            } else {
+              return (
+                <div key={component.id} className="w-full">
+                  <PagePreview
+                    components={[component]}
+                    viewMode={isMobile ? "mobile" : "desktop"}
+                    selectedComponent={null}
+                    onSelectComponent={() => {}}
+                    onDeleteComponent={() => {}}
+                    previewMode={true}
+                    isMobile={isMobile}
+                    onVideoWatched={handleVideoWatched}
+                    onVideoTimeUpdate={handleVideoTimeUpdate}
+                  />
+                </div>
+              )
+            }
+          })}
         </div>
       </div>
     </div>
@@ -706,13 +780,18 @@ function InteractiveQuestionComponent({
 
     case "short-answer":
       return (
-        <input
-          type="text"
-          value={value || ""}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={config.placeholder || "Type your answer here..."}
-          className="w-full bg-card border-none rounded-xl px-4 py-3 shadow-neumorphic-inset focus:outline-none focus:ring-2 focus:ring-primary"
-        />
+        <div>
+          <label className="block text-xs font-medium mb-2">
+            {config.label || "What is your name?"}
+          </label>
+          <input
+            type="text"
+            value={value || ""}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={config.placeholder || "Type your answer here..."}
+            className="w-full bg-card border-none rounded-xl px-4 py-3 shadow-neumorphic-inset focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+        </div>
       )
 
     case "long-answer":
@@ -748,4 +827,5 @@ function InteractiveQuestionComponent({
       return null
   }
 }
+
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { X, Smartphone, Monitor, Plus, ChevronDown } from 'lucide-react'
+import { X, Smartphone, Monitor, Plus, ChevronDown, ArrowUpDown, GripVertical } from 'lucide-react'
 import { toast } from "sonner"
 import type { FlowNode } from "./flow-builder"
 import { ComponentLibrary } from "./component-library"
@@ -34,6 +34,7 @@ export type PageComponent = {
   id: string
   type: ComponentType
   config: Record<string, any>
+  order?: number
 }
 
 // Component categories
@@ -105,56 +106,114 @@ function EditablePageTitle({ value, onChange }: { value: string; onChange: (valu
 }
 
 export function PageEditor({ node, onClose, onSave }: PageEditorProps) {
-  // Helper to check if pageComponents is in object format
-  const isObjectFormat = (pc: typeof node.pageComponents): pc is { displayUpload?: PageComponent; question?: PageComponent; textInstruction?: PageComponent } => {
-    return pc !== undefined && !Array.isArray(pc)
+  // Helper to normalize pageComponents to array format
+  const normalizeToArray = (pageComponents: any): PageComponent[] => {
+    if (!pageComponents) return []
+    if (Array.isArray(pageComponents)) {
+      // Ensure all components have order property
+      return pageComponents.map((comp, index) => ({
+        ...comp,
+        order: comp.order ?? index
+      })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    }
+    // Convert old object format to array
+    if (typeof pageComponents === 'object') {
+      const components: PageComponent[] = []
+      if (pageComponents.textInstruction) {
+        components.push({ ...pageComponents.textInstruction, order: 0 })
+      }
+      if (pageComponents.displayUpload) {
+        components.push({ ...pageComponents.displayUpload, order: 1 })
+      }
+      if (pageComponents.question) {
+        components.push({ ...pageComponents.question, order: 2 })
+      }
+      return components.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    }
+    return []
   }
 
   const [pageTitle, setPageTitle] = useState(node.title)
-  const [displayUpload, setDisplayUpload] = useState<PageComponent | null>(
-    isObjectFormat(node.pageComponents) ? (node.pageComponents.displayUpload || null) : null
-  )
-  const [question, setQuestion] = useState<PageComponent | null>(
-    isObjectFormat(node.pageComponents) ? (node.pageComponents.question || null) : null
-  )
-  const [textInstruction, setTextInstruction] = useState<PageComponent | null>(
-    isObjectFormat(node.pageComponents) ? (node.pageComponents.textInstruction || null) : null
+  const [components, setComponents] = useState<PageComponent[]>(() => 
+    normalizeToArray(node.pageComponents)
   )
   const [selectedComponent, setSelectedComponent] = useState<PageComponent | null>(null)
   const [viewMode, setViewMode] = useState<"desktop" | "mobile">("desktop")
   const [draggingComponent, setDraggingComponent] = useState<ComponentType | null>(null)
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 })
   const [isLibraryExpanded, setIsLibraryExpanded] = useState(false)
+  const [draggedComponentId, setDraggedComponentId] = useState<string | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
   // Load existing components when node changes
   useEffect(() => {
     setPageTitle(node.title)
-    if (isObjectFormat(node.pageComponents)) {
-      setDisplayUpload(node.pageComponents.displayUpload || null)
-      setQuestion(node.pageComponents.question || null)
-      setTextInstruction(node.pageComponents.textInstruction || null)
-    } else {
-      setDisplayUpload(null)
-      setQuestion(null)
-      setTextInstruction(null)
-    }
+    setComponents(normalizeToArray(node.pageComponents))
   }, [node])
+
+  // Handle drag start for reordering components
+  const handleComponentDragStart = (componentId: string, e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', componentId)
+    setDraggedComponentId(componentId)
+  }
+
+  // Handle drag over for reordering
+  const handleComponentDragOver = (index: number, e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverIndex(index)
+  }
+
+  // Handle drop for reordering
+  const handleComponentDrop = (targetIndex: number, e: React.DragEvent) => {
+    e.preventDefault()
+    const draggedId = e.dataTransfer.getData('text/plain')
+    if (!draggedId) return
+
+    const draggedIndex = components.findIndex(c => c.id === draggedId)
+    if (draggedIndex === -1 || draggedIndex === targetIndex) {
+      setDraggedComponentId(null)
+      setDragOverIndex(null)
+      return
+    }
+
+    const newComponents = [...components]
+    const [dragged] = newComponents.splice(draggedIndex, 1)
+    newComponents.splice(targetIndex, 0, dragged)
+    
+    // Update order property
+    const updatedComponents = newComponents.map((comp, index) => ({
+      ...comp,
+      order: index
+    }))
+
+    setComponents(updatedComponents)
+    setDraggedComponentId(null)
+    setDragOverIndex(null)
+  }
+
+  // Handle drag end
+  const handleComponentDragEnd = () => {
+    setDraggedComponentId(null)
+    setDragOverIndex(null)
+  }
 
   const handleDragStart = (type: ComponentType, e: React.MouseEvent) => {
     // Check if component type is already added
-    if (DISPLAY_UPLOAD_TYPES.includes(type) && displayUpload) {
+    if (DISPLAY_UPLOAD_TYPES.includes(type) && components.some(c => DISPLAY_UPLOAD_TYPES.includes(c.type))) {
       toast.error("Only one display/upload block allowed", {
         description: "Remove the existing display or upload block before adding another.",
       })
       return
     }
-    if (QUESTION_TYPES.includes(type) && question) {
+    if (QUESTION_TYPES.includes(type) && components.some(c => QUESTION_TYPES.includes(c.type))) {
       toast.error("Only one question block allowed", {
         description: "Remove the existing question block before adding another.",
       })
       return
     }
-    if (type === TEXT_INSTRUCTION_TYPE && textInstruction) {
+    if (type === TEXT_INSTRUCTION_TYPE && components.some(c => c.type === TEXT_INSTRUCTION_TYPE)) {
       toast.error("Only one text instruction block allowed", {
         description: "Remove the existing text instruction block before adding another.",
       })
@@ -194,71 +253,45 @@ export function PageEditor({ node, onClose, onSave }: PageEditorProps) {
       const newComponent: PageComponent = {
         id: Date.now().toString(),
         type: draggingComponent,
-        config
+        config,
+        order: components.length
       }
 
-      if (DISPLAY_UPLOAD_TYPES.includes(draggingComponent)) {
-        setDisplayUpload(newComponent)
-      } else if (QUESTION_TYPES.includes(draggingComponent)) {
-        setQuestion(newComponent)
-      } else if (draggingComponent === TEXT_INSTRUCTION_TYPE) {
-        setTextInstruction(newComponent)
-      }
-
+      setComponents(prev => [...prev, newComponent].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)))
       setDraggingComponent(null)
     }
   }
 
   const handleDeleteComponent = (id: string) => {
-    if (displayUpload?.id === id) {
-      setDisplayUpload(null)
-    }
-    if (question?.id === id) {
-      setQuestion(null)
-    }
-    if (textInstruction?.id === id) {
-      setTextInstruction(null)
-    }
+    const updated = components.filter(c => c.id !== id)
+      .map((comp, index) => ({ ...comp, order: index }))
+    setComponents(updated)
     if (selectedComponent?.id === id) {
       setSelectedComponent(null)
     }
   }
 
   const handleUpdateComponent = (id: string, config: Record<string, any>) => {
-    if (displayUpload?.id === id) {
-      setDisplayUpload({ ...displayUpload, config })
-    }
-    if (question?.id === id) {
-      setQuestion({ ...question, config })
-    }
-    if (textInstruction?.id === id) {
-      setTextInstruction({ ...textInstruction, config })
-    }
+    setComponents(prev => prev.map(comp => 
+      comp.id === id ? { ...comp, config: { ...comp.config, ...config } } : comp
+    ))
     if (selectedComponent?.id === id) {
-      setSelectedComponent({ ...selectedComponent, config })
+      setSelectedComponent({ ...selectedComponent, config: { ...selectedComponent.config, ...config } })
     }
   }
 
   const handleSave = () => {
-    const componentCount = (displayUpload ? 1 : 0) + (question ? 1 : 0) + (textInstruction ? 1 : 0)
     const updatedNode: FlowNode = {
       ...node,
       title: pageTitle,
-      components: componentCount,
-      pageComponents: {
-        displayUpload: displayUpload || undefined,
-        question: question || undefined,
-        textInstruction: textInstruction || undefined
-      }
+      components: components.length,
+      pageComponents: components.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)) // Save as array with order
     }
     onSave(updatedNode)
   }
 
-  const components = [
-    ...(textInstruction ? [textInstruction] : []),
-    ...(displayUpload ? [displayUpload] : []),
-    ...(question ? [question] : [])
-  ]
+  // Sort components by order for display
+  const sortedComponents = [...components].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
   return (
     <div 
@@ -311,12 +344,18 @@ export function PageEditor({ node, onClose, onSave }: PageEditorProps) {
         <div className="flex-1 overflow-y-auto scrollbar-hide bg-background">
           <div className="w-full max-w-6xl mx-auto py-8 px-6">
             <PagePreview
-              components={components}
+              components={sortedComponents}
               viewMode={viewMode}
               selectedComponent={selectedComponent}
               onSelectComponent={setSelectedComponent}
               onDeleteComponent={handleDeleteComponent}
               onUpdateComponent={handleUpdateComponent}
+              onComponentDragStart={handleComponentDragStart}
+              onComponentDragOver={handleComponentDragOver}
+              onComponentDrop={handleComponentDrop}
+              onComponentDragEnd={handleComponentDragEnd}
+              draggedComponentId={draggedComponentId}
+              dragOverIndex={dragOverIndex}
             />
           </div>
         </div>

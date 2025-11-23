@@ -164,7 +164,6 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
       <div className="flex-1 flex flex-col min-w-0">
         <FlowCanvas 
           flow={selectedFlow}
-          accessLevel={isAdmin ? "owner" : "customer"}
           onUpdateFlow={(updatedFlow) => {
             // Update local state only (no auto-save to database)
             setFlows(flows.map(f => f.id === updatedFlow.id ? updatedFlow : f))

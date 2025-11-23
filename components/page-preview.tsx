@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Trash2, Edit3, Plus, X, Image as ImageIcon, Video, Upload, File, Check, Download, AlignLeft, AlignCenter, AlignRight, ChevronLeft } from 'lucide-react'
+import { Trash2, Edit3, Plus, X, Image as ImageIcon, Video, Upload, File, Check, Download, AlignLeft, AlignCenter, AlignRight, ChevronLeft, VideoOff, GripVertical } from 'lucide-react'
 import type { PageComponent } from "./page-editor"
 import { useTheme } from "./theme-provider"
 import { uploadFileToStorage, compressImageUnder1MB, extractVideoThumbnail, deleteFileFromStorage, convertImageTo16x9, compressVideo } from "@/lib/utils"
@@ -20,6 +20,12 @@ type PagePreviewProps = {
   isMobile?: boolean
   onVideoWatched?: (componentId: string, watched: boolean) => void
   onVideoTimeUpdate?: (componentId: string, time: number) => void
+  onComponentDragStart?: (componentId: string, e: React.DragEvent) => void
+  onComponentDragOver?: (index: number, e: React.DragEvent) => void
+  onComponentDrop?: (index: number, e: React.DragEvent) => void
+  onComponentDragEnd?: () => void
+  draggedComponentId?: string | null
+  dragOverIndex?: number | null
 }
 
 export function PagePreview({ 
@@ -32,7 +38,13 @@ export function PagePreview({
   previewMode = false,
   isMobile = false,
   onVideoWatched,
-  onVideoTimeUpdate
+  onVideoTimeUpdate,
+  onComponentDragStart,
+  onComponentDragOver,
+  onComponentDrop,
+  onComponentDragEnd,
+  draggedComponentId,
+  dragOverIndex
 }: PagePreviewProps) {
   return (
     <div className="w-full">
@@ -47,20 +59,52 @@ export function PagePreview({
               Drag components here to build your page
             </div>
           ) : (
+            // Separate cards for both editor and preview mode
             components.map((component, index) => (
               <div
                 key={component.id}
                 data-preview-component={index === 0 ? 'first' : undefined}
-                onClick={previewMode || isMobile ? undefined : () => onSelectComponent(component)}
+                draggable={!previewMode && !isMobile && onComponentDragStart !== undefined}
+                onDragStart={(e) => {
+                  if (!previewMode && !isMobile && onComponentDragStart) {
+                    onComponentDragStart(component.id, e)
+                  }
+                }}
+                onDragOver={(e) => {
+                  if (!previewMode && !isMobile && onComponentDragOver) {
+                    onComponentDragOver(index, e)
+                  }
+                }}
+                onDrop={(e) => {
+                  if (!previewMode && !isMobile && onComponentDrop) {
+                    onComponentDrop(index, e)
+                  }
+                }}
+                onDragEnd={() => {
+                  if (!previewMode && !isMobile && onComponentDragEnd) {
+                    onComponentDragEnd()
+                  }
+                }}
+                onClick={(previewMode || isMobile) ? undefined : () => onSelectComponent(component)}
                 className={`relative group rounded-xl p-4 sm:p-6 transition-all ${
-                  previewMode || isMobile ? '' : 'cursor-pointer'
+                  (previewMode || isMobile) ? '' : 'cursor-pointer'
                 } ${
                   selectedComponent?.id === component.id
                     ? "bg-card shadow-neumorphic-pressed ring-2 ring-primary/20"
                     : "bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed"
+                } ${
+                  draggedComponentId === component.id ? 'opacity-50' : ''
+                } ${
+                  dragOverIndex === index ? 'ring-2 ring-primary/50' : ''
                 } w-full flex flex-col justify-center overflow-visible`}
                 style={{ maxWidth: '840px', gap: isMobile ? '0' : undefined }}
               >
+                {/* Drag handle - visible on hover */}
+                {!previewMode && !isMobile && onComponentDragStart && (
+                  <div className="absolute left-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity cursor-move z-10">
+                    <GripVertical className="w-4 h-4 text-muted-foreground" />
+                  </div>
+                )}
                 <ComponentRenderer 
                   component={component} 
                   onUpdateComponent={previewMode ? undefined : (onUpdateComponent ? (config) => onUpdateComponent(component.id, config) : undefined)}
@@ -1157,22 +1201,25 @@ export function ComponentRenderer({
                     <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                     <p className="text-[10px] text-muted-foreground">Uploading video...</p>
                   </div>
-                ) : (
+                ) : onUpdateComponent ? (
                   <>
                     <div className="text-center">
                       <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
                       <p className="text-[10px] text-muted-foreground">Drop video or click to upload</p>
                     </div>
-                    {onUpdateComponent && (
-                      <input
-                        ref={videoInputRef}
-                        type="file"
-                        accept="video/*"
-                        onChange={handleVideoFileSelect}
-                        className="hidden"
-                      />
-                    )}
+                    <input
+                      ref={videoInputRef}
+                      type="file"
+                      accept="video/*"
+                      onChange={handleVideoFileSelect}
+                      className="hidden"
+                    />
                   </>
+                ) : (
+                  <div className="text-center">
+                    <VideoOff className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-[10px] text-muted-foreground">The creator hasn't set up a video on this card.</p>
+                  </div>
                 )}
               </>
             )}
@@ -1433,7 +1480,7 @@ export function ComponentRenderer({
     case "short-answer":
       return (
         <div>
-          <label className="block text-xs font-medium mb-0">
+          <label className="block text-xs font-medium mb-2">
             {onUpdateComponent ? (
               <EditableText
                 value={config.label || "What is your name?"}
@@ -1448,8 +1495,8 @@ export function ComponentRenderer({
           <input
             type="text"
             placeholder={config.placeholder || "Type your answer here..."}
-            className="w-full bg-card border-none rounded-xl px-3 py-2 text-xs shadow-neumorphic-inset focus:outline-none mt-0"
-            readOnly
+            className="w-full bg-card border-none rounded-xl px-4 py-3 shadow-neumorphic-inset focus:outline-none focus:ring-2 focus:ring-primary"
+            readOnly={!onUpdateComponent}
           />
         </div>
       )
@@ -1555,12 +1602,18 @@ export function ComponentRenderer({
             </div>
             </>
           )}
+          {/* Show description above button with spacing */}
+          {!onUpdateComponent && config.description && (
+            <p className="text-xs text-muted-foreground mb-3 text-center max-w-md">
+              {config.description}
+            </p>
+          )}
           {isValidUrl ? (
           <a
               href={linkUrl}
             target="_blank"
             rel="noopener noreferrer"
-              className={`inline-block px-4 py-2 rounded-xl bg-primary text-primary-foreground shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-xs font-medium ${
+              className={`w-full block px-4 py-2 rounded-xl bg-primary text-primary-foreground shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-xs font-medium text-center ${
                 onUpdateComponent ? 'pointer-events-none cursor-default' : 'cursor-pointer'
               }`}
               onClick={(e) => {
@@ -1590,7 +1643,7 @@ export function ComponentRenderer({
           ) : (
             <button
               disabled={!isValidUrl}
-              className={`inline-block px-4 py-2 rounded-xl bg-primary text-primary-foreground shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
+              className={`w-full block px-4 py-2 rounded-xl bg-primary text-primary-foreground shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed text-center ${
                 onUpdateComponent ? 'pointer-events-none cursor-default' : ''
               }`}
             >
@@ -1605,11 +1658,6 @@ export function ComponentRenderer({
                 config.label || "Click here"
               )}
             </button>
-          )}
-          {!onUpdateComponent && config.description && (
-            <p className="text-xs text-muted-foreground mt-2 text-center max-w-md">
-              {config.description}
-            </p>
           )}
         </div>
       )

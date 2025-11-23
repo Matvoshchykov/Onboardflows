@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect, memo } from "react"
 import { clearFlowCache } from "@/lib/db/flows"
-import { FileText, Plus, Upload, X, Play, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ArrowUpDown, Eye, Trash2, Check, Minus } from 'lucide-react'
+import { FileText, Plus, Upload, X, Play, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ArrowUpDown, Eye, Trash2, Check, Minus, AlertTriangle, Crown } from 'lucide-react'
 import { toast } from "sonner"
 import { toggleFlowActive } from "@/lib/db/flows"
 import { useTheme } from "./theme-provider"
@@ -21,6 +21,7 @@ import { deleteNodeResponses } from "@/lib/db/responses"
 import { deleteNodePaths } from "@/lib/db/paths"
 import { useRouter } from "next/navigation"
 import { UploadFlowModal } from "./upload-flow-modal"
+import { UpgradeModal } from "./upgrade-modal"
 
 type PortPoint = { x: number; y: number }
 
@@ -64,25 +65,36 @@ type FlowCanvasProps = {
 // Helper function to normalize pageComponents to array format (handles both old and new formats)
 function normalizePageComponents(pageComponents: any): PageComponent[] {
   if (!pageComponents) return []
-  // If it's already an array, return it
-  if (Array.isArray(pageComponents)) return pageComponents
+  // If it's already an array, return it sorted by order
+  if (Array.isArray(pageComponents)) {
+    return [...pageComponents].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+  }
   // If it's the old object format, convert it to array
   if (typeof pageComponents === 'object') {
     const components: PageComponent[] = []
-    if (pageComponents.textInstruction) components.push(pageComponents.textInstruction)
-    if (pageComponents.displayUpload) components.push(pageComponents.displayUpload)
-    if (pageComponents.question) components.push(pageComponents.question)
-    return components
+    if (pageComponents.textInstruction) components.push({ ...pageComponents.textInstruction, order: 0 })
+    if (pageComponents.displayUpload) components.push({ ...pageComponents.displayUpload, order: 1 })
+    if (pageComponents.question) components.push({ ...pageComponents.question, order: 2 })
+    return components.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
   }
   return []
 }
 
-export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel = "owner" }: FlowCanvasProps & { accessLevel?: "owner" | "customer" }) {
+export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase }: FlowCanvasProps) {
   const [viewMode, setViewMode] = useState<"create" | "analytics">("create")
   const router = useRouter()
   const { theme } = useTheme()
   const [flowTitle, setFlowTitle] = useState(flow?.title || "Untitled Flow")
   const [lastSavedFlow, setLastSavedFlow] = useState<Flow | null>(flow || null)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [currentPlan, setCurrentPlan] = useState<"free" | "premium-monthly" | "premium-yearly">("free")
+  
+  useEffect(() => {
+    const savedPlan = localStorage.getItem("currentPlan") as "free" | "premium-monthly" | "premium-yearly"
+    if (savedPlan) {
+      setCurrentPlan(savedPlan)
+    }
+  }, [])
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 })
@@ -106,6 +118,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
   const [showConditionOptions, setShowConditionOptions] = useState<Record<string, boolean>>({})
   const [showPreview, setShowPreview] = useState(false)
   const [previewNodeIndex, setPreviewNodeIndex] = useState(0)
+  const [previewClickedNodeId, setPreviewClickedNodeId] = useState<string | null>(null)
   const [previewAnswers, setPreviewAnswers] = useState<Record<string, any>>(() => {
     // Initialize from localStorage (temporary database)
     if (typeof window !== 'undefined' && flow) {
@@ -1630,7 +1643,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
     <>
         <header className="bg-card px-2 sm:px-4 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 border-b border-border shadow-neumorphic-subtle relative">
           <div className="flex items-center gap-3">
-            <div className="relative">
+            <div className="relative flex items-center gap-2">
               <input
                 type="text"
                 value={flowTitle}
@@ -1642,11 +1655,16 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
                 }}
                 className="text-lg font-bold bg-card shadow-neumorphic-inset rounded-xl px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 text-foreground placeholder:text-muted-foreground"
               />
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                className="text-sm italic text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                upgrade
+              </button>
               {flow && (
                 <button
                   onClick={() => {
                     if (flow.status === "Live") {
-                      // Disable flow instantly
                       toggleFlowActive(flow.id, false).then((success) => {
                         if (success && onUpdateFlow) {
                           onUpdateFlow({ ...flow, status: "Draft" as const })
@@ -1704,24 +1722,13 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
   return (
     <>
         <header className="bg-card px-2 sm:px-4 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 border-b border-border shadow-neumorphic-subtle relative">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <input
-              type="text"
-              value={flowTitle}
-              onChange={(e) => {
-                setFlowTitle(e.target.value)
-                if (flow) {
-                  onUpdateFlow({ ...flow, title: e.target.value })
-                }
-              }}
-              className="text-lg font-bold bg-card shadow-neumorphic-inset rounded-xl px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 text-foreground placeholder:text-muted-foreground"
-            />
+        <div className="flex items-center gap-3 flex-1">
+          <div className="relative flex items-center gap-2">
+            {/* Enable/Disable button - above title input on the right */}
             {flow && (
               <button
                 onClick={() => {
                   if (flow.status === "Live") {
-                    // Disable flow instantly
                     toggleFlowActive(flow.id, false).then((success) => {
                       if (success && onUpdateFlow) {
                         onUpdateFlow({ ...flow, status: "Draft" as const })
@@ -1732,7 +1739,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
                     setShowUploadModal(true)
                   }
                 }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-neumorphic-raised hover:shadow-neumorphic-pressed z-10"
+                className="w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-neumorphic-raised hover:shadow-neumorphic-pressed z-10"
                 style={{
                   backgroundColor: flow.status === "Live" ? '#ef4444' : '#10b981',
                 }}
@@ -1745,9 +1752,21 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
                 )}
               </button>
             )}
+            <input
+              type="text"
+              value={flowTitle}
+              onChange={(e) => {
+                setFlowTitle(e.target.value)
+                if (flow) {
+                  onUpdateFlow({ ...flow, title: e.target.value })
+                }
+              }}
+              className="text-lg font-bold bg-card shadow-neumorphic-inset rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 text-foreground placeholder:text-muted-foreground"
+            />
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        
+        <div className="flex items-center gap-3 flex-1 justify-end">
           {/* Mode Toggle Buttons - Right side next to Save Changes */}
           <div className="flex items-center" style={{ gap: '5px', marginRight: '10px' }}>
             <button
@@ -1765,42 +1784,38 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
               Data Analytics
             </button>
           </div>
-          {/* Save Changes Button - Moved to header */}
+          {/* Save Changes Button */}
           {onSaveToDatabase && flow && (
             <button
               onClick={async () => {
                 if (flow && hasUnsavedChanges && !isSaving) {
                   setIsSaving(true)
-                  
-                  // INSTANT: Update UI immediately (optimistic update)
-                  setLastSavedFlow(JSON.parse(JSON.stringify(flow))) // Deep copy
-                  
-                  // Save in background (fire and forget - don't wait)
+                  setLastSavedFlow(JSON.parse(JSON.stringify(flow)))
                   onSaveToDatabase(flow).catch((error) => {
                     console.error('Error saving flow:', error)
-                    // On error, mark as unsaved again
                     setLastSavedFlow((prev) => prev ? JSON.parse(JSON.stringify(prev)) : null)
                   })
-                  
-                  // Show loading state for 300ms to prevent early exit
                   setTimeout(() => {
                     setIsSaving(false)
                   }, 300)
                 }
               }}
               disabled={!hasUnsavedChanges || isSaving}
-              className={`font-medium transition-all duration-300 flex items-center justify-center shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed bg-primary text-primary-foreground touch-manipulation ${
+              className={`font-medium transition-all duration-300 flex items-center justify-center shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed touch-manipulation ${
                 hasUnsavedChanges && !isSaving
                   ? 'cursor-pointer'
                   : 'cursor-not-allowed opacity-50'
               }`}
               style={{
+                backgroundColor: hasUnsavedChanges ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                color: hasUnsavedChanges ? '#f59e0b' : '#10b981',
                 minWidth: isMobile ? '100px' : '140px',
                 minHeight: isMobile ? '44px' : '32px',
                 padding: isMobile ? '0 16px' : '0 12px',
                 fontSize: isMobile ? '0.75rem' : '0.827rem',
                 borderRadius: '10px'
               }}
+              title={hasUnsavedChanges ? "Unsaved changes" : "All changes saved"}
             >
               {isSaving ? (
                 <>
@@ -1813,8 +1828,13 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
                   />
                   <span>Saving...</span>
                 </>
+              ) : hasUnsavedChanges ? (
+                <>
+                  <AlertTriangle className="w-4 h-4 mr-2" />
+                  <span>Unsaved changes</span>
+                </>
               ) : (
-                <span>Save Changes</span>
+                <span className="text-center w-full">All saved</span>
               )}
             </button>
           )}
@@ -1822,6 +1842,51 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
       </header>
 
       <div className="flex flex-1 overflow-hidden">
+        {/* Plan Limitation Progress Bar - Top Left (only show for premium plans) */}
+        {currentPlan !== "free" && (
+          <div className="absolute top-4 left-4 z-20 bg-card rounded-xl p-4 shadow-neumorphic-raised min-w-[200px]">
+            <div className="text-xs font-semibold mb-3 text-muted-foreground">
+              {currentPlan === "premium-monthly" ? "Premium Monthly" : "Premium Yearly"}
+            </div>
+            
+            {/* Flow Progress */}
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-muted-foreground">Flow</span>
+                <span className="text-xs text-muted-foreground">
+                  {flow ? 1 : 0} / 3
+                </span>
+              </div>
+              <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-blue-500 transition-all duration-300 rounded-full"
+                  style={{ 
+                    width: `${Math.min(100, ((flow ? 1 : 0) / 3) * 100)}%` 
+                  }}
+                />
+              </div>
+            </div>
+            
+            {/* Block Progress */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-muted-foreground">Blocks</span>
+                <span className="text-xs text-muted-foreground">
+                  {flow ? (flow.nodes.length + (flow.logicBlocks?.length || 0)) : 0} / 20
+                </span>
+              </div>
+              <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-green-500 transition-all duration-300 rounded-full"
+                  style={{ 
+                    width: `${Math.min(100, ((flow ? (flow.nodes.length + (flow.logicBlocks?.length || 0)) : 0) / 20) * 100)}%` 
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         <div
           ref={canvasRef}
             className={`flex-1 bg-background relative overflow-hidden touch-none ${
@@ -2162,9 +2227,21 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
+                        // Clear A/B test decisions when starting a new preview session
+                        if (typeof window !== 'undefined' && flow) {
+                          const keysToRemove: string[] = []
+                          for (let i = 0; i < sessionStorage.length; i++) {
+                            const key = sessionStorage.key(i)
+                            if (key && key.startsWith(`ab-test-${flow.id}-`)) {
+                              keysToRemove.push(key)
+                            }
+                          }
+                          keysToRemove.forEach(key => sessionStorage.removeItem(key))
+                        }
                         // Find the node in flow.nodes and set preview to show that node
                         const nodeIndex = flow.nodes.findIndex(n => n.id === node.id)
                         if (nodeIndex !== -1) {
+                          setPreviewClickedNodeId(node.id) // Track the clicked node
                           setPreviewNodeIndex(nodeIndex) // Start at the clicked node
                           setShowPreview(true)
                         }
@@ -2237,6 +2314,17 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
                               />
                             )}
                           </div>
+                          {/* Upgrade button - beside title */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setShowUpgradeModal(true)
+                            }}
+                            className="flex items-center gap-1 text-blue-600 dark:text-blue-400 underline font-medium text-xs whitespace-nowrap flex-shrink-0"
+                          >
+                            <Crown className="w-3 h-3" />
+                            <span>Upgrade</span>
+                          </button>
                         </div>
                         <p className="text-xs text-muted-foreground leading-relaxed">
                           {node.components} Components / {node.completion}% Complete
@@ -2952,21 +3040,21 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
         </div>
 
         {/* Logic block library - Dropdown (always visible, fixed position) */}
-        <div className="fixed right-0 z-40" style={{ top: '80px', bottom: '80px', paddingRight: '8px' }}>
+        <div className="fixed z-40" style={{ top: '80px', bottom: '80px', right: '60px' }}>
           <div className="relative h-full flex flex-col">
-            {/* Dropdown button - long and thin */}
+            {/* Dropdown button */}
             <button
               onClick={() => setIsLogicLibraryExpanded(!isLogicLibraryExpanded)}
-              className="w-[230px] h-8 bg-background/80 backdrop-blur-sm rounded-lg shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all border border-border/30 flex items-center justify-center gap-2 px-3 flex-shrink-0"
+              className="w-[180px] h-8 bg-background/80 backdrop-blur-sm rounded-lg shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all border border-border/30 flex items-center justify-center gap-2 px-3 flex-shrink-0"
               title={isLogicLibraryExpanded ? "Collapse Logic Blocks" : "Expand Logic Blocks"}
             >
               <span className="text-xs font-medium text-muted-foreground">Logic Blocks</span>
               <ChevronDown className={`w-3 h-3 transition-transform ${isLogicLibraryExpanded ? 'rotate-180' : ''}`} />
             </button>
             
-            {/* Dropdown content */}
+            {/* Dropdown content - aligned with button */}
             {isLogicLibraryExpanded && (
-              <div className="mt-2 w-[246px] bg-card rounded-lg pt-2 px-2 pb-2 shadow-lg flex flex-col">
+              <div className="mt-2 w-[196px] bg-card rounded-lg pt-2 px-2 pb-2 shadow-lg flex flex-col" style={{ marginLeft: '0' }}>
                 <LogicBlockLibrary onDragStart={handleLogicDragStart} />
               </div>
             )}
@@ -3084,11 +3172,19 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
           previewAnswers={previewAnswers}
           setPreviewAnswers={setPreviewAnswers}
           setShowPreview={setShowPreview}
+          previewClickedNodeId={previewClickedNodeId}
+          setPreviewClickedNodeId={setPreviewClickedNodeId}
         />
       )}
 
 
       {/* Upload Flow Modal */}
+      {showUpgradeModal && (
+        <UpgradeModal
+          onClose={() => setShowUpgradeModal(false)}
+          currentPlan="free"
+        />
+      )}
       {showUploadModal && flow && (
         <UploadFlowModal
           onClose={() => setShowUploadModal(false)}
@@ -3175,7 +3271,9 @@ function PreviewModal({
   setPreviewNodeIndex,
   previewAnswers,
   setPreviewAnswers,
-  setShowPreview
+  setShowPreview,
+  previewClickedNodeId,
+  setPreviewClickedNodeId
 }: {
   flow: Flow
   logicBlocks: LogicBlock[]
@@ -3184,6 +3282,8 @@ function PreviewModal({
   previewAnswers: Record<string, any>
   setPreviewAnswers: React.Dispatch<React.SetStateAction<Record<string, any>>>
   setShowPreview: React.Dispatch<React.SetStateAction<boolean>>
+  previewClickedNodeId: string | null
+  setPreviewClickedNodeId: React.Dispatch<React.SetStateAction<string | null>>
 }) {
   // Don't track sessions in preview mode - preview is for creator testing only
   // Session tracking removed to prevent preview from counting as real flow sessions
@@ -3338,8 +3438,27 @@ function PreviewModal({
     }
     
     if (block.type === "a-b-test") {
+      // Use sessionStorage to persist A/B test decisions per flow session
+      // Key format: `ab-test-${flow.id}-${block.id}`
+      const storageKey = `ab-test-${flow.id}-${block.id}`
+      
+      // Check if we already have a decision for this A/B test in this session
+      const storedDecision = sessionStorage.getItem(storageKey)
+      
+      if (storedDecision !== null) {
+        // Use stored decision (persists when going back/forward)
+        const pathIndex = parseInt(storedDecision)
+        return block.connections[pathIndex] || block.connections[0] || null
+      }
+      
+      // Generate new 50/50 random decision
       const randomValue = Math.random()
-      return randomValue < 0.5 ? block.connections[0] : block.connections[1] || null
+      const pathIndex = randomValue < 0.5 ? 0 : 1
+      
+      // Store decision in sessionStorage for this session
+      sessionStorage.setItem(storageKey, pathIndex.toString())
+      
+      return block.connections[pathIndex] || block.connections[0] || null
     }
     
     return null
@@ -3350,6 +3469,15 @@ function PreviewModal({
     const connectedLogicBlock = logicBlocks.find(lb => node.connections.includes(lb.id))
     
     if (connectedLogicBlock) {
+      // For A/B test, always evaluate even without answer
+      if (connectedLogicBlock.type === "a-b-test") {
+        const targetId = evaluateLogicBlock(connectedLogicBlock, answer)
+        if (targetId) {
+          return flow.nodes.find(n => n.id === targetId) || null
+        }
+        return null
+      }
+      
       if (answer !== undefined && answer !== null) {
         const targetId = evaluateLogicBlock(connectedLogicBlock, answer)
         if (targetId) {
@@ -3370,9 +3498,19 @@ function PreviewModal({
         return flow.nodes.find(n => n.id === nextId) || null
       }
       const nextLogicBlock = logicBlocks.find(lb => lb.id === nextId)
-      if (nextLogicBlock && nextLogicBlock.connections.length > 0) {
-        const firstTargetId = nextLogicBlock.connections[0]
-        return flow.nodes.find(n => n.id === firstTargetId) || null
+      if (nextLogicBlock) {
+        // For A/B test, always evaluate even without answer
+        if (nextLogicBlock.type === "a-b-test") {
+          const targetId = evaluateLogicBlock(nextLogicBlock, answer)
+          if (targetId) {
+            return flow.nodes.find(n => n.id === targetId) || null
+          }
+          return null
+        }
+        if (nextLogicBlock.connections.length > 0) {
+          const firstTargetId = nextLogicBlock.connections[0]
+          return flow.nodes.find(n => n.id === firstTargetId) || null
+        }
       }
     }
     
@@ -3416,6 +3554,24 @@ function PreviewModal({
     if (!flow || !flow.nodes || flow.nodes.length === 0) return []
     return buildPathFromAnswers()
   })
+  
+  // Clear A/B test decisions when preview resets (starts from beginning)
+  useEffect(() => {
+    if (!flow) return
+    
+    // When preview is at index 0, clear previous A/B test decisions for this flow
+    // This ensures a fresh 50/50 chance on each new preview session
+    if (previewNodeIndex === 0 && typeof window !== 'undefined') {
+      const keysToRemove: string[] = []
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i)
+        if (key && key.startsWith(`ab-test-${flow.id}-`)) {
+          keysToRemove.push(key)
+        }
+      }
+      keysToRemove.forEach(key => sessionStorage.removeItem(key))
+    }
+  }, [previewNodeIndex, flow?.id])
   
   // Rebuild path when answers change or when preview opens (but preserve visited nodes up to current index)
   useEffect(() => {
@@ -3462,12 +3618,29 @@ function PreviewModal({
   const pathNodes = actualPathTaken.length > 0 ? actualPathTaken : (flow?.nodes || [])
   // Ensure previewNodeIndex is within bounds
   const safePreviewNodeIndex = Math.min(previewNodeIndex, Math.max(0, pathNodes.length - 1))
-  const currentPreviewNode = pathNodes[safePreviewNodeIndex] || pathNodes[0]
+  // If a specific node was clicked, show that node's components directly
+  const currentPreviewNode = previewClickedNodeId 
+    ? flow.nodes.find(n => n.id === previewClickedNodeId) || pathNodes[safePreviewNodeIndex] || pathNodes[0]
+    : (pathNodes[safePreviewNodeIndex] || pathNodes[0])
   
-  // Rebuild path when preview opens or flow changes
+  // Rebuild path when preview opens or flow changes (but not when a specific node was clicked)
   useEffect(() => {
     if (!flow || !flow.nodes || flow.nodes.length === 0) {
       setActualPathTaken([])
+      return
+    }
+    
+    // If a specific node was clicked, don't rebuild the path - just show that node
+    if (previewClickedNodeId) {
+      // Set the path to just the clicked node
+      const clickedNode = flow.nodes.find(n => n.id === previewClickedNodeId)
+      if (clickedNode) {
+        setActualPathTaken([clickedNode])
+        const nodeIndex = flow.nodes.findIndex(n => n.id === previewClickedNodeId)
+        if (nodeIndex !== -1) {
+          setPreviewNodeIndex(0) // Use index 0 since we only have one node in the path
+        }
+      }
       return
     }
     
@@ -3490,24 +3663,13 @@ function PreviewModal({
       setPreviewNodeIndex(0)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flow?.id]) // Rebuild when flow changes
+  }, [flow?.id, previewClickedNodeId]) // Rebuild when flow changes or clicked node changes
   
   // Don't initialize session in preview mode - preview is for creator testing only
   // Sessions should only be created in the real onboarding flow (app/experiences/[experienceId]/flow/page.tsx)
   
   // Don't track path visits in preview mode - preview is for creator testing only
 
-  const previewComponents = normalizePageComponents(currentPreviewNode?.pageComponents)
-  const questionComponent = previewComponents.find(
-    (comp: PageComponent) => ["multiple-choice", "checkbox-multi", "short-answer", "long-answer", "scale-slider"].includes(comp.type)
-  )
-  const needsAnswer = questionComponent && [
-    "multiple-choice",
-    "checkbox-multi",
-    "short-answer",
-    "scale-slider"
-  ].includes(questionComponent.type)
-  
   // Get current answer - this will trigger re-render when previewAnswers changes
   const currentAnswer = currentPreviewNode ? previewAnswers[currentPreviewNode.id] : undefined
   
@@ -3578,6 +3740,7 @@ function PreviewModal({
     } else {
       // Don't complete session in preview mode
       setShowPreview(false)
+      setPreviewClickedNodeId(null) // Reset clicked node when closing
     }
   }
 
@@ -3602,7 +3765,10 @@ function PreviewModal({
               : "You've reached the end of the flow."}
           </p>
           <button
-            onClick={() => setShowPreview(false)}
+            onClick={() => {
+              setShowPreview(false)
+              setPreviewClickedNodeId(null) // Reset clicked node when closing
+            }}
             className="w-full px-4 py-2 rounded-xl bg-primary text-primary-foreground shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all font-medium"
           >
             Close Preview
@@ -3616,15 +3782,17 @@ function PreviewModal({
   // For preview, we show all components in order
   const allComponents = normalizePageComponents(currentPreviewNode?.pageComponents || [])
   
-  // Find question component if any
+  // Find question component if any (for logic purposes)
   const previewQuestionComponent = allComponents.find(
     (comp: PageComponent) => ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(comp.type)
   )
   
-  // Non-question components (displayed in PagePreview)
-  const nonQuestionComponents = allComponents.filter(
-    (comp: PageComponent) => !["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(comp.type)
-  )
+  const needsAnswer = previewQuestionComponent && [
+    "multiple-choice",
+    "checkbox-multi",
+    "short-answer",
+    "scale-slider"
+  ].includes(previewQuestionComponent.type)
 
   const previewContentRef = useRef<HTMLDivElement>(null)
   const questionComponentRef = useRef<HTMLDivElement>(null)
@@ -3644,17 +3812,10 @@ function PreviewModal({
             top: Math.max(0, componentTop - 20),
             behavior: 'smooth'
           })
-        } else if (questionComponentRef.current && nonQuestionComponents.length === 0) {
-          // If no non-question components, show question component at top
-          const componentTop = questionComponentRef.current.offsetTop
-          container.scrollTo({
-            top: Math.max(0, componentTop - 20),
-            behavior: 'smooth'
-          })
         }
       }, 200)
     }
-  }, [currentPreviewNode?.id, nonQuestionComponents.length])
+  }, [currentPreviewNode?.id, allComponents.length])
   
   // Scroll to bottom when answer is selected
   useEffect(() => {
@@ -3685,7 +3846,10 @@ function PreviewModal({
         
         {/* Close button - top right */}
         <button
-          onClick={() => setShowPreview(false)}
+          onClick={() => {
+            setShowPreview(false)
+            setPreviewClickedNodeId(null) // Reset clicked node when closing
+          }}
           className="fixed top-4 right-4 z-20 p-2 rounded-lg bg-card/90 backdrop-blur-sm shadow-lg hover:shadow-xl transition-all border border-border/30"
         >
           <X className="w-4 h-4" />
@@ -3730,46 +3894,59 @@ function PreviewModal({
         
         <div className="w-full max-w-6xl mx-auto px-6 flex flex-col items-center justify-center min-h-full" style={{ paddingTop: '80px', paddingBottom: '80px' }}>
           <div className="w-full space-y-6" style={{ transform: 'scale(1.25)', maxWidth: '840px' }}>
-            {/* Only show non-question components in PagePreview */}
-            {nonQuestionComponents.length > 0 && (
-              <PagePreview
-                components={nonQuestionComponents}
-                viewMode="desktop"
-                selectedComponent={null}
-                onSelectComponent={() => {}}
-                onDeleteComponent={() => {}}
-                onUpdateComponent={undefined}
-                previewMode={true}
-              />
-            )}
-            
-            {/* Show question component separately with interactive functionality */}
-            {previewQuestionComponent && needsAnswer && (
-              <div ref={questionComponentRef} className={`w-full mx-auto ${nonQuestionComponents.length > 0 ? "mt-6" : ""}`} style={{ maxWidth: '840px' }}>
-                <div className="relative group rounded-xl p-6 transition-all bg-card shadow-neumorphic-raised min-h-[200px] flex flex-col justify-center">
-                  <InteractiveQuestionComponent
-                    key={currentPreviewNode.id}
-                    component={previewQuestionComponent}
-                    value={previewAnswers[currentPreviewNode.id]}
-                    onChange={async (value) => {
-                      // Immediately update the answer in state
-                      if (currentPreviewNode) {
-                        setPreviewAnswers(prev => {
-                          const updated = { ...prev, [currentPreviewNode.id]: value }
-                          // Save to localStorage (temporary database)
-                          if (typeof window !== 'undefined') {
-                            localStorage.setItem(`preview-answers-${flow.id}`, JSON.stringify(updated))
+            {/* Display ALL components in order */}
+            {allComponents.map((component, index) => {
+              const isQuestion = ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(component.type)
+              
+              if (isQuestion && needsAnswer) {
+                return (
+                  <div 
+                    key={component.id} 
+                    ref={index === 0 ? questionComponentRef : null}
+                    className="w-full mx-auto" 
+                    style={{ maxWidth: '840px' }}
+                  >
+                    <div className="relative group rounded-xl p-6 transition-all bg-card shadow-neumorphic-raised flex flex-col">
+                      <InteractiveQuestionComponent
+                        key={currentPreviewNode.id}
+                        component={component}
+                        value={previewAnswers[currentPreviewNode.id]}
+                        onChange={async (value) => {
+                          if (currentPreviewNode) {
+                            setPreviewAnswers(prev => {
+                              const updated = { ...prev, [currentPreviewNode.id]: value }
+                              if (typeof window !== 'undefined') {
+                                localStorage.setItem(`preview-answers-${flow.id}`, JSON.stringify(updated))
+                              }
+                              return updated
+                            })
                           }
-                          return updated
-                        })
-                        
-                        // Don't save to database in preview mode - preview is for creator testing only
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-            )}
+                        }}
+                      />
+                    </div>
+                  </div>
+                )
+              } else {
+                return (
+                  <div 
+                    key={component.id} 
+                    data-preview-component={index === 0 ? 'first' : undefined}
+                    className="w-full mx-auto" 
+                    style={{ maxWidth: '840px' }}
+                  >
+                    <PagePreview
+                      components={[component]}
+                      viewMode="desktop"
+                      selectedComponent={null}
+                      onSelectComponent={() => {}}
+                      onDeleteComponent={() => {}}
+                      onUpdateComponent={undefined}
+                      previewMode={true}
+                    />
+                  </div>
+                )
+              }
+            })}
           </div>
         </div>
         </div>
@@ -3853,13 +4030,18 @@ function InteractiveQuestionComponent({
 
     case "short-answer":
       return (
-        <input
-          type="text"
-          value={value || ""}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={config.placeholder || "Type your answer here..."}
-          className="w-full bg-card border-none rounded-xl px-4 py-3 shadow-neumorphic-inset focus:outline-none focus:ring-2 focus:ring-primary"
-        />
+        <div>
+          <label className="block text-xs font-medium mb-2">
+            {config.label || "What is your name?"}
+          </label>
+          <input
+            type="text"
+            value={value || ""}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={config.placeholder || "Type your answer here..."}
+            className="w-full bg-card border-none rounded-xl px-4 py-3 shadow-neumorphic-inset focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+        </div>
       )
 
 

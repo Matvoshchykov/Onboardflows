@@ -333,7 +333,7 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
 
             {/* Top Visited Nodes - List View */}
             {nodeVisitChartData.length > 0 && (() => {
-              const itemsPerPage = 4
+              const itemsPerPage = 6
               const startIndex = nodeVisitPage * itemsPerPage
               const endIndex = startIndex + itemsPerPage
               const displayedNodes = nodeVisitChartData.slice(startIndex, endIndex)

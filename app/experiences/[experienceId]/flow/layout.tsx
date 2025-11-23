@@ -26,14 +26,6 @@ export default async function FlowLayout({
 	if (access.access_level === "customer") {
 		return (
 			<>
-				{/* Subtle user info in bottom-right corner */}
-				<div className="fixed bottom-2 right-2 z-50 bg-background/80 backdrop-blur-sm border border-border/50 rounded-lg px-2 py-1 text-[10px] text-muted-foreground font-mono opacity-60 hover:opacity-100 transition-opacity pointer-events-none">
-					<div className="flex items-center gap-2">
-						<span>{userId.slice(0, 8)}...</span>
-						<span className="text-[8px]">•</span>
-						<span className="capitalize">{access.access_level}</span>
-					</div>
-				</div>
 				{children}
 			</>
 		);
