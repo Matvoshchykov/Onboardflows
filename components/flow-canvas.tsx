@@ -1678,7 +1678,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
               <button
                 onClick={() => setViewMode("create")}
                 className="text-[12px] text-muted-foreground hover:text-foreground transition-colors"
-                style={{ minWidth: '105px' }}
+                style={{ minWidth: '105px', marginLeft: '10px' }}
               >
                 Flow Creation
               </button>
@@ -1753,7 +1753,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
             <button
               onClick={() => setViewMode("create")}
               className="text-[12px] text-foreground"
-              style={{ minWidth: '105px' }}
+              style={{ minWidth: '105px', marginLeft: '10px' }}
             >
               Flow Creation
             </button>
