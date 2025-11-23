@@ -924,28 +924,51 @@ export function ComponentRenderer({
                 />
               ) : (
                 // Preview/onboarding: show video
-                <video
-                  key={videoSource || videoPreview || 'video'}
-                  src={videoSource || videoPreview || ''}
-                  controls
-                  preload="metadata"
-                  playsInline
-                  webkit-playsinline="true"
-                  muted={false}
-                  crossOrigin="anonymous"
-                  className={`w-full rounded-xl ${
-                    isPreviewMode
-                      ? 'h-full object-cover aspect-video'
-                      : 'h-auto max-h-[600px] object-contain'
-                  }`}
-                  style={{ 
-                    maxWidth: '100%', 
-                    WebkitPlaysinline: 'true',
-                    width: '100%',
-                    height: 'auto',
-                    display: 'block',
-                    objectFit: 'contain'
-                  } as React.CSSProperties}
+                // On mobile, show clickable button to open video in new tab to bypass native video issues
+                isMobile ? (
+                  <div className="w-full h-full relative aspect-video bg-muted/50 rounded-xl flex items-center justify-center">
+                    <a
+                      href={videoSource || videoPreview || '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex flex-col items-center gap-3 px-6 py-4 bg-primary text-primary-foreground rounded-xl hover:opacity-90 transition-opacity shadow-lg"
+                      onClick={(e) => {
+                        if (!videoSource && !videoPreview) {
+                          e.preventDefault()
+                          console.error('[Video Debug] No video source available')
+                        } else {
+                          console.log('[Video Debug] Opening video in new tab:', videoSource || videoPreview)
+                        }
+                      }}
+                    >
+                      <Video className="w-8 h-8" />
+                      <span className="text-sm font-medium">Tap to Watch Video</span>
+                      <span className="text-xs opacity-80">Opens in new tab</span>
+                    </a>
+                  </div>
+                ) : (
+                  <video
+                    key={videoSource || videoPreview || 'video'}
+                    src={videoSource || videoPreview || ''}
+                    controls
+                    preload="metadata"
+                    playsInline
+                    webkit-playsinline="true"
+                    muted={false}
+                    crossOrigin="anonymous"
+                    className={`w-full rounded-xl ${
+                      isPreviewMode
+                        ? 'h-full object-cover aspect-video'
+                        : 'h-auto max-h-[600px] object-contain'
+                    }`}
+                    style={{ 
+                      maxWidth: '100%', 
+                      WebkitPlaysinline: 'true',
+                      width: '100%',
+                      height: 'auto',
+                      display: 'block',
+                      objectFit: 'contain'
+                    } as React.CSSProperties}
                   onLoadedMetadata={(e) => {
                     // Force video metadata load on mobile
                     const video = e.currentTarget
@@ -1101,11 +1124,12 @@ export function ComponentRenderer({
                       setVideoPreview(null)
                     }
                   }}
-                  onLoadStart={() => {
-                    console.log('Video loading started:', videoSource)
-                  }}
-                />
-              )
+                   onLoadStart={() => {
+                     console.log('Video loading started:', videoSource)
+                   }}
+                 />
+                )
+               )
             ) : (
               <>
                 {uploadingVideo ? (

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Download, TrendingUp, Users, CheckCircle2, Clock, TrendingDown, PieChart, Activity, Video } from "lucide-react"
+import { Download, TrendingUp, Users, CheckCircle2, Clock, TrendingDown, PieChart, Activity } from "lucide-react"
 import { getFlowAnalytics, type AnalyticsData, type CompletedSessionData } from "@/lib/db/analytics"
 import type { Flow } from "./flow-builder"
 import { ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from "recharts"
@@ -134,27 +134,61 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
   const exportToCSV = () => {
     if (!analytics || analytics.sessions.length === 0) return
 
-    const headers = ['User', 'Started At', 'Completed At', 'Duration (seconds)', 'Path Taken', 'Answers']
+    const headers = [
+      'User ID',
+      'User Nickname', 
+      'Session ID',
+      'Started At (UTC)',
+      'Completed At (UTC)',
+      'Duration (seconds)',
+      'Duration (formatted)',
+      'Completion Status',
+      'Path Taken (Node IDs)',
+      'Path Taken (Node Titles)',
+      'Total Nodes Visited',
+      'Response Count',
+      'All Responses (JSON)',
+      'Individual Responses'
+    ]
     
     const rows = analytics.sessions.map(session => {
       const userDisplay = userNicknames[session.userId] || session.userId.slice(0, 8)
-      const pathString = session.path.map(p => p.nodeTitle).join(' → ')
-      const answersString = session.responses.map(r => {
+      const pathTitles = session.path.map(p => p.nodeTitle).join(' → ')
+      const pathIds = session.path.map(p => p.nodeId).join(' → ')
+      
+      // Format individual responses for better CSV analysis
+      const responsesFormatted = session.responses.map(r => {
         const answerValue = Array.isArray(r.answer) 
-          ? r.answer.join(', ') 
+          ? r.answer.join('; ') 
           : typeof r.answer === 'object' 
             ? JSON.stringify(r.answer) 
             : String(r.answer)
-        return `${r.nodeTitle}: ${answerValue}`
+        return `${r.nodeTitle} [${r.nodeId}]: ${answerValue}`
       }).join(' | ')
       
+      const allResponsesJson = JSON.stringify(session.responses.map(r => ({
+        nodeId: r.nodeId,
+        nodeTitle: r.nodeTitle,
+        questionType: r.questionType,
+        answer: r.answer,
+        answeredAt: r.answeredAt
+      })))
+      
       return [
+        session.userId,
         userDisplay,
-        new Date(session.startedAt).toLocaleString(),
-        new Date(session.completedAt).toLocaleString(),
+        session.sessionId,
+        new Date(session.startedAt).toISOString(),
+        new Date(session.completedAt).toISOString(),
         session.duration.toString(),
-        pathString,
-        answersString
+        formatDuration(session.duration),
+        'Completed',
+        pathIds,
+        pathTitles,
+        session.path.length.toString(),
+        session.responses.length.toString(),
+        allResponsesJson,
+        responsesFormatted
       ]
     })
 
@@ -249,74 +283,50 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
                 <h3 className="text-xs font-semibold text-foreground">Completion Overview</h3>
               </div>
               {/* Pie Chart Container - Centered and Symmetrical */}
-              <div className="flex justify-center items-center py-4" style={{ minHeight: '260px' }}>
-                <div className="relative flex items-center justify-center" style={{ width: '100%', maxWidth: '320px', height: '260px' }}>
-                  {/* Pie Chart */}
-                  <div className="relative" style={{ width: '220px', height: '260px' }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RechartsPieChart>
-                        <Pie
-                          data={completionChartData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={110}
-                          paddingAngle={2}
-                          dataKey="value"
-                          startAngle={90}
-                          endAngle={-270}
-                        >
-                          {completionChartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.fill} />
-                          ))}
-                        </Pie>
-                      </RechartsPieChart>
-                    </ResponsiveContainer>
-                    
-                    {/* Legends positioned to stem from their pie segments */}
-                    {completionChartData.map((entry, index) => {
-                      const total = completionChartData.reduce((sum, e) => sum + e.value, 0)
-                      const percentage = entry.value / total
-                      // Calculate cumulative angle to find segment midpoint
-                      let cumulativeAngle = 0
-                      for (let i = 0; i < index; i++) {
-                        cumulativeAngle += (completionChartData[i].value / total) * 360
-                      }
-                      const segmentMidAngle = cumulativeAngle + (percentage * 360) / 2
-                      // Convert angle to position (starting from top, clockwise)
-                      // Pie starts at 90° (top), so adjust
-                      const angleFromTop = segmentMidAngle - 90
-                      const radians = (angleFromTop * Math.PI) / 180
-                      // Position legend at outer edge of pie + offset
-                      const centerX = 110 // half of pie chart width
-                      const centerY = 130 // half of pie chart height
-                      const outerRadius = 110
-                      const labelDistance = outerRadius + 30
-                      const labelX = centerX + Math.sin(radians) * labelDistance
-                      const labelY = centerY - Math.cos(radians) * labelDistance
-                      
-                      return (
-                        <div
-                          key={index}
-                          className="absolute flex items-center gap-2"
-                          style={{
-                            left: `${labelX}px`,
-                            top: `${labelY}px`,
-                            transform: 'translate(-50%, -50%)',
-                            pointerEvents: 'auto'
-                          }}
-                        >
-                          <div 
-                            className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
-                            style={{ backgroundColor: entry.fill }}
-                          />
-                          <span className="text-[10px] text-foreground whitespace-nowrap">
-                            {entry.name}: {entry.value} ({Math.round(percentage * 100)}%)
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
+              <div className="flex flex-col items-center justify-center py-4" style={{ minHeight: '280px' }}>
+                {/* Pie Chart - Centered */}
+                <div className="relative flex items-center justify-center mb-4" style={{ width: '240px', height: '240px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RechartsPieChart>
+                      <Pie
+                        data={completionChartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={100}
+                        paddingAngle={2}
+                        dataKey="value"
+                        startAngle={90}
+                        endAngle={-270}
+                      >
+                        {completionChartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                    </RechartsPieChart>
+                  </ResponsiveContainer>
+                </div>
+                
+                {/* Legends - Balanced below chart */}
+                <div className="flex items-center justify-center gap-6 flex-wrap">
+                  {completionChartData.map((entry, index) => {
+                    const total = completionChartData.reduce((sum, e) => sum + e.value, 0)
+                    const percentage = Math.round((entry.value / total) * 100)
+                    return (
+                      <div
+                        key={index}
+                        className="flex items-center gap-2"
+                      >
+                        <div 
+                          className="w-3 h-3 rounded-full flex-shrink-0" 
+                          style={{ backgroundColor: entry.fill }}
+                        />
+                        <span className="text-[10px] text-foreground whitespace-nowrap">
+                          {entry.name}: {entry.value} ({percentage}%)
+                        </span>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             </div>
@@ -400,59 +410,19 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
           </div>
         )}
 
-        {/* Video Viewing Stats */}
-        {analytics.videoViewingStats && Object.keys(analytics.videoViewingStats).length > 0 && (
-          <div className="bg-card rounded-lg p-4 shadow-neumorphic-raised">
-            <div className="flex items-center gap-2 mb-3">
-              <Video className="w-4 h-4 text-muted-foreground" />
-              <h3 className="text-xs font-semibold text-foreground">Video Viewing Statistics</h3>
-            </div>
-            <div className="space-y-2">
-              {Object.entries(analytics.videoViewingStats).map(([componentId, stats]) => (
-                <div key={componentId} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-medium text-foreground">
-                        {stats.componentTitle || 'Video'}
-                      </span>
-                      <span className="text-[10px] font-semibold text-muted-foreground ml-2">
-                        {stats.viewCount} {stats.viewCount === 1 ? 'view' : 'views'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[9px] text-muted-foreground">Avg viewing time:</span>
-                      <span className="text-[9px] font-medium text-foreground">
-                        {formatDuration(stats.avgViewingTime)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        
-        {/* Show message if no video stats but videos exist */}
-        {(!analytics.videoViewingStats || Object.keys(analytics.videoViewingStats).length === 0) && (
-          <div className="bg-card rounded-lg p-4 shadow-neumorphic-raised text-center">
-            <Video className="w-6 h-6 text-muted-foreground mx-auto mb-2 opacity-50" />
-            <p className="text-[10px] text-muted-foreground">No video viewing data yet</p>
-            <p className="text-[9px] text-muted-foreground mt-1">Video statistics will appear here once users watch videos in the flow</p>
-          </div>
-        )}
-
-        {/* Compact Sessions Table - One line per row */}
+        {/* Enhanced Sessions Table with Better Data Display */}
         {analytics.sessions.length > 0 ? (
           <div className="bg-card rounded-xl shadow-neumorphic-raised overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-[11px]">
-                <thead className="bg-muted/30 border-b border-border">
+                <thead className="bg-muted/30 border-b border-border sticky top-0 z-10">
                   <tr>
-                    <th className="px-2 py-1.5 text-left text-[9px] font-medium text-muted-foreground uppercase tracking-wider">User</th>
-                    <th className="px-2 py-1.5 text-left text-[9px] font-medium text-muted-foreground uppercase tracking-wider">Started</th>
-                    <th className="px-2 py-1.5 text-left text-[9px] font-medium text-muted-foreground uppercase tracking-wider">Duration</th>
-                    <th className="px-2 py-1.5 text-left text-[9px] font-medium text-muted-foreground uppercase tracking-wider">Path</th>
-                    <th className="px-2 py-1.5 text-left text-[9px] font-medium text-muted-foreground uppercase tracking-wider">Answers</th>
+                    <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">User</th>
+                    <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Started</th>
+                    <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Duration</th>
+                    <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Path</th>
+                    <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Responses</th>
+                    <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Details</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -460,52 +430,79 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
                     const userDisplay = userNicknames[session.userId] || session.userId.slice(0, 8)
                     return (
                       <tr key={session.sessionId} className={idx % 2 === 0 ? 'bg-card' : 'bg-muted/10 hover:bg-muted/20'}>
-                        <td className="px-2 py-1 text-[10px] text-foreground font-medium whitespace-nowrap">{userDisplay}</td>
-                        <td className="px-2 py-1 text-[10px] text-muted-foreground whitespace-nowrap">
-                          {new Date(session.startedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                        <td className="px-2 py-1 text-[10px] text-muted-foreground whitespace-nowrap">
-                          {formatDuration(session.duration)}
-                        </td>
-                        <td className="px-2 py-1 text-[10px]">
-                          <div className="flex items-center gap-0.5 flex-wrap">
-                            {session.path.map((p, i) => {
-                              const colorIndex = i % CONNECTION_COLORS.length
-                              return (
-                                <span key={i} className="inline-flex items-center gap-0.5">
-                                  <span 
-                                    className="px-1 py-0.5 rounded text-[9px] font-medium text-white" 
-                                    style={{ backgroundColor: CONNECTION_COLORS[colorIndex] }}
-                                    title={p.nodeTitle}
-                                  >
-                                    {p.nodeTitle.length > 10 ? p.nodeTitle.slice(0, 10) + '...' : p.nodeTitle}
-                                  </span>
-                                  {i < session.path.length - 1 && <span className="text-muted-foreground text-[8px]">→</span>}
-                                </span>
-                              )
-                            })}
+                        <td className="px-3 py-2">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] text-foreground font-medium">{userDisplay}</span>
+                            <span className="text-[8px] text-muted-foreground font-mono">{session.userId.slice(0, 12)}...</span>
                           </div>
                         </td>
-                        <td className="px-2 py-1 text-[10px] text-foreground">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {session.responses.slice(0, 5).map((r, i) => {
+                        <td className="px-3 py-2">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] text-muted-foreground">
+                              {new Date(session.startedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </span>
+                            <span className="text-[9px] text-muted-foreground/70">
+                              {new Date(session.startedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] text-foreground font-medium">{formatDuration(session.duration)}</span>
+                            <span className="text-[9px] text-muted-foreground/70">{session.duration}s</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-0.5 flex-wrap">
+                              {session.path.slice(0, 3).map((p, i) => {
+                                const colorIndex = i % CONNECTION_COLORS.length
+                                return (
+                                  <span key={i} className="inline-flex items-center gap-0.5">
+                                    <span 
+                                      className="px-1.5 py-0.5 rounded text-[9px] font-medium text-white" 
+                                      style={{ backgroundColor: CONNECTION_COLORS[colorIndex] }}
+                                      title={p.nodeTitle}
+                                    >
+                                      {p.nodeTitle.length > 12 ? p.nodeTitle.slice(0, 12) + '...' : p.nodeTitle}
+                                    </span>
+                                    {i < Math.min(session.path.length, 3) - 1 && <span className="text-muted-foreground text-[8px]">→</span>}
+                                  </span>
+                                )
+                              })}
+                            </div>
+                            {session.path.length > 3 && (
+                              <span className="text-[8px] text-muted-foreground">+{session.path.length - 3} more</span>
+                            )}
+                            <span className="text-[8px] text-muted-foreground/70 font-mono">{session.path.length} nodes</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-col gap-1">
+                            {session.responses.slice(0, 3).map((r, i) => {
                               const answerValue = Array.isArray(r.answer)
                                 ? r.answer.join(', ')
                                 : typeof r.answer === 'object'
                                   ? JSON.stringify(r.answer)
                                   : String(r.answer)
-                              const truncatedAnswer = answerValue.length > 20 ? answerValue.slice(0, 20) + '...' : answerValue
-                              const truncatedNode = r.nodeTitle.length > 8 ? r.nodeTitle.slice(0, 8) + '...' : r.nodeTitle
+                              const truncatedAnswer = answerValue.length > 25 ? answerValue.slice(0, 25) + '...' : answerValue
                               return (
-                                <span key={i} className="text-[9px]">
-                                  <span className="font-medium text-muted-foreground">{truncatedNode}:</span>{' '}
+                                <div key={i} className="text-[9px]">
+                                  <span className="font-medium text-muted-foreground">{r.nodeTitle}:</span>{' '}
                                   <span className="text-foreground">{truncatedAnswer}</span>
-                                </span>
+                                </div>
                               )
                             })}
-                            {session.responses.length > 5 && (
-                              <span className="text-[9px] text-muted-foreground">+{session.responses.length - 5}</span>
+                            {session.responses.length > 3 && (
+                              <span className="text-[8px] text-muted-foreground">+{session.responses.length - 3} more</span>
                             )}
+                            <span className="text-[8px] text-muted-foreground/70">{session.responses.length} total</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-col gap-0.5 text-[8px] text-muted-foreground/70">
+                            <span>Session: {session.sessionId.slice(0, 8)}...</span>
+                            <span>Path: {session.path.map(p => p.nodeId.slice(0, 6)).join('→')}</span>
                           </div>
                         </td>
                       </tr>
