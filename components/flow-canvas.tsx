@@ -60,6 +60,7 @@ type FlowCanvasProps = {
   flow: Flow | null
   onUpdateFlow: (flow: Flow) => void
   onSaveToDatabase?: (flow: Flow) => Promise<void>
+  experienceId?: string | null
 }
 
 // Helper function to normalize pageComponents to array format (handles both old and new formats)
@@ -80,7 +81,7 @@ function normalizePageComponents(pageComponents: any): PageComponent[] {
   return []
 }
 
-export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase }: FlowCanvasProps) {
+export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId }: FlowCanvasProps) {
   const [viewMode, setViewMode] = useState<"create" | "analytics">("create")
   const router = useRouter()
   const { theme } = useTheme()
@@ -88,13 +89,46 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase }: FlowCanvasP
   const [lastSavedFlow, setLastSavedFlow] = useState<Flow | null>(flow || null)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [currentPlan, setCurrentPlan] = useState<"free" | "premium-monthly" | "premium-yearly">("free")
+  const [membershipActive, setMembershipActive] = useState(false)
+  const [maxFlows, setMaxFlows] = useState(1)
+  const [maxBlocksPerFlow, setMaxBlocksPerFlow] = useState(5)
+  const [companyId, setCompanyId] = useState<string | null>(null)
   
+  // Load membership status
   useEffect(() => {
-    const savedPlan = localStorage.getItem("currentPlan") as "free" | "premium-monthly" | "premium-yearly"
-    if (savedPlan) {
-      setCurrentPlan(savedPlan)
+    async function loadMembership() {
+      try {
+        // Get experienceId from URL or prop (it's the companyId in Whop)
+        let expId = experienceId
+        if (!expId) {
+          const pathParts = window.location.pathname.split('/')
+          expId = pathParts[pathParts.indexOf('experiences') + 1]
+        }
+        if (!expId) return
+        
+        setCompanyId(expId)
+        
+        // Get company ID
+        const companyIdResponse = await fetch(`/api/get-company-id?experienceId=${expId}`)
+        if (!companyIdResponse.ok) return
+        const { companyId: cId } = await companyIdResponse.json()
+        
+        // Check membership
+        const membershipResponse = await fetch(`/api/check-membership?companyId=${cId}`)
+        if (membershipResponse.ok) {
+          const { membershipActive: active, maxFlows: mFlows, maxBlocksPerFlow: mBlocks } = await membershipResponse.json()
+          setMembershipActive(active)
+          setMaxFlows(mFlows)
+          setMaxBlocksPerFlow(mBlocks)
+          // Update currentPlan based on membership
+          setCurrentPlan(active ? "premium-monthly" : "free")
+        }
+      } catch (error) {
+        console.error("Error loading membership:", error)
+      }
     }
-  }, [])
+    loadMembership()
+  }, [experienceId])
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 })
@@ -203,9 +237,20 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase }: FlowCanvasP
   // Initialize lastSavedFlow when flow loads
   useEffect(() => {
     if (flow && !lastSavedFlow) {
-      setLastSavedFlow(JSON.parse(JSON.stringify(flow))) // Deep copy
+      const flowWithCollapsed = {
+        ...flow,
+        collapsedComponents: (flow as any).collapsedComponents || collapsedComponents
+      }
+      setLastSavedFlow(JSON.parse(JSON.stringify(flowWithCollapsed))) // Deep copy
     }
-  }, [flow, lastSavedFlow])
+  }, [flow, lastSavedFlow, collapsedComponents])
+
+  // Initialize collapsedComponents from flow when it loads
+  useEffect(() => {
+    if (flow && (flow as any).collapsedComponents) {
+      setCollapsedComponents((flow as any).collapsedComponents)
+    }
+  }, [flow?.id])
 
   // Center flow when it first loads and zoom out to fit
   useEffect(() => {
@@ -303,9 +348,16 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase }: FlowCanvasP
   // Check if there are unsaved changes
   const hasUnsavedChanges = useMemo(() => {
     if (!flow || !lastSavedFlow) return false
-    // Deep compare flow objects
-    return JSON.stringify(flow) !== JSON.stringify(lastSavedFlow)
-  }, [flow, lastSavedFlow])
+    
+    // Compare flow objects
+    const flowChanged = JSON.stringify(flow) !== JSON.stringify(lastSavedFlow)
+    
+    // Compare collapsedComponents state
+    const lastSavedCollapsed = (lastSavedFlow as any).collapsedComponents || {}
+    const collapsedChanged = JSON.stringify(collapsedComponents) !== JSON.stringify(lastSavedCollapsed)
+    
+    return flowChanged || collapsedChanged
+  }, [flow, lastSavedFlow, collapsedComponents])
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -787,6 +839,14 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase }: FlowCanvasP
       clearTimeout(plusClickTimer)
       setPlusClickTimer(null)
       
+      if (!flow) return
+      
+      // Check flow limit (count all flows, not just nodes in current flow)
+      // For now, we'll check the total nodes + logic blocks in current flow
+      const totalBlocks = flow.nodes.length + (flow.logicBlocks?.length || 0)
+      // Note: We need to check total flows across all flows, but for now we'll check per-flow blocks
+      // The actual flow limit should be checked when creating new flows
+      
       const sourceNode = flow.nodes.find(n => n.id === nodeId)
       if (!sourceNode) return
       
@@ -830,6 +890,18 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase }: FlowCanvasP
     if (plusClickTimer) {
       clearTimeout(plusClickTimer)
       setPlusClickTimer(null)
+      
+      if (!flow) return
+      
+      // Check block limit
+      const totalBlocks = flow.nodes.length + (flow.logicBlocks?.length || 0)
+      if (totalBlocks >= maxBlocksPerFlow) {
+        toast.error(`You've reached the limit of ${maxBlocksPerFlow} blocks per flow. ${membershipActive ? '' : 'Upgrade to Premium for 30 blocks per flow.'}`)
+        if (!membershipActive) {
+          setShowUpgradeModal(true)
+        }
+        return
+      }
       
       const sourceBlock = logicBlocks.find(b => b.id === blockId)
       if (!sourceBlock) return
@@ -1158,6 +1230,16 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase }: FlowCanvasP
     if (!node) return
 
     const currentComponents = normalizePageComponents(node.pageComponents)
+    
+    // Check block limit per flow based on membership
+    const totalBlocksInFlow = flow.nodes.length + (flow.logicBlocks?.length || 0)
+    if (totalBlocksInFlow >= maxBlocksPerFlow) {
+      toast.error(`You've reached the limit of ${maxBlocksPerFlow} blocks per flow. ${membershipActive ? '' : 'Upgrade to Premium for 30 blocks per flow.'}`)
+      if (!membershipActive) {
+        setShowUpgradeModal(true)
+      }
+      return
+    }
     
     // Validation logic
     const videoCount = currentComponents.filter(c => c.type === "video-step").length
@@ -1790,8 +1872,13 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase }: FlowCanvasP
               onClick={async () => {
                 if (flow && hasUnsavedChanges && !isSaving) {
                   setIsSaving(true)
-                  setLastSavedFlow(JSON.parse(JSON.stringify(flow)))
-                  onSaveToDatabase(flow).catch((error) => {
+                  // Save collapsedComponents state with flow
+                  const flowToSave = {
+                    ...flow,
+                    collapsedComponents: collapsedComponents
+                  } as Flow & { collapsedComponents?: Record<string, boolean> }
+                  setLastSavedFlow(JSON.parse(JSON.stringify(flowToSave)))
+                  onSaveToDatabase(flowToSave as Flow).catch((error) => {
                     console.error('Error saving flow:', error)
                     setLastSavedFlow((prev) => prev ? JSON.parse(JSON.stringify(prev)) : null)
                   })
@@ -1843,25 +1930,26 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase }: FlowCanvasP
 
       <div className="flex flex-1 overflow-hidden">
         {/* Plan Limitation Progress Bar - Top Left (only show for premium plans) */}
-        {currentPlan !== "free" && (
+        {membershipActive && (
           <div className="absolute top-4 left-4 z-20 bg-card rounded-xl p-4 shadow-neumorphic-raised min-w-[200px]">
             <div className="text-xs font-semibold mb-3 text-muted-foreground">
-              {currentPlan === "premium-monthly" ? "Premium Monthly" : "Premium Yearly"}
+              Premium Plan
             </div>
             
             {/* Flow Progress */}
             <div className="mb-3">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-muted-foreground">Flow</span>
+                <span className="text-xs text-muted-foreground">Flows</span>
                 <span className="text-xs text-muted-foreground">
-                  {flow ? 1 : 0} / 3
+                  {/* TODO: Get total flows count from API */}
+                  1 / {maxFlows}
                 </span>
               </div>
               <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-blue-500 transition-all duration-300 rounded-full"
                   style={{ 
-                    width: `${Math.min(100, ((flow ? 1 : 0) / 3) * 100)}%` 
+                    width: `${Math.min(100, (1 / maxFlows) * 100)}%` 
                   }}
                 />
               </div>
@@ -1872,14 +1960,14 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase }: FlowCanvasP
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs text-muted-foreground">Blocks</span>
                 <span className="text-xs text-muted-foreground">
-                  {flow ? (flow.nodes.length + (flow.logicBlocks?.length || 0)) : 0} / 20
+                  {flow ? (flow.nodes.length + (flow.logicBlocks?.length || 0)) : 0} / {maxBlocksPerFlow}
                 </span>
               </div>
               <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-green-500 transition-all duration-300 rounded-full"
                   style={{ 
-                    width: `${Math.min(100, ((flow ? (flow.nodes.length + (flow.logicBlocks?.length || 0)) : 0) / 20) * 100)}%` 
+                    width: `${Math.min(100, ((flow ? (flow.nodes.length + (flow.logicBlocks?.length || 0)) : 0) / maxBlocksPerFlow) * 100)}%` 
                   }}
                 />
               </div>
@@ -3040,21 +3128,21 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase }: FlowCanvasP
         </div>
 
         {/* Logic block library - Dropdown (always visible, fixed position) */}
-        <div className="fixed z-40" style={{ top: '80px', bottom: '80px', right: '60px' }}>
+        <div className="fixed z-40" style={{ top: '80px', bottom: '80px', right: '40px' }}>
           <div className="relative h-full flex flex-col">
             {/* Dropdown button */}
             <button
               onClick={() => setIsLogicLibraryExpanded(!isLogicLibraryExpanded)}
-              className="w-[180px] h-8 bg-background/80 backdrop-blur-sm rounded-lg shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all border border-border/30 flex items-center justify-center gap-2 px-3 flex-shrink-0"
+              className="w-[210px] h-8 bg-background/80 backdrop-blur-sm rounded-lg shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all border border-border/30 flex items-center justify-center gap-2 px-3 flex-shrink-0"
               title={isLogicLibraryExpanded ? "Collapse Logic Blocks" : "Expand Logic Blocks"}
             >
-              <span className="text-xs font-medium text-muted-foreground">Logic Blocks</span>
-              <ChevronDown className={`w-3 h-3 transition-transform ${isLogicLibraryExpanded ? 'rotate-180' : ''}`} />
+              <span className="text-xs font-medium text-muted-foreground text-center flex-1">Logic Blocks</span>
+              <ChevronDown className={`w-3 h-3 transition-transform flex-shrink-0 ${isLogicLibraryExpanded ? 'rotate-180' : ''}`} />
             </button>
             
             {/* Dropdown content - aligned with button */}
             {isLogicLibraryExpanded && (
-              <div className="mt-2 w-[196px] bg-card rounded-lg pt-2 px-2 pb-2 shadow-lg flex flex-col" style={{ marginLeft: '0' }}>
+              <div className="mt-2 w-[226px] bg-card rounded-lg pt-2 px-2 pb-2 shadow-lg flex flex-col" style={{ marginLeft: '0' }}>
                 <LogicBlockLibrary onDragStart={handleLogicDragStart} />
               </div>
             )}
@@ -3892,8 +3980,8 @@ function PreviewModal({
           </button>
         )}
         
-        <div className="w-full max-w-6xl mx-auto px-6 flex flex-col items-center justify-center min-h-full" style={{ paddingTop: '80px', paddingBottom: '80px' }}>
-          <div className="w-full space-y-6" style={{ transform: 'scale(1.25)', maxWidth: '840px' }}>
+          <div className="w-full max-w-6xl mx-auto px-6 flex flex-col items-center justify-center min-h-full" style={{ paddingTop: '80px', paddingBottom: '80px' }}>
+          <div className="w-full flex flex-col" style={{ transform: 'scale(1.25)', maxWidth: '840px', gap: '2px' }}>
             {/* Display ALL components in order */}
             {allComponents.map((component, index) => {
               const isQuestion = ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(component.type)
@@ -4047,27 +4135,29 @@ function InteractiveQuestionComponent({
 
     case "scale-slider":
       return (
-        <div className="px-2">
-          <input
-            type="range"
-            min={config.min ?? 1}
-            max={config.max ?? 100}
-            value={
-              value ??
-              config.default ??
-              Math.round(((config.min ?? 1) + (config.max ?? 100)) / 2)
-            }
-            onChange={(e) => onChange(parseInt(e.target.value))}
-            className="w-full"
-          />
-          <div className="flex justify-between text-xs text-muted-foreground mt-2">
-            <span>{config.minLabel || String(config.min ?? 1)}</span>
-            <span className="font-medium">
-              {value ??
+        <div>
+          {config.label && config.label.trim().length > 0 && (
+            <label className="block text-xs font-medium mb-2">
+              {config.label}
+            </label>
+          )}
+          <div className="px-2">
+            <input
+              type="range"
+              min={config.min ?? 1}
+              max={config.max ?? 100}
+              value={
+                value ??
                 config.default ??
-                Math.round(((config.min ?? 1) + (config.max ?? 100)) / 2)}
-            </span>
-            <span>{config.maxLabel || String(config.max ?? 100)}</span>
+                Math.round(((config.min ?? 1) + (config.max ?? 100)) / 2)
+              }
+              onChange={(e) => onChange(parseInt(e.target.value))}
+              className="w-full"
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
+              <span>{config.min ?? 1}</span>
+              <span>{config.max ?? 100}</span>
+            </div>
           </div>
         </div>
       )

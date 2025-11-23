@@ -1,11 +1,13 @@
 "use client"
 
+import { useState } from "react"
 import { X } from "lucide-react"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Check } from "lucide-react"
 import { toast } from "sonner"
+import { useIframeSdk } from "@whop/react"
+import { useParams } from "next/navigation"
 
 type PlanType = "free" | "premium-monthly" | "premium-yearly"
 
@@ -17,14 +19,11 @@ const pricingPlans = [
     monthlyPrice: 0,
     yearlyPrice: 0,
     flows: 1,
-    blocks: 20,
+    blocks: 5,
     features: [
-      "1 onboarding flow",
-      "Up to 20 blocks per flow",
-      "File uploads (images & videos)",
-      "Unique onboarding blocks",
-      "Basic components",
-      "Community support"
+      "1 flow",
+      "5 blocks per flow",
+      "No analytics"
     ],
     popular: false,
   },
@@ -32,19 +31,16 @@ const pricingPlans = [
     id: "premium-monthly" as PlanType,
     name: "Premium",
     description: "Ideal for growing teams and businesses",
-    monthlyPrice: 29,
-    yearlyPrice: 278.40,
+    monthlyPrice: 30,
+    yearlyPrice: 280,
     flows: 3,
-    blocks: 20,
+    blocks: 30,
     features: [
-      "3 flows per shop/community",
-      "Up to 20 blocks per flow",
-      "All premium components",
-      "Advanced logic blocks",
-      "A/B testing capabilities",
-      "Priority support",
-      "Analytics & insights",
-      "Custom branding"
+      "3 flows per whop",
+      "30 blocks per flow",
+      "Advanced analytics",
+      "Export data",
+      "Priority support"
     ],
     popular: false,
   },
@@ -52,22 +48,19 @@ const pricingPlans = [
     id: "premium-yearly" as PlanType,
     name: "Premium",
     description: "Best value for long-term growth",
-    monthlyPrice: 29,
-    yearlyPrice: 278.40,
+    monthlyPrice: 30,
+    yearlyPrice: 280, // $30 * 12 * 0.78 = $280 (approximately 22% savings)
     flows: 3,
-    blocks: 20,
+    blocks: 30,
     features: [
-      "3 flows per shop/community",
-      "Up to 20 blocks per flow",
-      "All premium components",
-      "Advanced logic blocks",
-      "A/B testing capabilities",
+      "3 flows per whop",
+      "30 blocks per flow",
+      "Advanced analytics",
+      "Export data",
       "Priority support",
-      "Analytics & insights",
-      "Custom branding",
-      "Save 20% vs monthly"
+      "Save 22%"
     ],
-    popular: true,
+    popular: false,
   },
 ]
 
@@ -77,17 +70,128 @@ type UpgradeModalProps = {
 }
 
 export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProps) {
-  const handleBuy = (planId: PlanType) => {
-    console.log(`Buying plan: ${planId}`)
-    const plan = pricingPlans.find(p => p.id === planId)
-    const planName = plan?.name || "Premium"
-    toast.success(`Upgrading to ${planName} plan...`)
-    
-    localStorage.setItem("currentPlan", planId)
-    
-    setTimeout(() => {
-      onClose()
-    }, 1500)
+  const iframeSdk = useIframeSdk()
+  const params = useParams()
+  const experienceId = params?.experienceId as string
+  const [isProcessing, setIsProcessing] = useState(false)
+
+  const handleBuy = async (planId: PlanType) => {
+    if (planId === "free") {
+      toast.info("You're already on the free plan")
+      return
+    }
+
+    if (!iframeSdk) {
+      toast.error("Payment system not available. Please try again later.")
+      return
+    }
+
+    setIsProcessing(true)
+
+    try {
+      // Get company ID
+      const companyIdResponse = await fetch(`/api/get-company-id?experienceId=${experienceId}`)
+      if (!companyIdResponse.ok) {
+        throw new Error("Failed to get company ID")
+      }
+      const { companyId } = await companyIdResponse.json()
+
+      // Create checkout configuration
+      const checkoutResponse = await fetch("/api/create-checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          planType: planId,
+          companyId: companyId,
+          experienceId: experienceId, // Also pass experienceId as fallback
+        }),
+      })
+
+      if (!checkoutResponse.ok) {
+        // Get response text first to see what we're dealing with
+        const responseText = await checkoutResponse.text()
+        console.error("Checkout error - Status:", checkoutResponse.status)
+        console.error("Checkout error - Response:", responseText)
+        
+        let errorData: any = null
+        try {
+          // Try to parse the response text
+          // Handle case where responseText might be a stringified JSON string
+          const textToParse = responseText.startsWith('"') && responseText.endsWith('"') 
+            ? JSON.parse(responseText) 
+            : responseText
+          errorData = typeof textToParse === 'string' ? JSON.parse(textToParse) : textToParse
+        } catch (e) {
+          // If not JSON, use the text as error message
+          console.error("Failed to parse error response:", e)
+          throw new Error(responseText || `HTTP ${checkoutResponse.status}: Failed to create checkout`)
+        }
+        
+        console.error("Checkout error - Parsed:", errorData)
+        
+        // Extract error message from nested error object if present
+        let errorMessage = "Failed to create checkout"
+        if (errorData) {
+          if (errorData.error) {
+            if (typeof errorData.error === 'string') {
+              errorMessage = errorData.error
+            } else if (errorData.error.message) {
+              errorMessage = errorData.error.message
+            } else if (errorData.error.type) {
+              errorMessage = `${errorData.error.type}: ${errorData.error.message || 'Unknown error'}`
+            }
+          } else if (errorData.details) {
+            errorMessage = errorData.details
+          } else if (errorData.message) {
+            errorMessage = errorData.message
+          } else if (typeof errorData === 'string') {
+            errorMessage = errorData
+          }
+        }
+        
+        if (responseText && errorMessage === "Failed to create checkout") {
+          errorMessage = responseText
+        }
+        
+        throw new Error(errorMessage)
+      }
+
+      const responseData = await checkoutResponse.json()
+      const { checkoutId, planId: whopPlanId } = responseData
+      
+      if (!checkoutId || !whopPlanId) {
+        console.error("Invalid checkout response:", responseData)
+        throw new Error("Invalid checkout response: missing checkoutId or planId")
+      }
+
+      console.log("Opening payment modal with:", { checkoutId, planId: whopPlanId })
+
+      // Open payment modal using Whop iframe SDK
+      const res = await iframeSdk.inAppPurchase({
+        planId: whopPlanId,
+        id: checkoutId,
+      })
+
+      console.log("Payment modal response:", res)
+
+      if (res.status === "ok") {
+        toast.success("Payment successful! Your membership has been activated.")
+        // Refresh the page to update membership status
+        setTimeout(() => {
+          window.location.reload()
+        }, 1500)
+      } else {
+        console.error("Payment failed:", res)
+        toast.error(res.message || "Payment was cancelled or failed")
+        setIsProcessing(false)
+      }
+    } catch (error) {
+      console.error("Error processing payment:", error)
+      toast.error("Failed to process payment. Please try again.")
+      setIsProcessing(false)
+    }
   }
 
   // Show all 3 plans
@@ -139,16 +243,9 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
               return (
                 <Card
                   key={plan.id}
-                  className={`relative flex flex-col h-[600px] ${
-                    plan.popular ? "border-primary shadow-lg scale-105" : ""
-                  }`}
+                  className="relative flex flex-col h-[600px]"
                   role="listitem"
                 >
-                  {plan.popular && (
-                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2" aria-label="Most popular plan">
-                      Most Popular
-                    </Badge>
-                  )}
 
                   <CardHeader className="text-center pb-8">
                     <CardTitle className="text-2xl font-bold">
@@ -169,6 +266,9 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
                       {period === "per year" && (
                         <div className="text-sm text-muted-foreground mt-1">
                           ${Math.round(plan.yearlyPrice / 12)}/month billed annually
+                          <div className="text-primary font-medium mt-1">
+                            Save 22% vs monthly
+                          </div>
                         </div>
                       )}
                     </div>
@@ -197,17 +297,14 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
 
                   <CardFooter>
                     <Button
-                      className={`w-full ${
-                        !plan.popular
-                          ? "dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700 dark:hover:bg-gray-700 dark:hover:border-gray-600"
-                          : ""
-                      }`}
-                      variant={plan.popular ? "default" : "outline"}
+                      className="w-full"
+                      variant="default"
                       size="lg"
                       onClick={() => handleBuy(plan.id)}
+                      disabled={isProcessing || plan.id === "free"}
                       aria-label={`Get started with ${plan.name} plan for $${price} per ${period}`}
                     >
-                      Get Started
+                      {isProcessing ? "Processing..." : plan.id === "free" ? "Current Plan" : "Get Started"}
                     </Button>
                   </CardFooter>
                 </Card>

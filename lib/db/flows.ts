@@ -25,6 +25,7 @@ function generateFlowId(): string {
 export interface FlowData {
   nodes: FlowNode[]
   logicBlocks?: LogicBlock[]
+  collapsedComponents?: Record<string, boolean>
 }
 
 export interface FlowRecord {
@@ -57,7 +58,8 @@ export async function saveFlow(flow: Flow): Promise<FlowRecord | null> {
 
   const flowData: FlowData = {
     nodes: flow.nodes,
-    logicBlocks: flow.logicBlocks || []
+    logicBlocks: flow.logicBlocks || [],
+    collapsedComponents: (flow as any).collapsedComponents || {}
   }
 
   // Ensure flow has a unique UUID
@@ -97,7 +99,8 @@ export async function saveFlow(flow: Flow): Promise<FlowRecord | null> {
         try {
           const flowData: FlowData = {
             nodes: flow.nodes,
-            logicBlocks: flow.logicBlocks || []
+            logicBlocks: flow.logicBlocks || [],
+            collapsedComponents: (flow as any).collapsedComponents || {}
           }
           const flowId = flow.id || generateFlowId()
 
@@ -142,8 +145,9 @@ export async function loadFlow(flowId: string): Promise<Flow | null> {
       dateCreated: new Date(flowRecord.created_at).toISOString().split('T')[0],
       status: flowRecord.active ? 'Live' : 'Draft',
       nodes: flowRecord.flow_data.nodes || [],
-      logicBlocks: flowRecord.flow_data.logicBlocks || []
-    }
+      logicBlocks: flowRecord.flow_data.logicBlocks || [],
+      collapsedComponents: flowRecord.flow_data.collapsedComponents || {}
+    } as Flow & { collapsedComponents?: Record<string, boolean> }
   }
 
   try {
@@ -174,8 +178,9 @@ export async function loadFlow(flowId: string): Promise<Flow | null> {
       dateCreated: new Date(flowRecord.created_at).toISOString().split('T')[0],
       status: flowRecord.active ? 'Live' : 'Draft',
       nodes: flowRecord.flow_data.nodes || [],
-      logicBlocks: flowRecord.flow_data.logicBlocks || []
-    }
+      logicBlocks: flowRecord.flow_data.logicBlocks || [],
+      collapsedComponents: flowRecord.flow_data.collapsedComponents || {}
+    } as Flow & { collapsedComponents?: Record<string, boolean> }
   } catch (error) {
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
       console.error('Network error: Failed to connect to Supabase while loading flow')

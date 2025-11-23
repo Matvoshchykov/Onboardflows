@@ -665,7 +665,7 @@ export default function OnboardingFlowView() {
       )}
       
       <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 flex flex-col items-center justify-center min-h-full">
-        <div className="w-full flex flex-col" style={{ maxWidth: '840px', gap: '10px' }}>
+        <div className="w-full flex flex-col" style={{ maxWidth: '840px', gap: '2px' }}>
           {/* Display ALL components in order */}
           {allComponents.map((component, index) => {
             const isQuestion = ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(component.type)
@@ -721,7 +721,9 @@ function InteractiveQuestionComponent({
     case "multiple-choice":
       return (
         <div>
-          <h3 className="text-sm font-medium mb-4">{config.title || "Select your answer"}</h3>
+          {config.title && config.title.trim().length > 0 && (
+            <h3 className="text-sm font-medium mb-4">{config.title}</h3>
+          )}
           <div className="space-y-2">
             {(config.options || ["Option A", "Option B", "Option C"]).map((option: string, idx: number) => (
               <button
@@ -747,7 +749,9 @@ function InteractiveQuestionComponent({
       const selectedValues = Array.isArray(value) ? value : []
       return (
         <div>
-          <h3 className="text-sm font-medium mb-4">{config.title || "Select all that apply"}</h3>
+          {config.title && config.title.trim().length > 0 && (
+            <h3 className="text-sm font-medium mb-4">{config.title}</h3>
+          )}
           <div className="space-y-2">
             {(config.options || ["Interest A", "Interest B", "Interest C"]).map((option: string, idx: number) => {
               const isSelected = selectedValues.includes(option)
@@ -781,9 +785,11 @@ function InteractiveQuestionComponent({
     case "short-answer":
       return (
         <div>
-          <label className="block text-xs font-medium mb-2">
-            {config.label || "What is your name?"}
-          </label>
+          {config.label && config.label.trim().length > 0 && (
+            <label className="block text-xs font-medium mb-2">
+              {config.label}
+            </label>
+          )}
           <input
             type="text"
             value={value || ""}
@@ -806,19 +812,25 @@ function InteractiveQuestionComponent({
 
     case "scale-slider":
       return (
-        <div className="px-2">
-          <input
-            type="range"
-            min={config.min || 1}
-            max={config.max || 10}
-            value={value || config.default || 5}
-            onChange={(e) => onChange(parseInt(e.target.value))}
-            className="w-full"
-          />
-          <div className="flex justify-between text-xs text-muted-foreground mt-2">
-            <span>{config.minLabel || "Beginner"}</span>
-            <span className="font-medium">{value || config.default || 5}</span>
-            <span>{config.maxLabel || "Expert"}</span>
+        <div>
+          {config.label && config.label.trim().length > 0 && (
+            <label className="block text-sm font-medium mb-2">
+              {config.label}
+            </label>
+          )}
+          <div className="px-2">
+            <input
+              type="range"
+              min={config.min || 1}
+              max={config.max || 10}
+              value={value || config.default || 5}
+              onChange={(e) => onChange(parseInt(e.target.value))}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-muted-foreground mt-2">
+              <span>{config.min || 1}</span>
+              <span>{config.max || 10}</span>
+            </div>
           </div>
         </div>
       )

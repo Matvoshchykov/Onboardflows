@@ -181,6 +181,7 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
               toast.error('Failed to save flow to database')
             })
           }}
+          experienceId={null} // Will be determined from URL in FlowCanvas
         />
       </div>
 
@@ -189,6 +190,29 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
           onClose={() => setShowChatModal(false)}
           onCreateFlow={async (name: string) => {
             try {
+              // Check flow limit before creating
+              // Get experienceId from URL
+              const pathParts = window.location.pathname.split('/')
+              const expId = pathParts[pathParts.indexOf('experiences') + 1]
+              
+              if (expId) {
+                // Get company ID and check membership
+                const companyIdResponse = await fetch(`/api/get-company-id?experienceId=${expId}`)
+                if (companyIdResponse.ok) {
+                  const { companyId } = await companyIdResponse.json()
+                  const membershipResponse = await fetch(`/api/check-membership?companyId=${companyId}`)
+                  if (membershipResponse.ok) {
+                    const { maxFlows: mFlows } = await membershipResponse.json()
+                    // Check if user has reached flow limit
+                    if (flows.length >= mFlows) {
+                      toast.error(`You've reached the limit of ${mFlows} flow${mFlows > 1 ? 's' : ''}. Upgrade to Premium for 3 flows.`)
+                      setShowChatModal(false)
+                      return
+                    }
+                  }
+                }
+              }
+              
               const newFlow = await createFlow(name)
               if (newFlow) {
                 setFlows([...flows, newFlow])
