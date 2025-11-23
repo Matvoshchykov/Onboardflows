@@ -520,9 +520,9 @@ export function ComponentRenderer({
             )}
           </label>
           <div
-            className={`rounded-xl p-6 text-center transition-colors border-2 border-white ${
+            className={`rounded-xl p-6 text-center transition-colors ${
               onUpdateComponent ? 'cursor-pointer' : ''
-            } ${uploading ? 'opacity-50' : ''} bg-[hsl(220,9%,10%)]`}
+            } ${uploading ? 'opacity-50' : ''} bg-card shadow-neumorphic-subtle`}
             onDrop={onUpdateComponent ? handleFileDrop : undefined}
             onDragOver={onUpdateComponent ? (e) => e.preventDefault() : undefined}
             onClick={onUpdateComponent ? () => fileInputRef.current?.click() : undefined}
@@ -743,6 +743,28 @@ export function ComponentRenderer({
       // This ensures state is properly synced, especially on mobile
       const videoSource = videoPreview || getVideoSource()
       
+      // Debug logging for video source resolution
+      if (!onUpdateComponent && videoSource) {
+        console.log('[Video Debug] Video source resolved', {
+          videoSource,
+          videoPreview,
+          getVideoSourceResult: getVideoSource(),
+          isMobile,
+          componentId: component.id,
+          isValidUrl: isValidStorageUrl(videoSource),
+          isVideo: isVideoUrl(videoSource)
+        })
+      } else if (!onUpdateComponent && !videoSource) {
+        console.error('[Video Debug] No video source available', {
+          videoPreview,
+          getVideoSourceResult: getVideoSource(),
+          configVideoUrl: config.videoUrl,
+          configVideoOriginal: config.videoOriginal,
+          isMobile,
+          componentId: component.id
+        })
+      }
+      
       const handleVideoDrop = async (e: React.DragEvent) => {
         e.preventDefault()
         if (!onUpdateComponent) return
@@ -811,12 +833,22 @@ export function ComponentRenderer({
       
       // Load video preview from config on mount - only use storage URLs, filter out data URLs
       useEffect(() => {
+        console.log('[Video Debug] useEffect triggered', {
+          onUpdateComponent,
+          isMobile,
+          videoUrl: config.videoUrl,
+          videoOriginal: config.videoOriginal,
+          componentId: component.id
+        })
+        
         if (onUpdateComponent) {
           // Component editor: show thumbnail (can be image)
           const url = config.videoUrl || null
           if (isValidStorageUrl(url)) {
+            console.log('[Video Debug] Editor mode: Setting thumbnail URL', url)
             setVideoPreview(url)
           } else {
+            console.warn('[Video Debug] Editor mode: Invalid thumbnail URL', url)
             setVideoPreview(null)
           }
         } else {
@@ -824,12 +856,31 @@ export function ComponentRenderer({
           const original = config.videoOriginal || null
           const url = config.videoUrl || null
           
+          console.log('[Video Debug] Preview/Onboarding mode: Checking video sources', {
+            original,
+            originalIsValid: isValidStorageUrl(original),
+            originalIsVideo: original ? isVideoUrl(original) : false,
+            url,
+            urlIsValid: isValidStorageUrl(url),
+            urlIsVideo: url ? isVideoUrl(url) : false
+          })
+          
           // Only use valid video URLs, never image thumbnails
           if (isValidStorageUrl(original) && isVideoUrl(original)) {
+            console.log('[Video Debug] Using videoOriginal:', original)
             setVideoPreview(original)
           } else if (isValidStorageUrl(url) && isVideoUrl(url)) {
+            console.log('[Video Debug] Using videoUrl:', url)
             setVideoPreview(url)
           } else {
+            console.error('[Video Debug] No valid video source found', {
+              original,
+              url,
+              originalValid: isValidStorageUrl(original),
+              originalVideo: original ? isVideoUrl(original) : false,
+              urlValid: isValidStorageUrl(url),
+              urlVideo: url ? isVideoUrl(url) : false
+            })
             setVideoPreview(null)
           }
         }
@@ -898,18 +949,79 @@ export function ComponentRenderer({
                   onLoadedMetadata={(e) => {
                     // Force video metadata load on mobile
                     const video = e.currentTarget
-                    console.log('Video metadata loaded, readyState:', video.readyState, 'src:', video.src)
+                    console.log('[Video Debug] onLoadedMetadata', {
+                      readyState: video.readyState,
+                      networkState: video.networkState,
+                      src: video.src,
+                      currentSrc: video.currentSrc,
+                      duration: video.duration,
+                      videoWidth: video.videoWidth,
+                      videoHeight: video.videoHeight,
+                      isMobile,
+                      componentId: component.id
+                    })
                     if (isMobile) {
+                      console.log('[Video Debug] Mobile detected - forcing video reload')
                       // On mobile, ensure video is ready to play
                       video.load()
                     }
                   }}
                   onLoadedData={(e) => {
                     const video = e.currentTarget
-                    console.log('Video data loaded, readyState:', video.readyState)
+                    console.log('[Video Debug] onLoadedData', {
+                      readyState: video.readyState,
+                      networkState: video.networkState,
+                      src: video.src,
+                      currentSrc: video.currentSrc,
+                      duration: video.duration,
+                      isMobile,
+                      componentId: component.id
+                    })
                   }}
                   onCanPlay={(e) => {
-                    console.log('Video can play, src:', e.currentTarget.src)
+                    const video = e.currentTarget
+                    console.log('[Video Debug] onCanPlay', {
+                      readyState: video.readyState,
+                      networkState: video.networkState,
+                      src: video.src,
+                      currentSrc: video.currentSrc,
+                      duration: video.duration,
+                      isMobile,
+                      componentId: component.id
+                    })
+                  }}
+                  onPlay={(e) => {
+                    const video = e.currentTarget
+                    console.log('[Video Debug] onPlay', {
+                      src: video.src,
+                      currentTime: video.currentTime,
+                      duration: video.duration,
+                      isMobile,
+                      componentId: component.id
+                    })
+                  }}
+                  onWaiting={(e) => {
+                    const video = e.currentTarget
+                    console.warn('[Video Debug] onWaiting (buffering)', {
+                      src: video.src,
+                      currentTime: video.currentTime,
+                      buffered: video.buffered.length > 0 ? {
+                        start: video.buffered.start(0),
+                        end: video.buffered.end(0)
+                      } : null,
+                      isMobile,
+                      componentId: component.id
+                    })
+                  }}
+                  onStalled={(e) => {
+                    const video = e.currentTarget
+                    console.error('[Video Debug] onStalled (network issue)', {
+                      src: video.src,
+                      networkState: video.networkState,
+                      readyState: video.readyState,
+                      isMobile,
+                      componentId: component.id
+                    })
                   }}
                   onTimeUpdate={(e) => {
                     const video = e.currentTarget
@@ -932,15 +1044,44 @@ export function ComponentRenderer({
                   }}
                   onError={(e) => {
                     const video = e.currentTarget
-                    console.error('Video load error - source:', videoSource || videoPreview)
-                    console.error('Video error details:', {
-                      error: video.error?.code,
+                    const errorDetails = {
+                      errorCode: video.error?.code,
                       errorMessage: video.error?.message,
                       networkState: video.networkState,
                       readyState: video.readyState,
                       src: video.src,
-                      currentSrc: video.currentSrc
-                    })
+                      currentSrc: video.currentSrc,
+                      videoSource,
+                      videoPreview,
+                      configVideoUrl: config.videoUrl,
+                      configVideoOriginal: config.videoOriginal,
+                      isMobile,
+                      isPreviewMode,
+                      componentId: component.id,
+                      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
+                    }
+                    
+                    console.error('[Video Debug] onError - Video failed to load', errorDetails)
+                    
+                    // Log specific error codes
+                    if (video.error) {
+                      switch (video.error.code) {
+                        case 1: // MEDIA_ERR_ABORTED
+                          console.error('[Video Debug] Error: Media aborted by user')
+                          break
+                        case 2: // MEDIA_ERR_NETWORK
+                          console.error('[Video Debug] Error: Network error while loading video')
+                          break
+                        case 3: // MEDIA_ERR_DECODE
+                          console.error('[Video Debug] Error: Video decoding failed (codec issue)')
+                          break
+                        case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
+                          console.error('[Video Debug] Error: Video source not supported (format/codec)')
+                          break
+                        default:
+                          console.error('[Video Debug] Error: Unknown error code', video.error.code)
+                      }
+                    }
                     
                     // Try fallback storage URLs (never data URLs, and must be video files)
                     const fallbackOriginal = config.videoOriginal || null
@@ -1017,7 +1158,6 @@ export function ComponentRenderer({
         right: "text-right"
       }
       
-      // Only show title if it exists and is not empty
       const hasTitle = config.title && config.title.trim().length > 0
       
       return (
@@ -1036,7 +1176,7 @@ export function ComponentRenderer({
               )}
             </h3>
           )}
-          <p className={`text-xs text-muted-foreground leading-relaxed ${alignmentClasses[alignment as keyof typeof alignmentClasses]} ${!hasTitle ? '' : ''}`}>
+          <p className={`text-xs text-muted-foreground leading-relaxed ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}>
             {onUpdateComponent ? (
               <EditableText
                 value={config.text || "This is a text instruction block. Use it for guidance, onboarding steps, expectations, disclaimers, etc."}
@@ -1349,25 +1489,42 @@ export function ComponentRenderer({
       const isValidUrl = linkUrl && linkUrl !== "#" && (linkUrl.startsWith('http://') || linkUrl.startsWith('https://'))
       
       return (
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center w-full">
           {onUpdateComponent && (
-            <div className="w-full mb-2">
-              <input
-                type="url"
-                value={config.url || ""}
-                onChange={(e) => updateConfig({ url: e.target.value })}
-                placeholder="https://example.com"
-                className="w-full bg-card border-none rounded-xl px-3 py-2 text-xs shadow-neumorphic-inset focus:outline-none"
-              />
-            </div>
+            <>
+              <div className="w-full mb-3">
+                <textarea
+                  value={config.description || ""}
+                  onChange={(e) => updateConfig({ description: e.target.value })}
+                  placeholder="Add information about this button..."
+                  className="w-full bg-card border-none rounded-xl px-3 py-2 text-xs shadow-neumorphic-inset focus:outline-none min-h-[60px] resize-none"
+                />
+              </div>
+              <div className="w-full mb-2">
+                <input
+                  type="url"
+                  value={config.url || ""}
+                  onChange={(e) => updateConfig({ url: e.target.value })}
+                  placeholder="https://example.com"
+                  className="w-full bg-card border-none rounded-xl px-3 py-2 text-xs shadow-neumorphic-inset focus:outline-none"
+                />
+              </div>
+            </>
           )}
           {isValidUrl ? (
             <a
               href={linkUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-block px-4 py-2 rounded-xl bg-primary text-primary-foreground shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-xs font-medium cursor-pointer"
+              className={`inline-block px-4 py-2 rounded-xl bg-primary text-primary-foreground shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-xs font-medium ${
+                onUpdateComponent ? 'pointer-events-none cursor-default' : 'cursor-pointer'
+              }`}
               onClick={(e) => {
+                // Prevent clicking in editor mode
+                if (onUpdateComponent) {
+                  e.preventDefault()
+                  return
+                }
                 // Ensure navigation happens on mobile
                 if (linkUrl && linkUrl !== "#") {
                   e.preventDefault()
@@ -1389,7 +1546,9 @@ export function ComponentRenderer({
           ) : (
             <button
               disabled={!isValidUrl}
-              className="inline-block px-4 py-2 rounded-xl bg-primary text-primary-foreground shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className={`inline-block px-4 py-2 rounded-xl bg-primary text-primary-foreground shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
+                onUpdateComponent ? 'pointer-events-none cursor-default' : ''
+              }`}
             >
               {onUpdateComponent ? (
                 <EditableText
@@ -1402,6 +1561,11 @@ export function ComponentRenderer({
                 config.label || "Click here"
               )}
             </button>
+          )}
+          {!onUpdateComponent && config.description && (
+            <p className="text-xs text-muted-foreground mt-2 text-center max-w-md">
+              {config.description}
+            </p>
           )}
         </div>
       )
@@ -1553,7 +1717,25 @@ export function ComponentRenderer({
       )
     }
 
-    case "scale-slider":
+    case "scale-slider": {
+      const minValue = config.min ?? 1
+      const maxValue = config.max ?? 100
+      const defaultValue = config.default ?? Math.round((minValue + maxValue) / 2)
+      const [sliderValue, setSliderValue] = useState(defaultValue)
+      
+      // Update slider value when min/max changes
+      useEffect(() => {
+        const newDefault = Math.round((minValue + maxValue) / 2)
+        if (sliderValue < minValue) {
+          setSliderValue(minValue)
+        } else if (sliderValue > maxValue) {
+          setSliderValue(maxValue)
+        } else if (config.default === undefined) {
+          setSliderValue(newDefault)
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [minValue, maxValue])
+      
       return (
         <div>
           <label className="block text-xs font-medium mb-3">
@@ -1568,46 +1750,84 @@ export function ComponentRenderer({
               config.label || "Rate your experience level"
             )}
           </label>
+          {onUpdateComponent && (
+            <div className="mb-3 flex gap-2 items-center">
+              <div className="flex-1">
+                <label className="block text-[10px] text-muted-foreground mb-1">Min</label>
+                <input
+                  type="number"
+                  value={minValue}
+                  onChange={(e) => {
+                    const newMin = parseInt(e.target.value) || 1
+                    updateConfig({ min: newMin })
+                    // Update slider value if it's out of new range
+                    if (sliderValue < newMin) {
+                      setSliderValue(newMin)
+                    }
+                  }}
+                  className="w-full bg-card border-none rounded-lg px-2 py-1 text-xs shadow-neumorphic-inset focus:outline-none"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-[10px] text-muted-foreground mb-1">Max</label>
+                <input
+                  type="number"
+                  value={maxValue}
+                  onChange={(e) => {
+                    const newMax = parseInt(e.target.value) || 100
+                    updateConfig({ max: newMax })
+                    // Update slider value if it's out of new range
+                    if (sliderValue > newMax) {
+                      setSliderValue(newMax)
+                    }
+                  }}
+                  className="w-full bg-card border-none rounded-lg px-2 py-1 text-xs shadow-neumorphic-inset focus:outline-none"
+                />
+              </div>
+            </div>
+          )}
           <div className="px-2">
             <input
               type="range"
-              min={config.min ?? 1}
-              max={config.max ?? 100}
-              defaultValue={
-                config.default ??
-                Math.round(((config.min ?? 1) + (config.max ?? 100)) / 2)
-              }
+              min={minValue}
+              max={maxValue}
+              value={sliderValue}
+              onChange={(e) => setSliderValue(parseInt(e.target.value))}
               className="w-full"
             />
             <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
               <span>
                 {onUpdateComponent ? (
                   <EditableText
-                    value={config.minLabel || String(config.min ?? 1)}
+                    value={config.minLabel || String(minValue)}
                     onChange={(value) => updateConfig({ minLabel: value })}
                     className="text-[10px] text-muted-foreground"
-                    placeholder={String(config.min ?? 1)}
+                    placeholder={String(minValue)}
                   />
                 ) : (
-                  config.minLabel || String(config.min ?? 1)
+                  config.minLabel || String(minValue)
                 )}
+              </span>
+              <span className="text-xs font-medium text-foreground">
+                {sliderValue}
               </span>
               <span>
                 {onUpdateComponent ? (
                   <EditableText
-                    value={config.maxLabel || String(config.max ?? 100)}
+                    value={config.maxLabel || String(maxValue)}
                     onChange={(value) => updateConfig({ maxLabel: value })}
                     className="text-[10px] text-muted-foreground"
-                    placeholder={String(config.max ?? 100)}
+                    placeholder={String(maxValue)}
                   />
                 ) : (
-                  config.maxLabel || String(config.max ?? 100)
+                  config.maxLabel || String(maxValue)
                 )}
               </span>
             </div>
           </div>
         </div>
       )
+    }
 
         default:
       return <div>Unknown component</div>

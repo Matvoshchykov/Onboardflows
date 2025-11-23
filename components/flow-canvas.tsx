@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect, memo } from "react"
 import { clearFlowCache } from "@/lib/db/flows"
-import { FileText, Plus, Upload, X, Play, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ArrowUpDown, Eye, Trash2, Check, Crown, Minus } from 'lucide-react'
+import { FileText, Plus, Upload, X, Play, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ArrowUpDown, Eye, Trash2, Check, Minus } from 'lucide-react'
 import { toast } from "sonner"
 import { toggleFlowActive } from "@/lib/db/flows"
 import { useTheme } from "./theme-provider"
@@ -20,7 +20,6 @@ import { deleteComponentFiles } from "@/lib/utils"
 import { deleteNodeResponses } from "@/lib/db/responses"
 import { deleteNodePaths } from "@/lib/db/paths"
 import { useRouter } from "next/navigation"
-import { PlanSelectionModal } from "./plan-selection-modal"
 import { UploadFlowModal } from "./upload-flow-modal"
 
 type PortPoint = { x: number; y: number }
@@ -101,8 +100,6 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
   const [selectedLogicId, setSelectedLogicId] = useState<string | null>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
   const hasCenteredFlowRef = useRef<string | null>(null)
-  const rafRef = useRef<number | null>(null)
-  const lastUpdateTime = useRef<number>(0)
   const [plusClickTimer, setPlusClickTimer] = useState<number | null>(null)
   const [connectingPortIndex, setConnectingPortIndex] = useState<number | undefined>(undefined)
   const [connectionLineStart, setConnectionLineStart] = useState<{ x: number; y: number } | null>(null)
@@ -127,10 +124,8 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
   const [showLogicLibrary, setShowLogicLibrary] = useState(true)
   const [showComponentLibraryForNode, setShowComponentLibraryForNode] = useState<string | null>(null)
   const [collapsedComponents, setCollapsedComponents] = useState<Record<string, boolean>>({})
-  const [currentPlan, setCurrentPlan] = useState<"free" | "premium-monthly" | "premium-yearly">("free")
   const [isLive, setIsLive] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [showPlanModal, setShowPlanModal] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [editingNodeTitle, setEditingNodeTitle] = useState<string | null>(null)
   const [editingNodeTitleValue, setEditingNodeTitleValue] = useState<string>("")
@@ -139,6 +134,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
   const flowRef = useRef<Flow | null>(flow)
   const onUpdateFlowRef = useRef(onUpdateFlow)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<{ nodeId: string; nodeTitle: string } | null>(null)
+  const dragAnimationFrameRef = useRef<number | null>(null)
   
   // Mobile touch gesture state
   const [isMobile, setIsMobile] = useState(false)
@@ -164,27 +160,6 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
   
-  // Calculate plan limits and usage
-  const planLimits = useMemo(() => {
-    if (currentPlan === "free") {
-      return { flows: 1, blocks: 5 } // Free: 1 flow, 5 blocks per flow
-    } else {
-      return { flows: 3, blocks: 20 } // Premium: 3 flows, 20 blocks per flow
-    }
-  }, [currentPlan])
-  
-  const planUsage = useMemo(() => {
-    // TODO: Get actual usage from database - count total flows
-    // For now, this is a placeholder - should get from parent component that has all flows
-    const totalFlows = 1 // Placeholder - should be count from all flows
-    
-    // Count total blocks in current flow: flow nodes + logic blocks
-    const flowBlocks = flow?.nodes?.length || 0
-    const logicBlocksCount = logicBlocks?.length || 0
-    const totalBlocks = flowBlocks + logicBlocksCount
-    
-    return { flows: totalFlows, blocks: totalBlocks }
-  }, [flow, logicBlocks])
 
   // Sync logicBlocks with flow when it changes
   useEffect(() => {
@@ -605,6 +580,15 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
     return () => document.removeEventListener('keydown', handleUndoKeyDown, true)
   }, []) // Empty array - all values come from refs which are always current
 
+  // Cleanup animation frame on unmount - MUST be before any early returns
+  useEffect(() => {
+    return () => {
+      if (dragAnimationFrameRef.current) {
+        cancelAnimationFrame(dragAnimationFrameRef.current)
+      }
+    }
+  }, [])
+
   if (!flow) {
     return (
       <div className="flex-1 flex items-center justify-center bg-background">
@@ -637,86 +621,75 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
     setPanStart({ x: e.clientX - canvasOffset.x, y: e.clientY - canvasOffset.y })
   }
 
-  // Throttle mouse move with requestAnimationFrame for better performance
-  const THROTTLE_MS = 16 // ~60fps
-
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
-    const now = Date.now()
+    // Cancel previous frame if exists
+    if (dragAnimationFrameRef.current) {
+      cancelAnimationFrame(dragAnimationFrameRef.current)
+    }
     
-    // Throttle updates to prevent excessive CPU load during dragging
-    if (now - lastUpdateTime.current < THROTTLE_MS && (draggingNodeId || draggingLogicId || isPanning)) {
-      if (rafRef.current === null) {
-        rafRef.current = requestAnimationFrame(() => {
-          lastUpdateTime.current = Date.now()
-          rafRef.current = null
-          handleCanvasMouseMove(e)
-        })
+    // Schedule update for next frame to prevent excessive CPU load
+    dragAnimationFrameRef.current = requestAnimationFrame(() => {
+      if (draggingVariable) {
+        setDragVariablePosition({ x: e.clientX, y: e.clientY })
       }
-      return
-    }
-    
-    lastUpdateTime.current = now
-    
-    if (draggingVariable) {
-      setDragVariablePosition({ x: e.clientX, y: e.clientY })
-    }
-    if (draggingLogicType) {
-      setDragCursorPosition({ x: e.clientX, y: e.clientY })
-    }
-    
-    if (isPanning && !draggingNodeId && !draggingLogicId && !connectingFrom) {
-      setCanvasOffset({ 
-        x: e.clientX - panStart.x, 
-        y: e.clientY - panStart.y 
-      })
-      return
-    }
-    
-    if (connectingFrom) {
-      const worldPos = screenToWorld(e.clientX, e.clientY)
-      setConnectionLineEnd(worldPos)
-      return
-    }
-    
-    if (draggingNodeId && e.buttons === 1) {
-      const worldPos = screenToWorld(e.clientX, e.clientY)
-      const updatedNodes = flow.nodes.map(n => {
-        if (n.id === draggingNodeId) {
-          return {
-            ...n,
-            position: {
-              x: worldPos.x - dragOffset.x,
-              y: worldPos.y - dragOffset.y
+      if (draggingLogicType) {
+        setDragCursorPosition({ x: e.clientX, y: e.clientY })
+      }
+      
+      if (isPanning && !draggingNodeId && !draggingLogicId && !connectingFrom) {
+        setCanvasOffset({ 
+          x: e.clientX - panStart.x, 
+          y: e.clientY - panStart.y 
+        })
+        return
+      }
+      
+      if (connectingFrom) {
+        const worldPos = screenToWorld(e.clientX, e.clientY)
+        setConnectionLineEnd(worldPos)
+        return
+      }
+      
+      if (draggingNodeId && e.buttons === 1) {
+        const worldPos = screenToWorld(e.clientX, e.clientY)
+        const updatedNodes = flow.nodes.map(n => {
+          if (n.id === draggingNodeId) {
+            return {
+              ...n,
+              position: {
+                x: worldPos.x - dragOffset.x,
+                y: worldPos.y - dragOffset.y
+              }
             }
           }
-        }
-        return n
-      })
-      onUpdateFlow({ ...flow, nodes: updatedNodes })
-    } else if (draggingNodeId && e.buttons === 0) {
-      setDraggingNodeId(null)
-    }
-    
-    if (draggingLogicId && e.buttons === 1) {
-      const worldPos = screenToWorld(e.clientX, e.clientY)
-      const updatedLogicBlocks = logicBlocks.map(b => {
-        if (b.id === draggingLogicId) {
-          return {
-            ...b,
-            position: {
-              x: worldPos.x - dragOffset.x,
-              y: worldPos.y - dragOffset.y
+          return n
+        })
+        onUpdateFlow({ ...flow, nodes: updatedNodes })
+      } else if (draggingNodeId && e.buttons === 0) {
+        setDraggingNodeId(null)
+      }
+      
+      if (draggingLogicId && e.buttons === 1) {
+        const worldPos = screenToWorld(e.clientX, e.clientY)
+        const updatedLogicBlocks = logicBlocks.map(b => {
+          if (b.id === draggingLogicId) {
+            return {
+              ...b,
+              position: {
+                x: worldPos.x - dragOffset.x,
+                y: worldPos.y - dragOffset.y
+              }
             }
           }
-        }
-        return b
-      })
-      handleLogicBlocksUpdate(updatedLogicBlocks)
-    } else if (draggingLogicId && e.buttons === 0) {
-      setDraggingLogicId(null)
-    }
+          return b
+        })
+        handleLogicBlocksUpdate(updatedLogicBlocks)
+      } else if (draggingLogicId && e.buttons === 0) {
+        setDraggingLogicId(null)
+      }
+    })
   }
-
+  
   const handleCanvasMouseUp = (e: React.MouseEvent) => {
     if (draggingVariable) {
       // Check if dropped on a drop target (condition/path input)
@@ -1699,8 +1672,8 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
               )}
             </div>
           </div>
-          {/* Mode Toggle Buttons - Top Center */}
-          <div className="absolute left-1/2 -translate-x-1/2 flex items-center z-20" style={{ gap: '10px' }}>
+          {/* Mode Toggle Buttons - Right side */}
+          <div className="flex items-center" style={{ gap: '5px' }}>
             <button
               onClick={() => setViewMode("create")}
               className="text-[12px] text-muted-foreground hover:text-foreground transition-colors"
@@ -1768,25 +1741,26 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
             )}
           </div>
         </div>
-        {/* Mode Toggle Buttons - Top Center */}
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center z-20" style={{ gap: '10px' }}>
-          <button
-            onClick={() => setViewMode("create")}
-            className="text-[12px] text-foreground"
-            style={{ minWidth: '105px' }}
-          >
-            Flow Creation
-          </button>
-          <button
-            onClick={() => setViewMode("analytics")}
-            className="text-[12px] text-muted-foreground hover:text-foreground transition-colors"
-            style={{ minWidth: '105px' }}
-          >
-            Data Analytics
-          </button>
-        </div>
-        {/* Save Changes Button - Moved to header */}
-        {onSaveToDatabase && flow && (
+        <div className="flex items-center gap-3">
+          {/* Mode Toggle Buttons - Right side next to Save Changes */}
+          <div className="flex items-center" style={{ gap: '5px' }}>
+            <button
+              onClick={() => setViewMode("create")}
+              className="text-[12px] text-foreground"
+              style={{ minWidth: '105px' }}
+            >
+              Flow Creation
+            </button>
+            <button
+              onClick={() => setViewMode("analytics")}
+              className="text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+              style={{ minWidth: '105px' }}
+            >
+              Data Analytics
+            </button>
+          </div>
+          {/* Save Changes Button - Moved to header */}
+          {onSaveToDatabase && flow && (
             <button
               onClick={async () => {
                 if (flow && hasUnsavedChanges && !isSaving) {
@@ -1838,6 +1812,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
               )}
             </button>
           )}
+        </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
@@ -2250,16 +2225,6 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
                               />
                             )}
                           </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setShowPlanModal(true)
-                      }}
-                      className="flex items-center gap-1 text-[#3b82f6] underline text-sm font-medium hover:text-[#2563eb] transition-colors flex-shrink-0"
-                    >
-                      <Crown className="w-3 h-3" />
-                      Upgrade
-                    </button>
                         </div>
                         <p className="text-xs text-muted-foreground leading-relaxed">
                           {node.components} Components / {node.completion}% Complete
@@ -3075,13 +3040,6 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
         />
       )}
 
-      {/* Plan Selection Modal */}
-      {showPlanModal && (
-        <PlanSelectionModal
-          onClose={() => setShowPlanModal(false)}
-          currentPlan={currentPlan}
-        />
-      )}
 
       {/* Upload Flow Modal */}
       {showUploadModal && flow && (

@@ -393,6 +393,15 @@ export function ComponentSettings({ component, onUpdateConfig }: ComponentSettin
         return (
           <>
             <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">Description</label>
+              <textarea
+                value={localConfig.description || ""}
+                onChange={(e) => handleChange("description", e.target.value)}
+                placeholder="Add information about this button..."
+                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[80px] resize-none"
+              />
+            </div>
+            <div className="mb-4">
               <label className="block text-sm font-medium mb-2">URL</label>
               <input
                 type="url"
