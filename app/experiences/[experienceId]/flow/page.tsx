@@ -56,14 +56,14 @@ export default function OnboardingFlowView() {
     loadUserData()
   }, [])
 
-  // Load flow data - in a real app, this would fetch from your data source
+  // Load flow data - load active flow (experienceId is not the flow ID)
   useEffect(() => {
     async function loadFlow() {
       setIsLoading(true)
       try {
-        // Try to load from database first
-        const { loadFlow } = await import('@/lib/db/flows')
-        const dbFlow = await loadFlow(experienceId)
+        // Load the active flow (flows have their own IDs, not experienceId)
+        const { getActiveFlow } = await import('@/lib/db/flows')
+        const dbFlow = await getActiveFlow()
         
         if (dbFlow) {
           setFlow(dbFlow)
@@ -83,57 +83,16 @@ export default function OnboardingFlowView() {
           
           if (firstNode) {
             setCurrentNodeId(firstNode.id)
+          } else if (dbFlow.nodes.length > 0) {
+            // Fallback: use first node if no entry node found
+            setCurrentNodeId(dbFlow.nodes[0].id)
           }
         } else {
-          // Fallback to localStorage
-          const storedFlow = localStorage.getItem(`flow-${experienceId}`)
-          if (storedFlow) {
-            const parsedFlow: Flow = JSON.parse(storedFlow)
-            setFlow(parsedFlow)
-            
-            // Find first node (no incoming connections)
-            const firstNode = parsedFlow.nodes.find((node: FlowNode) => {
-              // Check if any node connects to this one
-              const hasIncoming = parsedFlow.nodes.some((n: FlowNode) => 
-                n.connections.includes(node.id)
-              )
-              // Check if any logic block connects to this one
-              const hasLogicIncoming = parsedFlow.logicBlocks?.some((lb: LogicBlock) =>
-                lb.connections.includes(node.id)
-              )
-              return !hasIncoming && !hasLogicIncoming
-            })
-            
-            if (firstNode) {
-              setCurrentNodeId(firstNode.id)
-            }
-          }
+          // No active flow found
+          console.error('No active flow found')
         }
       } catch (error) {
         console.error('Error loading flow:', error)
-        // Fallback to localStorage on error
-        const storedFlow = localStorage.getItem(`flow-${experienceId}`)
-        if (storedFlow) {
-          const parsedFlow: Flow = JSON.parse(storedFlow)
-          setFlow(parsedFlow)
-          
-          // Find first node (no incoming connections)
-          const firstNode = parsedFlow.nodes.find((node: FlowNode) => {
-            // Check if any node connects to this one
-            const hasIncoming = parsedFlow.nodes.some((n: FlowNode) => 
-              n.connections.includes(node.id)
-            )
-            // Check if any logic block connects to this one
-            const hasLogicIncoming = parsedFlow.logicBlocks?.some((lb: LogicBlock) =>
-              lb.connections.includes(node.id)
-            )
-            return !hasIncoming && !hasLogicIncoming
-          })
-          
-          if (firstNode) {
-            setCurrentNodeId(firstNode.id)
-          }
-        }
       } finally {
         setIsLoading(false)
       }

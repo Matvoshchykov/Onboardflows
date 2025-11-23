@@ -877,8 +877,9 @@ export function ComponentRenderer({
                   key={videoSource || videoPreview || 'video'}
                   src={videoSource || videoPreview || ''}
                   controls
-                  preload="auto"
+                  preload="metadata"
                   playsInline
+                  webkit-playsinline="true"
                   muted={false}
                   crossOrigin="anonymous"
                   className={`w-full rounded-xl ${
@@ -894,14 +895,18 @@ export function ComponentRenderer({
                     display: 'block',
                     objectFit: 'contain'
                   } as React.CSSProperties}
-                  onLoadedData={(e) => {
-                    // Ensure video is ready on mobile
+                  onLoadedMetadata={(e) => {
+                    // Force video metadata load on mobile
                     const video = e.currentTarget
-                    console.log('Video loaded, readyState:', video.readyState, 'src:', video.src)
-                    // Force play on mobile if needed
-                    if (isMobile && video.readyState >= 2) {
+                    console.log('Video metadata loaded, readyState:', video.readyState, 'src:', video.src)
+                    if (isMobile) {
+                      // On mobile, ensure video is ready to play
                       video.load()
                     }
+                  }}
+                  onLoadedData={(e) => {
+                    const video = e.currentTarget
+                    console.log('Video data loaded, readyState:', video.readyState)
                   }}
                   onCanPlay={(e) => {
                     console.log('Video can play, src:', e.currentTarget.src)
