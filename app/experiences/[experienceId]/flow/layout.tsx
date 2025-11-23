@@ -24,19 +24,7 @@ export default async function FlowLayout({
 
 	// If customer, allow access to flow
 	if (access.access_level === "customer") {
-		return (
-			<>
-				<div className="bg-muted/50 border-b border-border px-4 py-2 text-sm">
-					<div className="flex items-center gap-4">
-						<span className="text-muted-foreground">User ID:</span>
-						<span className="font-mono">{userId}</span>
-						<span className="text-muted-foreground">Access Level:</span>
-						<span className="font-semibold capitalize">{access.access_level}</span>
-					</div>
-				</div>
-				{children}
-			</>
-		);
+		return <>{children}</>;
 	}
 
 	// Fallback - redirect if access level is unexpected
