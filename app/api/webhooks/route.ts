@@ -11,6 +11,19 @@ export async function POST(request: NextRequest): Promise<Response> {
 		// 2. Convert headers to plain object
 		const headers = Object.fromEntries(request.headers);
 		
+		// Debug: Log ALL headers to see what's actually arriving (as suggested by Whop)
+		console.log("[WEBHOOK DEBUG] All headers:", headers);
+		console.log("[WEBHOOK DEBUG] Body length:", requestBodyText.length);
+		
+		// Check for svix headers (Whop uses these)
+		const svixId = headers['svix-id'] || headers['Svix-Id'] || headers['SVIX-ID'];
+		const svixTimestamp = headers['svix-timestamp'] || headers['Svix-Timestamp'] || headers['SVIX-TIMESTAMP'];
+		const svixSignature = headers['svix-signature'] || headers['Svix-Signature'] || headers['SVIX-SIGNATURE'];
+		
+		console.log("[WEBHOOK DEBUG] svix-id:", svixId || 'NOT FOUND');
+		console.log("[WEBHOOK DEBUG] svix-timestamp:", svixTimestamp || 'NOT FOUND');
+		console.log("[WEBHOOK DEBUG] svix-signature:", svixSignature ? 'FOUND' : 'NOT FOUND');
+		
 		// 3. Unwrap and validate webhook
 		let webhookData;
 		try {
