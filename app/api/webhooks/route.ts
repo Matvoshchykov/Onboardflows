@@ -7,12 +7,67 @@ export async function POST(request: NextRequest): Promise<Response> {
 	try {
 		// Validate the webhook to ensure it's from Whop
 		const requestBodyText = await request.text();
-		const headers = Object.fromEntries(request.headers);
+		
+		// Get all headers - check both direct access and from entries
+		const headers: Record<string, string> = {};
+		request.headers.forEach((value, key) => {
+			headers[key] = value;
+			// Also add lowercase version for case-insensitive matching
+			headers[key.toLowerCase()] = value;
+		});
+		
+		// Also try getting headers directly (in case they're in a different format)
+		const webhookSignature = 
+			request.headers.get('webhook-signature') ||
+			request.headers.get('Webhook-Signature') ||
+			request.headers.get('WEBHOOK-SIGNATURE') ||
+			headers['webhook-signature'] ||
+			headers['Webhook-Signature'];
+			
+		const webhookTimestamp = 
+			request.headers.get('webhook-timestamp') ||
+			request.headers.get('Webhook-Timestamp') ||
+			request.headers.get('WEBHOOK-TIMESTAMP') ||
+			headers['webhook-timestamp'] ||
+			headers['Webhook-Timestamp'];
 		
 		console.log("[WEBHOOK REQUEST] Received POST request");
-		console.log("[WEBHOOK REQUEST] Headers:", Object.keys(headers));
-		console.log("[WEBHOOK REQUEST] webhook-signature:", headers['webhook-signature'] || headers['Webhook-Signature'] || 'NOT FOUND');
-		console.log("[WEBHOOK REQUEST] webhook-timestamp:", headers['webhook-timestamp'] || headers['Webhook-Timestamp'] || 'NOT FOUND');
+		console.log("[WEBHOOK REQUEST] Body length:", requestBodyText.length);
+		console.log("[WEBHOOK REQUEST] webhook-signature:", webhookSignature || 'NOT FOUND');
+		console.log("[WEBHOOK REQUEST] webhook-timestamp:", webhookTimestamp || 'NOT FOUND');
+		console.log("[WEBHOOK REQUEST] Has webhook secret:", !!process.env.WHOP_WEBHOOK_SECRET);
+		
+		// If headers are missing, this might be a test webhook or the headers were stripped
+		// Try to parse the body directly to see if it's a valid webhook payload
+		if (!webhookSignature || !webhookTimestamp) {
+			console.warn("[WEBHOOK WARNING] Missing signature headers - might be a test webhook");
+			
+			// Try to parse the body as JSON to see if it's a valid webhook payload
+			try {
+				const bodyJson = JSON.parse(requestBodyText);
+				console.log("[WEBHOOK TEST] Body appears to be JSON:", {
+					type: bodyJson.type,
+					hasData: !!bodyJson.data,
+					api_version: bodyJson.api_version
+				});
+				
+				// For test webhooks without signature, we can't verify but we can still process
+				// In production, you should only process verified webhooks
+				if (process.env.NODE_ENV === 'development' || process.env.ALLOW_UNVERIFIED_WEBHOOKS === 'true') {
+					console.warn("[WEBHOOK WARNING] Processing unverified webhook (development/test mode)");
+					if (bodyJson.type === "payment.succeeded") {
+						handlePaymentSucceeded(bodyJson.data).catch(console.error);
+					}
+					return new Response("OK", { status: 200 });
+				}
+			} catch (parseError) {
+				console.error("[WEBHOOK ERROR] Failed to parse body as JSON:", parseError);
+			}
+			
+			// Return 200 but don't process if we can't verify
+			console.error("[WEBHOOK ERROR] Cannot verify webhook without signature headers");
+			return new Response("OK", { status: 200 });
+		}
 		
 		let webhookData;
 		try {
@@ -23,7 +78,6 @@ export async function POST(request: NextRequest): Promise<Response> {
 			console.error("[WEBHOOK VALIDATION ERROR]", validationError);
 			console.error("[WEBHOOK VALIDATION ERROR] Message:", validationError instanceof Error ? validationError.message : String(validationError));
 			// Return 200 to prevent retries, but log the error
-			// This might happen with test webhooks or if headers are missing
 			return new Response("OK", { status: 200 });
 		}
 
