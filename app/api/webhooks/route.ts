@@ -16,21 +16,33 @@ export async function POST(request: NextRequest): Promise<Response> {
 		console.log("[WEBHOOK DEBUG] Body length:", requestBodyText.length);
 		
 		// Check for webhook headers (Whop uses webhook-signature and webhook-timestamp)
+		// SDK should check both webhook-* and svix-* formats automatically
 		const webhookSignature = headers['webhook-signature'] || headers['Webhook-Signature'] || headers['WEBHOOK-SIGNATURE'];
 		const webhookTimestamp = headers['webhook-timestamp'] || headers['Webhook-Timestamp'] || headers['WEBHOOK-TIMESTAMP'];
+		const svixSignature = headers['svix-signature'] || headers['Svix-Signature'] || headers['SVIX-SIGNATURE'];
+		const svixTimestamp = headers['svix-timestamp'] || headers['Svix-Timestamp'] || headers['SVIX-TIMESTAMP'];
 		
 		console.log("[WEBHOOK DEBUG] webhook-signature:", webhookSignature ? 'FOUND' : 'NOT FOUND');
 		console.log("[WEBHOOK DEBUG] webhook-timestamp:", webhookTimestamp || 'NOT FOUND');
+		console.log("[WEBHOOK DEBUG] svix-signature:", svixSignature ? 'FOUND' : 'NOT FOUND');
+		console.log("[WEBHOOK DEBUG] svix-timestamp:", svixTimestamp || 'NOT FOUND');
+		console.log("[WEBHOOK DEBUG] Has webhook secret:", !!process.env.WHOP_WEBHOOK_SECRET);
 		
 		// 3. Unwrap and validate webhook
+		// The SDK's unwrap() should automatically check for both webhook-* and svix-* header formats
 		let webhookData;
 		try {
 			webhookData = whopsdk.webhooks.unwrap(requestBodyText, { headers });
-			console.log("[WEBHOOK RECEIVED]", webhookData.type);
+			console.log("[WEBHOOK RECEIVED] Type:", webhookData.type);
+			console.log("[WEBHOOK RECEIVED] ID:", (webhookData as any).id);
 			console.log("[WEBHOOK DATA]", JSON.stringify(webhookData.data, null, 2));
 		} catch (validationError) {
 			console.error("[WEBHOOK VALIDATION ERROR]", validationError);
 			console.error("[WEBHOOK VALIDATION ERROR] Message:", validationError instanceof Error ? validationError.message : String(validationError));
+			console.error("[WEBHOOK VALIDATION ERROR] If headers are missing, check:");
+			console.error("  1. Vercel configuration - may be stripping custom headers");
+			console.error("  2. SDK version - ensure @whop/sdk supports webhook-* headers");
+			console.error("  3. Webhook URL in Whop dashboard matches deployed URL");
 			// Return 200 to prevent retries, but log the error
 			return new Response("OK", { status: 200 });
 		}
