@@ -59,7 +59,7 @@ export function PagePreview({
                     ? "bg-card shadow-neumorphic-pressed ring-2 ring-primary/20"
                     : "bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed"
                 } w-full flex flex-col justify-center overflow-visible`}
-                style={{ maxWidth: '840px', pointerEvents: isMobile && previewMode ? 'none' : 'auto', gap: isMobile ? '0' : undefined }}
+                style={{ maxWidth: '840px', gap: isMobile ? '0' : undefined }}
               >
                 <ComponentRenderer 
                   component={component} 
@@ -971,21 +971,21 @@ export function ComponentRenderer({
                       }}
                     />
                   ) : (
-                    <video
+              <video
                       key={`${videoUrl || ''}-${isMobile}`}
                       src={videoUrl || ''}
                       poster={config.videoUrl || undefined}
-                      controls
+                controls
                       playsInline
                       webkit-playsinline="true"
                       muted={false}
                       preload="metadata"
                       autoPlay={false}
-                      className={`w-full rounded-xl ${
+                className={`w-full rounded-xl ${
                         isPreviewMode
                           ? 'h-full object-cover aspect-video'
-                          : 'h-auto max-h-[600px] object-contain'
-                      }`}
+                    : 'h-auto max-h-[600px] object-contain'
+                }`}
                       style={{ 
                         maxWidth: '100%',
                         width: '100%',
