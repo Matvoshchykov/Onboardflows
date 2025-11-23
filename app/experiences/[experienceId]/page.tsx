@@ -30,14 +30,6 @@ export default async function ExperiencePage({
 	if (access.access_level === "admin") {
 		return (
 			<div className="flex flex-col h-screen">
-				<div className="bg-muted/50 border-b border-border px-4 py-2 text-sm">
-					<div className="flex items-center gap-4">
-						<span className="text-muted-foreground">User ID:</span>
-						<span className="font-mono">{userId}</span>
-						<span className="text-muted-foreground">Access Level:</span>
-						<span className="font-semibold capitalize">{access.access_level}</span>
-					</div>
-				</div>
 				<div className="flex-1 overflow-hidden">
 					<FlowBuilder isAdmin={true} />
 				</div>
