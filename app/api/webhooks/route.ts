@@ -15,14 +15,12 @@ export async function POST(request: NextRequest): Promise<Response> {
 		console.log("[WEBHOOK DEBUG] All headers:", headers);
 		console.log("[WEBHOOK DEBUG] Body length:", requestBodyText.length);
 		
-		// Check for svix headers (Whop uses these)
-		const svixId = headers['svix-id'] || headers['Svix-Id'] || headers['SVIX-ID'];
-		const svixTimestamp = headers['svix-timestamp'] || headers['Svix-Timestamp'] || headers['SVIX-TIMESTAMP'];
-		const svixSignature = headers['svix-signature'] || headers['Svix-Signature'] || headers['SVIX-SIGNATURE'];
+		// Check for webhook headers (Whop uses webhook-signature and webhook-timestamp)
+		const webhookSignature = headers['webhook-signature'] || headers['Webhook-Signature'] || headers['WEBHOOK-SIGNATURE'];
+		const webhookTimestamp = headers['webhook-timestamp'] || headers['Webhook-Timestamp'] || headers['WEBHOOK-TIMESTAMP'];
 		
-		console.log("[WEBHOOK DEBUG] svix-id:", svixId || 'NOT FOUND');
-		console.log("[WEBHOOK DEBUG] svix-timestamp:", svixTimestamp || 'NOT FOUND');
-		console.log("[WEBHOOK DEBUG] svix-signature:", svixSignature ? 'FOUND' : 'NOT FOUND');
+		console.log("[WEBHOOK DEBUG] webhook-signature:", webhookSignature ? 'FOUND' : 'NOT FOUND');
+		console.log("[WEBHOOK DEBUG] webhook-timestamp:", webhookTimestamp || 'NOT FOUND');
 		
 		// 3. Unwrap and validate webhook
 		let webhookData;
@@ -63,56 +61,53 @@ async function handlePaymentSucceeded(payment: Payment) {
 	try {
 		console.log("[PAYMENT SUCCEEDED]", JSON.stringify(payment, null, 2));
 		
-		// Extract metadata from the payment
-		// Check both payment.metadata and payment.checkout_configuration?.metadata
-		const metadata = (payment.metadata || (payment as any).checkout_configuration?.metadata || {}) as {
+		// Extract data from payment according to webhook format:
+		// - payment.user.id or payment.user_id for userId
+		// - payment.company.id or payment.company_id for companyId
+		// - payment.metadata for custom metadata
+		// - payment.id for payment ID
+		const userId = (payment as any).user?.id || (payment as any).user_id || (payment as any).customer_id;
+		const companyId = (payment as any).company?.id || (payment as any).company_id;
+		const paymentId = payment.id || (payment as any).receipt_id;
+		const metadata = (payment.metadata || {}) as {
 			user_id?: string;
 			plan_type?: string;
 			company_id?: string;
 		};
 		
-		console.log("[PAYMENT METADATA]", metadata);
+		// Use metadata if available, otherwise use direct fields
+		const finalUserId = metadata.user_id || userId;
+		const finalCompanyId = metadata.company_id || companyId;
+		const planType = metadata.plan_type || "premium-monthly";
 		
-		if (!metadata.user_id || !metadata.company_id) {
-			console.error("Missing user_id or company_id in payment metadata. Payment object:", payment);
-			// Try to get from payment object directly
-			const userId = (payment as any).user_id || (payment as any).customer_id;
-			const companyId = (payment as any).company_id;
-			
-			if (userId && companyId) {
-				console.log("Using fallback user_id and company_id from payment object");
-				await upsertUserMembership(
-					userId,
-					companyId,
-					true,
-					(payment as any).receipt_id || (payment as any).id,
-					metadata.plan_type || "premium-monthly"
-				);
-				return;
-			}
+		console.log("[PAYMENT DATA]", {
+			userId: finalUserId,
+			companyId: finalCompanyId,
+			paymentId,
+			planType,
+			metadata
+		});
+		
+		if (!finalUserId || !finalCompanyId) {
+			console.error("Missing user_id or company_id in payment. Payment object:", payment);
 			return;
 		}
 		
-		const userId = metadata.user_id;
-		const companyId = metadata.company_id;
-		const planType = metadata.plan_type || "premium-monthly";
-		const receiptId = (payment as any).receipt_id || (payment as any).id || payment.id;
-		
-		console.log(`[ACTIVATING MEMBERSHIP] User: ${userId}, Company: ${companyId}, Plan: ${planType}`);
+		console.log(`[ACTIVATING MEMBERSHIP] User: ${finalUserId}, Company: ${finalCompanyId}, Plan: ${planType}`);
 		
 		// Update or create user membership
 		const result = await upsertUserMembership(
-			userId,
-			companyId,
+			finalUserId,
+			finalCompanyId,
 			true, // membership_active = true
-			receiptId,
+			paymentId,
 			planType
 		);
 		
 		if (result) {
-			console.log(`[MEMBERSHIP ACTIVATED] User ${userId} for company ${companyId}, Membership ID: ${result.id}`);
+			console.log(`[MEMBERSHIP ACTIVATED] User ${finalUserId} for company ${finalCompanyId}, Membership ID: ${result.id}`);
 		} else {
-			console.error(`[MEMBERSHIP ACTIVATION FAILED] User ${userId} for company ${companyId}`);
+			console.error(`[MEMBERSHIP ACTIVATION FAILED] User ${finalUserId} for company ${finalCompanyId}`);
 		}
 	} catch (error) {
 		console.error("Error handling payment succeeded:", error);
