@@ -47,7 +47,7 @@ async function handlePaymentSucceeded(payment: Payment) {
 					userId,
 					companyId,
 					true,
-					payment.receipt_id,
+					(payment as any).receipt_id || (payment as any).id,
 					metadata.plan_type || "premium-monthly"
 				);
 				return;
@@ -58,7 +58,7 @@ async function handlePaymentSucceeded(payment: Payment) {
 		const userId = metadata.user_id;
 		const companyId = metadata.company_id;
 		const planType = metadata.plan_type || "premium-monthly";
-		const receiptId = payment.receipt_id;
+		const receiptId = (payment as any).receipt_id || (payment as any).id || payment.id;
 		
 		console.log(`[ACTIVATING MEMBERSHIP] User: ${userId}, Company: ${companyId}, Plan: ${planType}`);
 		
