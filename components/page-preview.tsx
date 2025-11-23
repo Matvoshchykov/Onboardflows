@@ -971,28 +971,46 @@ export function ComponentRenderer({
                       }}
                     />
                   ) : (
-              <video
+                    <video
                       key={`${videoUrl || ''}-${isMobile}`}
                       src={videoUrl || ''}
-                controls
+                      poster={config.videoUrl || undefined}
+                      controls
                       playsInline
                       webkit-playsinline="true"
-                      muted={isMobile}
+                      muted={false}
                       preload="metadata"
                       autoPlay={false}
-                className={`w-full rounded-xl ${
+                      className={`w-full rounded-xl ${
                         isPreviewMode
                           ? 'h-full object-cover aspect-video'
-                    : 'h-auto max-h-[600px] object-contain'
-                }`}
+                          : 'h-auto max-h-[600px] object-contain'
+                      }`}
                       style={{ 
                         maxWidth: '100%',
                         width: '100%',
                         height: 'auto',
                         display: 'block',
                         objectFit: 'contain',
-                        WebkitPlaysinline: 'true'
+                        WebkitPlaysinline: 'true',
+                        WebkitAppearance: 'none'
                       } as React.CSSProperties}
+                      onTouchStart={(e) => {
+                        // Force video to load on first touch on mobile
+                        const video = e.currentTarget
+                        if (video.readyState === 0) {
+                          video.load()
+                        }
+                      }}
+                      onClick={(e) => {
+                        // On mobile, ensure video plays on click
+                        const video = e.currentTarget
+                        if (isMobile && video.paused) {
+                          video.play().catch((err) => {
+                            console.error('[Video Debug] Play failed on click:', err)
+                          })
+                        }
+                      }}
                       onLoadStart={() => {
                         console.log('[Video Debug] Video load started', {
                           src: videoUrl,

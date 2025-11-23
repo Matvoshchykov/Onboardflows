@@ -2169,7 +2169,13 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
                           setShowPreview(true)
                         }
                       }}
-                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all duration-300 text-muted-foreground hover:text-foreground z-10"
+                      onTouchStart={(e) => e.stopPropagation()}
+                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all duration-300 text-muted-foreground hover:text-foreground z-10 touch-manipulation"
+                      style={{
+                        minWidth: isMobile ? '44px' : 'auto',
+                        minHeight: isMobile ? '44px' : 'auto',
+                        touchAction: 'manipulation'
+                      }}
                       title="Preview this page"
                     >
                       <Eye className="w-4 h-4" />
@@ -2240,16 +2246,31 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
 
                     {/* Output port: always visible on all blocks - centered on card only */}
                     <div
-                      className="connection-port absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-3 h-3 rounded-full z-40 hover:scale-150 transition-transform cursor-crosshair"
+                      className="connection-port absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 rounded-full z-40 hover:scale-150 transition-transform cursor-crosshair touch-manipulation"
                       style={{
                         backgroundColor: hasConnection ? "#10b981" : "var(--muted-foreground)",
                         borderColor: hasConnection ? "#10b981" : "var(--muted-foreground)",
                         borderWidth: "2px",
+                        width: isMobile ? '44px' : '12px',
+                        height: isMobile ? '44px' : '12px',
+                        touchAction: 'manipulation'
                       }}
                       title="Connect to another block"
                       onMouseDown={(e) => {
                         e.stopPropagation()
                         handleStartConnection(e, node.id)
+                      }}
+                      onTouchStart={(e) => {
+                        e.stopPropagation()
+                        const touch = e.touches[0]
+                        const syntheticEvent = {
+                          ...e,
+                          clientX: touch.clientX,
+                          clientY: touch.clientY,
+                          stopPropagation: () => e.stopPropagation(),
+                          preventDefault: () => e.preventDefault()
+                        } as any
+                        handleStartConnection(syntheticEvent, node.id)
                       }}
                     />
                     
@@ -2264,10 +2285,14 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
                             e.stopPropagation()
                             setShowComponentLibraryForNode(showComponentLibraryForNode === node.id ? null : node.id)
                           }}
-                          className="w-8 h-6 rounded-full text-white transition-colors flex items-center justify-center shadow-lg"
+                          onTouchStart={(e) => e.stopPropagation()}
+                          className="w-8 h-6 rounded-full text-white transition-colors flex items-center justify-center shadow-lg touch-manipulation"
                           style={{ 
                             backgroundColor: '#5DADE2',
-                            boxShadow: '0 2px 8px rgba(93, 173, 226, 0.4)'
+                            boxShadow: '0 2px 8px rgba(93, 173, 226, 0.4)',
+                            minWidth: isMobile ? '44px' : '32px',
+                            minHeight: isMobile ? '44px' : '24px',
+                            touchAction: 'manipulation'
                           }}
                           title="Add Component"
                         >
@@ -2314,7 +2339,13 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
                                     }
                                     handleDeleteComponent(node.id, component.id)
                                   }}
-                                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed text-destructive z-10"
+                                  onTouchStart={(e) => e.stopPropagation()}
+                                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity p-1.5 rounded-lg bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed text-destructive z-10 touch-manipulation"
+                                  style={{
+                                    minWidth: isMobile ? '44px' : 'auto',
+                                    minHeight: isMobile ? '44px' : 'auto',
+                                    touchAction: 'manipulation'
+                                  }}
                                   title="Delete component"
                                 >
                                   <Trash2 className="w-4 h-4" />
@@ -2358,7 +2389,13 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
                                           [node.id]: !prev[node.id]
                                         }))
                                       }}
-                                      className="mt-1 p-1 rounded-lg bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-muted-foreground hover:text-foreground"
+                                      onTouchStart={(e) => e.stopPropagation()}
+                                      className="mt-1 p-1 rounded-lg bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-muted-foreground hover:text-foreground touch-manipulation"
+                                      style={{
+                                        minWidth: isMobile ? '44px' : 'auto',
+                                        minHeight: isMobile ? '44px' : 'auto',
+                                        touchAction: 'manipulation'
+                                      }}
                                       title={collapsedComponents[node.id] ? "Expand components" : "Collapse components"}
                                     >
                                       <ChevronDown 
@@ -2397,10 +2434,14 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, accessLevel =
                             e.stopPropagation()
                             setShowComponentLibraryForNode(showComponentLibraryForNode === node.id ? null : node.id)
                           }}
-                          className="w-8 h-6 rounded-full text-white transition-colors flex items-center justify-center shadow-lg"
+                          onTouchStart={(e) => e.stopPropagation()}
+                          className="w-8 h-6 rounded-full text-white transition-colors flex items-center justify-center shadow-lg touch-manipulation"
                           style={{ 
                             backgroundColor: '#5DADE2',
-                            boxShadow: '0 2px 8px rgba(93, 173, 226, 0.4)'
+                            boxShadow: '0 2px 8px rgba(93, 173, 226, 0.4)',
+                            minWidth: isMobile ? '44px' : '32px',
+                            minHeight: isMobile ? '44px' : '24px',
+                            touchAction: 'manipulation'
                           }}
                           title="Add Component"
                         >
