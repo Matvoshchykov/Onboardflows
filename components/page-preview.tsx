@@ -694,6 +694,7 @@ export function ComponentRenderer({
       const videoInputRef = useRef<HTMLInputElement>(null)
       const [videoPreview, setVideoPreview] = useState<string | null>(null)
       const [uploadingVideo, setUploadingVideo] = useState(false)
+      const [useIframe, setUseIframe] = useState(false)
       
       // Helper to filter out data URLs - only allow HTTP/HTTPS URLs (storage URLs)
       const isValidStorageUrl = (url: string | null | undefined): boolean => {
@@ -886,6 +887,35 @@ export function ComponentRenderer({
         }
       }, [config.videoUrl, config.videoOriginal, onUpdateComponent, isMobile])
       
+      // Video URL for preview/onboarding
+      const videoUrl = !onUpdateComponent ? (videoSource || videoPreview || '') : null
+      
+      // Comprehensive debugging for video URL
+      useEffect(() => {
+        if (!onUpdateComponent && videoUrl) {
+          console.log('[Video Debug] Video URL resolved:', {
+            videoUrl,
+            isMobile,
+            userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+            componentId: component.id
+          })
+          
+          // Test if URL is accessible
+          fetch(videoUrl, { method: 'HEAD', mode: 'no-cors' })
+            .then(() => console.log('[Video Debug] Video URL is accessible'))
+            .catch((err) => console.error('[Video Debug] Video URL fetch test failed:', err))
+        } else if (!onUpdateComponent && !videoUrl) {
+          console.error('[Video Debug] NO VIDEO URL AVAILABLE', {
+            videoSource,
+            videoPreview,
+            configVideoUrl: config.videoUrl,
+            configVideoOriginal: config.videoOriginal,
+            componentId: component.id,
+            isMobile
+          })
+        }
+      }, [videoUrl, isMobile, onUpdateComponent, videoSource, videoPreview, component.id, config.videoUrl, config.videoOriginal])
+      
       return (
         <div>
           <h3 className="text-xs font-medium mb-3">
@@ -924,208 +954,174 @@ export function ComponentRenderer({
                 />
               ) : (
                 // Preview/onboarding: show video - comprehensive mobile debugging and fallbacks
-                (() => {
-                  const videoUrl = videoSource || videoPreview || ''
-                  const [useIframe, setUseIframe] = useState(false)
-                  
-                  // Comprehensive debugging on mount
-                  useEffect(() => {
-                    if (!videoUrl) {
-                      console.error('[Video Debug] NO VIDEO URL AVAILABLE', {
-                        videoSource,
-                        videoPreview,
-                        configVideoUrl: config.videoUrl,
-                        configVideoOriginal: config.videoOriginal,
-                        componentId: component.id,
-                        isMobile
-                      })
-                      return
-                    }
-                    
-                    console.log('[Video Debug] Video URL resolved:', {
-                      videoUrl,
-                      isMobile,
-                      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-                      componentId: component.id
-                    })
-                    
-                    // Test if URL is accessible
-                    fetch(videoUrl, { method: 'HEAD', mode: 'no-cors' })
-                      .then(() => console.log('[Video Debug] Video URL is accessible'))
-                      .catch((err) => console.error('[Video Debug] Video URL fetch test failed:', err))
-                  }, [videoUrl, isMobile, videoSource, videoPreview, component.id])
-                  
-                  return (
-                    <>
-                      {useIframe && isMobile ? (
-                        <iframe
-                          src={videoUrl}
-                          className="w-full rounded-xl aspect-video"
-                          style={{
-                            border: 'none',
-                            minHeight: '200px'
-                          }}
-                          allow="autoplay; encrypted-media; picture-in-picture"
-                          allowFullScreen
-                          onError={() => {
-                            console.error('[Video Debug] Iframe failed, trying video element')
-                            setUseIframe(false)
-                          }}
-                        />
-                      ) : (
-                        <video
-                          key={`${videoUrl}-${isMobile}`}
-                          src={videoUrl}
-                          controls
-                          playsInline
-                          webkit-playsinline="true"
-                          muted={isMobile}
-                          preload="none"
-                          autoPlay={false}
-                          className={`w-full rounded-xl ${
-                            isPreviewMode
-                              ? 'h-full object-cover aspect-video'
-                              : 'h-auto max-h-[600px] object-contain'
-                          }`}
-                          style={{ 
-                            maxWidth: '100%',
-                            width: '100%',
-                            height: 'auto',
-                            display: 'block',
-                            objectFit: 'contain',
-                            WebkitPlaysinline: 'true'
-                          } as React.CSSProperties}
-                          onLoadStart={() => {
-                            console.log('[Video Debug] Video load started', {
-                              src: videoUrl,
-                              isMobile,
-                              componentId: component.id
-                            })
-                          }}
-                          onLoadedMetadata={(e) => {
-                            const video = e.currentTarget
-                            console.log('[Video Debug] Video metadata loaded SUCCESS', {
-                              duration: video.duration,
-                              videoWidth: video.videoWidth,
-                              videoHeight: video.videoHeight,
-                              readyState: video.readyState,
-                              networkState: video.networkState,
-                              src: video.src,
-                              currentSrc: video.currentSrc,
-                              isMobile,
-                              componentId: component.id
-                            })
-                          }}
-                          onLoadedData={(e) => {
-                            const video = e.currentTarget
-                            console.log('[Video Debug] Video data loaded', {
-                              readyState: video.readyState,
-                              networkState: video.networkState,
-                              isMobile,
-                              componentId: component.id
-                            })
-                          }}
-                          onCanPlay={(e) => {
-                            const video = e.currentTarget
-                            console.log('[Video Debug] Video CAN PLAY', {
-                              readyState: video.readyState,
-                              networkState: video.networkState,
-                              isMobile,
-                              componentId: component.id
-                            })
-                          }}
-                          onPlay={(e) => {
-                            const video = e.currentTarget
-                            console.log('[Video Debug] Video PLAYING', {
-                              currentTime: video.currentTime,
-                              duration: video.duration,
-                              isMobile,
-                              componentId: component.id
-                            })
-                          }}
-                          onTimeUpdate={(e) => {
-                            const video = e.currentTarget
-                            const currentTime = video.currentTime
-                            const duration = video.duration
-                            if (onVideoTimeUpdate && duration > 0) {
-                              onVideoTimeUpdate(component.id, currentTime)
-                            }
-                            if (config.requiredToWatch && duration > 0 && currentTime >= duration - 0.5) {
-                              if (onVideoWatched) {
-                                onVideoWatched(component.id, true)
-                              }
-                            }
-                          }}
-                          onEnded={() => {
-                            if (onVideoWatched) {
-                              onVideoWatched(component.id, true)
-                            }
-                          }}
-                          onError={(e) => {
-                            const video = e.currentTarget
-                            const errorDetails = {
-                              errorCode: video.error?.code,
-                              errorMessage: video.error?.message,
-                              networkState: video.networkState,
-                              readyState: video.readyState,
-                              src: video.src,
-                              currentSrc: video.currentSrc,
-                              videoUrl,
-                              isMobile,
-                              componentId: component.id,
-                              userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-                              videoSupports: {
-                                canPlayTypeMP4: video.canPlayType('video/mp4'),
-                                canPlayTypeWebM: video.canPlayType('video/webm'),
-                                canPlayTypeOGG: video.canPlayType('video/ogg')
-                              }
-                            }
-                            
-                            console.error('[Video Debug] VIDEO ELEMENT FAILED', errorDetails)
-                            
-                            if (video.error) {
-                              switch (video.error.code) {
-                                case 1:
-                                  console.error('[Video Debug] Error: Media aborted')
-                                  break
-                                case 2:
-                                  console.error('[Video Debug] Error: Network error - check CORS/URL accessibility')
-                                  break
-                                case 3:
-                                  console.error('[Video Debug] Error: Decode failed - codec not supported')
-                                  break
-                                case 4:
-                                  console.error('[Video Debug] Error: Source not supported - format/codec issue')
-                                  break
-                              }
-                            }
-                            
-                            // On mobile, try iframe as fallback
-                            if (isMobile && !useIframe) {
-                              console.log('[Video Debug] Trying iframe fallback on mobile')
-                              setUseIframe(true)
-                            }
-                          }}
-                          onWaiting={(e) => {
-                            console.warn('[Video Debug] Video buffering', {
-                              currentTime: e.currentTarget.currentTime,
-                              isMobile,
-                              componentId: component.id
-                            })
-                          }}
-                          onStalled={(e) => {
-                            console.error('[Video Debug] Video stalled (network issue)', {
-                              networkState: e.currentTarget.networkState,
-                              readyState: e.currentTarget.readyState,
-                              isMobile,
-                              componentId: component.id
-                            })
-                          }}
-                        />
-                      )}
-                    </>
-                  )
-                })()
+                <>
+                  {useIframe && isMobile ? (
+                    <iframe
+                      src={videoUrl || ''}
+                      className="w-full rounded-xl aspect-video"
+                      style={{
+                        border: 'none',
+                        minHeight: '200px'
+                      }}
+                      allow="autoplay; encrypted-media; picture-in-picture"
+                      allowFullScreen
+                      onError={() => {
+                        console.error('[Video Debug] Iframe failed, trying video element')
+                        setUseIframe(false)
+                      }}
+                    />
+                  ) : (
+                    <video
+                      key={`${videoUrl || ''}-${isMobile}`}
+                      src={videoUrl || ''}
+                      controls
+                      playsInline
+                      webkit-playsinline="true"
+                      muted={isMobile}
+                      preload="none"
+                      autoPlay={false}
+                      className={`w-full rounded-xl ${
+                        isPreviewMode
+                          ? 'h-full object-cover aspect-video'
+                          : 'h-auto max-h-[600px] object-contain'
+                      }`}
+                      style={{ 
+                        maxWidth: '100%',
+                        width: '100%',
+                        height: 'auto',
+                        display: 'block',
+                        objectFit: 'contain',
+                        WebkitPlaysinline: 'true'
+                      } as React.CSSProperties}
+                      onLoadStart={() => {
+                        console.log('[Video Debug] Video load started', {
+                          src: videoUrl,
+                          isMobile,
+                          componentId: component.id
+                        })
+                      }}
+                      onLoadedMetadata={(e) => {
+                        const video = e.currentTarget
+                        console.log('[Video Debug] Video metadata loaded SUCCESS', {
+                          duration: video.duration,
+                          videoWidth: video.videoWidth,
+                          videoHeight: video.videoHeight,
+                          readyState: video.readyState,
+                          networkState: video.networkState,
+                          src: video.src,
+                          currentSrc: video.currentSrc,
+                          isMobile,
+                          componentId: component.id
+                        })
+                      }}
+                      onLoadedData={(e) => {
+                        const video = e.currentTarget
+                        console.log('[Video Debug] Video data loaded', {
+                          readyState: video.readyState,
+                          networkState: video.networkState,
+                          isMobile,
+                          componentId: component.id
+                        })
+                      }}
+                      onCanPlay={(e) => {
+                        const video = e.currentTarget
+                        console.log('[Video Debug] Video CAN PLAY', {
+                          readyState: video.readyState,
+                          networkState: video.networkState,
+                          isMobile,
+                          componentId: component.id
+                        })
+                      }}
+                      onPlay={(e) => {
+                        const video = e.currentTarget
+                        console.log('[Video Debug] Video PLAYING', {
+                          currentTime: video.currentTime,
+                          duration: video.duration,
+                          isMobile,
+                          componentId: component.id
+                        })
+                      }}
+                      onTimeUpdate={(e) => {
+                        const video = e.currentTarget
+                        const currentTime = video.currentTime
+                        const duration = video.duration
+                        if (onVideoTimeUpdate && duration > 0) {
+                          onVideoTimeUpdate(component.id, currentTime)
+                        }
+                        if (config.requiredToWatch && duration > 0 && currentTime >= duration - 0.5) {
+                          if (onVideoWatched) {
+                            onVideoWatched(component.id, true)
+                          }
+                        }
+                      }}
+                      onEnded={() => {
+                        if (onVideoWatched) {
+                          onVideoWatched(component.id, true)
+                        }
+                      }}
+                      onError={(e) => {
+                        const video = e.currentTarget
+                        const errorDetails = {
+                          errorCode: video.error?.code,
+                          errorMessage: video.error?.message,
+                          networkState: video.networkState,
+                          readyState: video.readyState,
+                          src: video.src,
+                          currentSrc: video.currentSrc,
+                          videoUrl,
+                          isMobile,
+                          componentId: component.id,
+                          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+                          videoSupports: {
+                            canPlayTypeMP4: video.canPlayType('video/mp4'),
+                            canPlayTypeWebM: video.canPlayType('video/webm'),
+                            canPlayTypeOGG: video.canPlayType('video/ogg')
+                          }
+                        }
+                        
+                        console.error('[Video Debug] VIDEO ELEMENT FAILED', errorDetails)
+                        
+                        if (video.error) {
+                          switch (video.error.code) {
+                            case 1:
+                              console.error('[Video Debug] Error: Media aborted')
+                              break
+                            case 2:
+                              console.error('[Video Debug] Error: Network error - check CORS/URL accessibility')
+                              break
+                            case 3:
+                              console.error('[Video Debug] Error: Decode failed - codec not supported')
+                              break
+                            case 4:
+                              console.error('[Video Debug] Error: Source not supported - format/codec issue')
+                              break
+                          }
+                        }
+                        
+                        // On mobile, try iframe as fallback
+                        if (isMobile && !useIframe) {
+                          console.log('[Video Debug] Trying iframe fallback on mobile')
+                          setUseIframe(true)
+                        }
+                      }}
+                      onWaiting={(e) => {
+                        console.warn('[Video Debug] Video buffering', {
+                          currentTime: e.currentTarget.currentTime,
+                          isMobile,
+                          componentId: component.id
+                        })
+                      }}
+                      onStalled={(e) => {
+                        console.error('[Video Debug] Video stalled (network issue)', {
+                          networkState: e.currentTarget.networkState,
+                          readyState: e.currentTarget.readyState,
+                          isMobile,
+                          componentId: component.id
+                        })
+                      }}
+                    />
+                  )}
+                </>
               )
             ) : (
               <>
