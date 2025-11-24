@@ -309,12 +309,13 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
 
                   <CardFooter>
                     <Button
-                      className="w-full"
+                      className="w-full text-white"
                       variant="default"
                       size="lg"
                       onClick={() => handleBuy(plan.id)}
                       disabled={isProcessing || plan.id === "free"}
                       aria-label={`Get started with ${plan.name} plan for $${price} per ${period}`}
+                      style={plan.id !== "free" ? { backgroundColor: '#3b82f6' } : {}}
                     >
                       {isProcessing ? "Processing..." : plan.id === "free" ? "Current Plan" : "Get Started"}
                     </Button>

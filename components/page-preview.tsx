@@ -53,7 +53,7 @@ export function PagePreview({
           viewMode === "desktop" ? "w-full" : "w-full max-w-md mx-auto"
         }`}
       >
-        <div className={`flex flex-col items-center ${previewMode ? 'pt-5 pb-5' : ''} ${components.length === 1 || components.length === 2 ? '' : ''}`} style={{ gap: previewMode ? '10px' : '1rem' }}>
+        <div className="flex flex-col items-center" style={{ gap: '10px' }}>
           {components.length === 0 ? (
             <div className="flex items-center justify-center h-64 text-muted-foreground">
               Drag components here to build your page
@@ -281,7 +281,7 @@ export function ComponentRenderer({
   switch (component.type) {
     case "text-input":
       return (
-        <div className="p-6">
+        <div className={isPreviewMode ? "p-0" : "p-6"}>
           <label className="block text-sm font-medium mb-2">
             {config.label || "What is your main challenge right now?"}
           </label>
@@ -295,7 +295,7 @@ export function ComponentRenderer({
 
     case "preference-poll":
       return (
-        <div className="p-6">
+        <div className={isPreviewMode ? "p-0" : "p-6"}>
           <h3 className="text-sm font-medium mb-4">{config.title || "Rank your top priorities"}</h3>
           <div className="space-y-2">
             {(config.options || ["Feature A", "Feature B", "Feature C"]).map((option: string, idx: number) => (
@@ -312,7 +312,7 @@ export function ComponentRenderer({
 
     case "role-selector":
       return (
-        <div className="p-6">
+        <div className={isPreviewMode ? "p-0" : "p-6"}>
           <h3 className="text-sm font-medium mb-4">{config.title || "Select your role"}</h3>
           <div className="space-y-2">
             {(config.roles || ["Creator", "Manager", "Developer"]).map((role: string, idx: number) => (
@@ -327,7 +327,7 @@ export function ComponentRenderer({
 
     case "commitment-assessment":
       return (
-        <div className="p-6">
+        <div className={isPreviewMode ? "p-0" : "p-6"}>
           <h3 className="text-sm font-medium mb-4">{config.title || "Choose your commitment level"}</h3>
           <div className="grid grid-cols-3 gap-3">
             {(config.tiers || ["Starter", "Professional", "Enterprise"]).map((tier: string, idx: number) => (
@@ -341,7 +341,7 @@ export function ComponentRenderer({
 
     case "feature-rating":
       return (
-        <div className="p-6">
+        <div className={isPreviewMode ? "p-0" : "p-6"}>
           <h3 className="text-sm font-medium mb-4">{config.title || "Rate your interest in these features"}</h3>
           <div className="space-y-4">
             {(config.features || ["Analytics", "Automation", "Integrations"]).map((feature: string, idx: number) => (
@@ -360,7 +360,7 @@ export function ComponentRenderer({
 
     case "kpi-input":
       return (
-        <div className="p-6">
+        <div className={isPreviewMode ? "p-0" : "p-6"}>
           <label className="block text-sm font-medium mb-2">
             {config.label || "What is your target goal?"}
           </label>
@@ -378,7 +378,7 @@ export function ComponentRenderer({
 
     case "communication-style":
       return (
-        <div className="p-6">
+        <div className={isPreviewMode ? "p-0" : "p-6"}>
           <h3 className="text-sm font-medium mb-4">{config.title || "How do you prefer to learn?"}</h3>
           <div className="grid grid-cols-2 gap-3">
             {(config.styles || ["Video Tutorials", "Live Webinars", "Documentation", "Email"]).map((style: string, idx: number) => (
@@ -392,7 +392,7 @@ export function ComponentRenderer({
 
     case "privacy-consent":
       return (
-        <div className="p-6">
+        <div className={isPreviewMode ? "p-0" : "p-6"}>
           <div className="bg-muted rounded-xl p-4 mb-4">
             <p className="text-sm text-muted-foreground">
               {config.text || "We collect and process your data to provide our services. By checking this box, you agree to our Privacy Policy."}
@@ -411,7 +411,7 @@ export function ComponentRenderer({
 
     case "video-embed":
       return (
-        <div className="p-6">
+        <div className={isPreviewMode ? "p-0" : "p-6"}>
           <h3 className="text-sm font-medium mb-4">{config.title || "Watch this instructional video"}</h3>
           <div className="aspect-video bg-muted rounded-xl flex items-center justify-center">
             <Video className="w-12 h-12 text-muted-foreground" />
@@ -1270,13 +1270,13 @@ export function ComponentRenderer({
               <EditableText
                 value={config.title}
                 onChange={(value) => updateConfig({ title: value })}
-                className={`text-xs font-medium mb-2 ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}
+                className={`text-xs font-medium ${isPreviewMode ? 'mb-1' : 'mb-2'} ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}
                 placeholder="Welcome to our onboarding"
               />
             ) : null
           ) : (
             config.title && config.title.trim().length > 0 && (
-              <h3 className={`text-xs font-medium mb-2 ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}>
+              <h3 className={`text-xs font-medium ${isPreviewMode ? 'mb-1' : 'mb-2'} ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}>
                 {config.title}
               </h3>
             )
@@ -1361,13 +1361,13 @@ export function ComponentRenderer({
               <EditableText
                 value={config.title}
                 onChange={(value) => updateConfig({ title: value })}
-                className="text-xs font-medium mb-3"
+                className={`text-xs font-medium ${isPreviewMode ? 'mb-2' : 'mb-3'}`}
                 placeholder="Select your answer"
               />
             ) : null
           ) : (
             config.title && config.title.trim().length > 0 && (
-              <h3 className="text-xs font-medium mb-3">
+              <h3 className={`text-xs font-medium ${isPreviewMode ? 'mb-2' : 'mb-3'}`}>
                 {config.title}
               </h3>
             )
@@ -1509,13 +1509,13 @@ export function ComponentRenderer({
               <EditableText
                 value={config.label}
                 onChange={(value) => updateConfig({ label: value })}
-                className="text-xs font-medium mb-2 block"
+                className={`text-xs font-medium ${isPreviewMode ? 'mb-1.5' : 'mb-2'} block`}
                 placeholder="What is your name?"
               />
             ) : null
           ) : (
             config.label && config.label.trim().length > 0 && (
-              <label className="block text-xs font-medium mb-2">
+              <label className={`block text-xs font-medium ${isPreviewMode ? 'mb-1.5' : 'mb-2'}`}>
                 {config.label}
               </label>
             )

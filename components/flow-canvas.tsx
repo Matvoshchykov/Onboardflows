@@ -22,6 +22,7 @@ import { deleteNodePaths } from "@/lib/db/paths"
 import { useRouter } from "next/navigation"
 import { UploadFlowModal } from "./upload-flow-modal"
 import { UpgradeModal } from "./upgrade-modal"
+import { UpgradeLimitPopup } from "./upgrade-limit-popup"
 import { TierInfo } from "./tier-info"
 import { FlowNodeComponent } from "./flow-node"
 
@@ -77,6 +78,9 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
   const [flowTitle, setFlowTitle] = useState(flow?.title || "Untitled Flow")
   const [lastSavedFlow, setLastSavedFlow] = useState<Flow | null>(flow || null)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [showLimitPopup, setShowLimitPopup] = useState(false)
+  const [limitPopupType, setLimitPopupType] = useState<"blocks" | "flows">("blocks")
+  const [limitPopupCount, setLimitPopupCount] = useState({ current: 0, max: 0 })
   const [currentPlan, setCurrentPlan] = useState<"free" | "premium-monthly" | "premium-yearly">("free")
   const [membershipActive, setMembershipActive] = useState(false)
   const [maxFlows, setMaxFlows] = useState(1)
@@ -454,7 +458,12 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
               toast.error("Plan limit reached")
             } else {
               toast.error(`You've reached the limit of ${maxBlocksPerFlow} blocks per flow. Upgrade to Premium for 30 blocks per flow.`)
-              setShowUpgradeModal(true)
+              // Wait 1 second before showing popup
+              setTimeout(() => {
+                setLimitPopupType("blocks")
+                setLimitPopupCount({ current: totalBlocks, max: maxBlocksPerFlow })
+                setShowLimitPopup(true)
+              }, 1000)
             }
             setDraggingLogicType(null)
             return
@@ -852,7 +861,12 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
           toast.error("Plan limit reached")
         } else {
           toast.error(`You've reached the limit of ${maxBlocksPerFlow} blocks per flow. Upgrade to Premium for 30 blocks per flow.`)
-          setShowUpgradeModal(true)
+          // Wait 1 second before showing popup
+          setTimeout(() => {
+            setLimitPopupType("blocks")
+            setLimitPopupCount({ current: totalBlocks, max: maxBlocksPerFlow })
+            setShowLimitPopup(true)
+          }, 1000)
         }
         return
       }
@@ -910,7 +924,12 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
           toast.error("Plan limit reached")
         } else {
           toast.error(`You've reached the limit of ${maxBlocksPerFlow} blocks per flow. Upgrade to Premium for 30 blocks per flow.`)
-          setShowUpgradeModal(true)
+          // Wait 1 second before showing popup
+          setTimeout(() => {
+            setLimitPopupType("blocks")
+            setLimitPopupCount({ current: totalBlocks, max: maxBlocksPerFlow })
+            setShowLimitPopup(true)
+          }, 1000)
         }
         return
       }
@@ -1250,7 +1269,12 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
         toast.error("Plan limit reached")
       } else {
         toast.error(`You've reached the limit of ${maxBlocksPerFlow} blocks per flow. Upgrade to Premium for 30 blocks per flow.`)
-        setShowUpgradeModal(true)
+        // Wait 1 second before showing popup
+        setTimeout(() => {
+          setLimitPopupType("blocks")
+          setLimitPopupCount({ current: totalBlocksInFlow, max: maxBlocksPerFlow })
+          setShowLimitPopup(true)
+        }, 1000)
       }
       return
     }
@@ -2847,7 +2871,12 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
                   toast.error("Plan limit reached")
                 } else {
                   toast.error(`You've reached the limit of ${maxBlocksPerFlow} blocks per flow. Upgrade to Premium for 30 blocks per flow.`)
-                  setShowUpgradeModal(true)
+                  // Wait 1 second before showing popup
+                  setTimeout(() => {
+                    setLimitPopupType("blocks")
+                    setLimitPopupCount({ current: totalBlocks, max: maxBlocksPerFlow })
+                    setShowLimitPopup(true)
+                  }, 1000)
                 }
                 return
               }
@@ -2942,6 +2971,19 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
         <UpgradeModal
           onClose={() => setShowUpgradeModal(false)}
           currentPlan="free"
+        />
+      )}
+
+      {showLimitPopup && (
+        <UpgradeLimitPopup
+          limitType={limitPopupType}
+          currentCount={limitPopupCount.current}
+          maxCount={limitPopupCount.max}
+          onUpgrade={() => {
+            setShowLimitPopup(false)
+            setShowUpgradeModal(true)
+          }}
+          onClose={() => setShowLimitPopup(false)}
         />
       )}
       {showUploadModal && flow && (
@@ -3652,7 +3694,7 @@ function PreviewModal({
         )}
         
           <div className="w-full max-w-6xl mx-auto px-6 flex flex-col items-center justify-center min-h-full" style={{ paddingTop: '80px', paddingBottom: '80px' }}>
-          <div className="w-full flex flex-col" style={{ transform: 'scale(1.25)', maxWidth: '840px', gap: '2px' }}>
+          <div className="w-full flex flex-col" style={{ transform: 'scale(1.25)', maxWidth: '840px', gap: '10px' }}>
             {/* Display ALL components in order */}
             {allComponents.map((component, index) => {
               const isQuestion = ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(component.type)
@@ -3665,7 +3707,7 @@ function PreviewModal({
                     className="w-full mx-auto" 
                     style={{ maxWidth: '840px' }}
                   >
-                    <div className="relative group rounded-xl p-6 transition-all bg-card shadow-neumorphic-raised flex flex-col">
+                    <div className="relative group rounded-xl p-4 sm:p-6 transition-all bg-card shadow-neumorphic-raised flex flex-col">
                       <InteractiveQuestionComponent
                         key={currentPreviewNode.id}
                         component={component}

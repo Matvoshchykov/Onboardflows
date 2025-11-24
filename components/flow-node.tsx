@@ -213,7 +213,8 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
                     e.stopPropagation()
                     onUpgrade()
                   }}
-                  className="flex items-center gap-1 text-blue-600 dark:text-blue-400 underline font-medium text-xs whitespace-nowrap flex-shrink-0"
+                  className="flex items-center gap-1 underline font-medium text-xs whitespace-nowrap flex-shrink-0"
+                  style={{ color: '#3b82f6' }}
                 >
                   <Crown className="w-3 h-3" />
                   <span>Upgrade</span>

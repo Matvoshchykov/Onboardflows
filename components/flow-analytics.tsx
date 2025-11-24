@@ -667,7 +667,8 @@ export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsP
             </p>
             <button
               onClick={() => setShowUpgradeModal(true)}
-              className="w-full bg-primary text-primary-foreground py-3 px-6 rounded-lg font-medium shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all"
+              className="w-full py-3 px-6 rounded-lg font-medium shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-white"
+              style={{ backgroundColor: '#3b82f6' }}
             >
               Upgrade to Premium
             </button>

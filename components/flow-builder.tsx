@@ -7,6 +7,7 @@ import { FlowCanvas } from "./flow-canvas"
 import { ChatModal } from "./chat-modal"
 import { FlowLoading } from "./flow-loading"
 import { UpgradeModal } from "./upgrade-modal"
+import { UpgradeLimitPopup } from "./upgrade-limit-popup"
 import { loadAllFlows, createFlow, saveFlow, toggleFlowActive, getActiveFlow } from "@/lib/db/flows"
 import { isSupabaseConfigured } from "@/lib/supabase"
 import { toast } from "sonner"
@@ -46,6 +47,8 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
   const [selectedFlow, setSelectedFlow] = useState<Flow | null>(null)
   const [showChatModal, setShowChatModal] = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [showLimitPopup, setShowLimitPopup] = useState(false)
+  const [maxFlows, setMaxFlows] = useState(1)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
   const [hasCheckedActiveFlow, setHasCheckedActiveFlow] = useState(false)
@@ -206,13 +209,17 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
                   const membershipResponse = await fetch(`/api/check-membership?companyId=${companyId}`)
                   if (membershipResponse.ok) {
                     const { maxFlows: mFlows, membershipActive } = await membershipResponse.json()
+                    setMaxFlows(mFlows)
                     // Check if user has reached flow limit
                     if (flows.length >= mFlows) {
                       if (membershipActive) {
                         toast.error("Plan limit reached")
                       } else {
                         toast.error(`You've reached the limit of ${mFlows} flow${mFlows > 1 ? 's' : ''}. Upgrade to Premium for 3 flows.`)
-                        setShowUpgradeModal(true)
+                        // Wait 1 second before showing popup
+                        setTimeout(() => {
+                          setShowLimitPopup(true)
+                        }, 1000)
                       }
                       setShowChatModal(false)
                       return
@@ -242,6 +249,19 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
         <UpgradeModal
           onClose={() => setShowUpgradeModal(false)}
           currentPlan="free"
+        />
+      )}
+
+      {showLimitPopup && (
+        <UpgradeLimitPopup
+          limitType="flows"
+          currentCount={flows.length}
+          maxCount={maxFlows}
+          onUpgrade={() => {
+            setShowLimitPopup(false)
+            setShowUpgradeModal(true)
+          }}
+          onClose={() => setShowLimitPopup(false)}
         />
       )}
 

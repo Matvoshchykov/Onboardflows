@@ -685,7 +685,7 @@ export default function OnboardingFlowView() {
       )}
       
       <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 flex flex-col items-center justify-center min-h-full">
-        <div className="w-full flex flex-col" style={{ maxWidth: '840px', gap: '2px' }}>
+        <div className="w-full flex flex-col" style={{ maxWidth: '840px', gap: '10px' }}>
           {/* Display ALL components in order */}
           {allComponents.map((component, index) => {
             const isQuestion = ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(component.type)
