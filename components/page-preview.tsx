@@ -97,7 +97,7 @@ export function PagePreview({
                 } ${
                   dragOverIndex === index ? 'ring-2 ring-primary/50' : ''
                 } w-full flex flex-col justify-center overflow-visible`}
-                style={{ maxWidth: '840px', gap: isMobile ? '0' : undefined }}
+                style={{ maxWidth: '840px' }}
               >
                 {/* Drag handle - visible on hover */}
                 {!previewMode && !isMobile && onComponentDragStart && (
