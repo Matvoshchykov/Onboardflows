@@ -1,13 +1,15 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Download, TrendingUp, Users, CheckCircle2, Clock, TrendingDown, PieChart, Activity } from "lucide-react"
+import { Download, TrendingUp, Users, CheckCircle2, Clock, TrendingDown, PieChart, Activity, Lock } from "lucide-react"
 import { getFlowAnalytics, type AnalyticsData, type CompletedSessionData } from "@/lib/db/analytics"
 import type { Flow } from "./flow-builder"
 import { ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from "recharts"
+import { UpgradeModal } from "./upgrade-modal"
 
 type FlowAnalyticsProps = {
   flow: Flow
+  membershipActive?: boolean
 }
 
 // Connection colors matching flow canvas
@@ -31,12 +33,13 @@ const getNodeColor = (nodeId: string, flowNodes: Array<{ id: string; title: stri
   return CHART_COLORS[nodeIndex % CHART_COLORS.length]
 }
 
-export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
+export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsProps) {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [userNicknames, setUserNicknames] = useState<Record<string, string>>({})
   const [isMobile, setIsMobile] = useState(false)
   const [nodeVisitPage, setNodeVisitPage] = useState(0)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
   useEffect(() => {
     const checkMobile = () => {
@@ -51,6 +54,130 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
     async function loadAnalytics() {
       setIsLoading(true)
       try {
+        // For free users, show fully fake mock data
+        if (!membershipActive) {
+          // Generate complete fake analytics data with all components
+          const mockNodeTitles = flow.nodes.map(n => ({ id: n.id, title: n.title || 'Untitled' }))
+          
+          // Generate fake node visit stats
+          const mockNodeVisitStats: Record<string, { nodeTitle: string; visitCount: number; avgTimeSpent: number }> = {}
+          mockNodeTitles.forEach((node, idx) => {
+            mockNodeVisitStats[node.id] = {
+              nodeTitle: node.title,
+              visitCount: Math.floor(Math.random() * 30) + 10,
+              avgTimeSpent: Math.floor(Math.random() * 60) + 15
+            }
+          })
+          
+          // Generate fake sessions with paths and responses
+          const mockSessions: CompletedSessionData[] = []
+          const mockUserIds = ['user_001', 'user_002', 'user_003', 'user_004', 'user_005', 'user_006', 'user_007', 'user_008']
+          const mockNicknames: Record<string, string> = {
+            'user_001': 'John Doe',
+            'user_002': 'Jane Smith',
+            'user_003': 'Bob Johnson',
+            'user_004': 'Alice Williams',
+            'user_005': 'Charlie Brown',
+            'user_006': 'Diana Prince',
+            'user_007': 'Eve Adams',
+            'user_008': 'Frank Miller'
+          }
+          
+          for (let i = 0; i < 28; i++) {
+            const userId = mockUserIds[i % mockUserIds.length]
+            const sessionId = `session_${String(i + 1).padStart(3, '0')}`
+            const startTime = new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000)
+            const duration = Math.floor(Math.random() * 300) + 120
+            const completedTime = new Date(startTime.getTime() + duration * 1000)
+            
+            // Generate fake path (visit 3-6 nodes)
+            const pathLength = Math.floor(Math.random() * 4) + 3
+            const shuffledNodes = [...mockNodeTitles].sort(() => Math.random() - 0.5)
+            const path = shuffledNodes.slice(0, pathLength).map((node, idx) => ({
+              nodeId: node.id,
+              nodeTitle: node.title,
+              orderIndex: idx,
+              visitedAt: new Date(startTime.getTime() + idx * 30 * 1000).toISOString()
+            }))
+            
+            // Generate fake responses
+            const responses = path.slice(0, pathLength - 1).map((pathNode, idx) => {
+              const node = flow.nodes.find(n => n.id === pathNode.nodeId)
+              const components = node?.pageComponents || []
+              const questionComponent = Array.isArray(components) 
+                ? components.find((c: any) => ['multiple-choice', 'checkbox-multi', 'short-answer', 'scale-slider'].includes(c.type))
+                : null
+              
+              let answer: any = 'Sample Answer'
+              if (questionComponent?.type === 'multiple-choice') {
+                const options = questionComponent.config?.options || ['Option A', 'Option B', 'Option C']
+                answer = options[Math.floor(Math.random() * options.length)]
+              } else if (questionComponent?.type === 'checkbox-multi') {
+                const options = questionComponent.config?.options || ['Option A', 'Option B', 'Option C']
+                answer = options.slice(0, Math.floor(Math.random() * options.length) + 1)
+              } else if (questionComponent?.type === 'scale-slider') {
+                answer = Math.floor(Math.random() * 100) + 1
+              }
+              
+              return {
+                nodeId: pathNode.nodeId,
+                nodeTitle: pathNode.nodeTitle,
+                questionType: questionComponent?.type || 'short-answer',
+                answer: answer,
+                answeredAt: new Date(startTime.getTime() + (idx + 1) * 30 * 1000).toISOString()
+              }
+            })
+            
+            mockSessions.push({
+              userId,
+              sessionId,
+              startedAt: startTime.toISOString(),
+              completedAt: completedTime.toISOString(),
+              duration,
+              path,
+              responses
+            })
+          }
+          
+          setUserNicknames(mockNicknames)
+          
+          // Generate fake path analytics
+          const mockPathFrequency = new Map<string, number>()
+          mockSessions.forEach(session => {
+            const pathKey = session.path.map(p => p.nodeId).join('→')
+            mockPathFrequency.set(pathKey, (mockPathFrequency.get(pathKey) || 0) + 1)
+          })
+          
+          // Get most common path
+          const mostCommonPathKey = Array.from(mockPathFrequency.entries())
+            .sort((a, b) => b[1] - a[1])[0]?.[0] || ''
+          const mostCommonPath = mostCommonPathKey
+            ? mostCommonPathKey.split('→').map(id => {
+                const node = mockNodeTitles.find(n => n.id === id)
+                return node ? { nodeId: node.id, nodeTitle: node.title } : null
+              }).filter(Boolean) as Array<{ nodeId: string; nodeTitle: string }>
+            : []
+          
+          const mockAnalytics: AnalyticsData = {
+            totalSessions: 42,
+            completedSessions: 28,
+            completionRate: 66.7,
+            dropOffRate: 33.3,
+            averageDuration: 245,
+            sessions: mockSessions,
+            pathAnalytics: {
+              mostCommonPath,
+              pathFrequency: mockPathFrequency
+            },
+            answerDistribution: {},
+            nodeVisitStats: mockNodeVisitStats,
+            videoViewingStats: {}
+          }
+          setAnalytics(mockAnalytics)
+          setIsLoading(false)
+          return
+        }
+
         const nodeTitles = flow.nodes.map(n => ({ id: n.id, title: n.title || 'Untitled' }))
         const data = await getFlowAnalytics(flow.id, nodeTitles)
         setAnalytics(data)
@@ -77,7 +204,7 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
       }
     }
     loadAnalytics()
-  }, [flow.id, flow.nodes])
+  }, [flow.id, flow.nodes, membershipActive])
 
   // Prepare chart data - filter out deleted nodes
   const nodeVisitChartData = useMemo(() => {
@@ -211,22 +338,29 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
   return (
     <div className="h-full w-full bg-background overflow-y-auto p-4 relative">
       {/* Export Button - Top Right, aligned with toggle buttons in header */}
-      <button
-        onClick={exportToCSV}
-        disabled={!analytics || analytics.sessions.length === 0}
-        className="fixed right-4 z-50 font-medium transition-all duration-300 flex items-center justify-center shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed bg-primary text-primary-foreground touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-        style={{
-          top: 'calc(3.5rem + 8px - 50px)',
-          minWidth: isMobile ? '100px' : '140px',
-          minHeight: isMobile ? '44px' : '32px',
-          padding: isMobile ? '0 16px' : '0 12px',
-          fontSize: isMobile ? '0.75rem' : '0.827rem',
-          borderRadius: '10px'
-        }}
-      >
-        <Download className={isMobile ? 'w-4 h-4 mr-2' : 'w-4 h-4 mr-1.5'} />
-        Export CSV
-      </button>
+      {membershipActive && (
+        <button
+          onClick={exportToCSV}
+          disabled={!analytics || analytics.sessions.length === 0}
+          className="fixed right-4 z-50 font-medium transition-all duration-300 flex items-center justify-center shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{
+            top: 'calc(3.5rem + 8px - 50px)',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            color: '#10b981',
+            minWidth: isMobile ? '100px' : '140px',
+            minHeight: isMobile ? '44px' : '32px',
+            padding: isMobile ? '0 16px' : '0 12px',
+            fontSize: isMobile ? '0.75rem' : '0.827rem',
+            borderRadius: '10px'
+          }}
+        >
+          <Download className={isMobile ? 'w-4 h-4 mr-2' : 'w-4 h-4 mr-1.5'} />
+          Export CSV
+        </button>
+      )}
+
+      {/* Blurred mock data for free users - show fake data but blurred */}
+      <div className={!membershipActive ? 'blur-sm' : ''}>
       
       <div className="max-w-7xl mx-auto space-y-4 pt-8">
 
@@ -520,6 +654,33 @@ export function FlowAnalytics({ flow }: FlowAnalyticsProps) {
           </div>
         )}
       </div>
+      </div>
+
+      {/* Free plan overlay - lock overlay on top of blurred data */}
+      {!membershipActive && (
+        <div className="absolute inset-0 z-50 bg-background/60 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+          <div className="bg-card rounded-xl p-8 shadow-neumorphic-raised border border-border max-w-md mx-4 text-center pointer-events-auto">
+            <Lock className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+            <h3 className="text-xl font-bold mb-2 text-foreground">Advanced Analytics</h3>
+            <p className="text-muted-foreground mb-6">
+              You need Premium to access advanced analytics and export your data.
+            </p>
+            <button
+              onClick={() => setShowUpgradeModal(true)}
+              className="w-full bg-primary text-primary-foreground py-3 px-6 rounded-lg font-medium shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all"
+            >
+              Upgrade to Premium
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showUpgradeModal && (
+        <UpgradeModal
+          onClose={() => setShowUpgradeModal(false)}
+          currentPlan="free"
+        />
+      )}
     </div>
   )
 }

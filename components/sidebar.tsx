@@ -54,11 +54,12 @@ export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, isCol
     <>
       <div
         className={cn(
-          "relative flex h-screen flex-col bg-neutral-50 dark:bg-neutral-900 transition-all duration-300 ease-in-out border-r border-neutral-200 dark:border-neutral-800 z-30",
+          "relative flex h-screen flex-col bg-neutral-50 dark:bg-neutral-900 transition-all duration-300 ease-in-out border-r border-gray-400 dark:border-gray-500 z-30",
           isMobile 
             ? "w-16 absolute inset-y-0 left-0 shadow-lg"
             : "w-16"
         )}
+        style={{ borderRightWidth: '1px' }}
       >
 
       {showNewIndicatorPopup && (

@@ -6,6 +6,7 @@ import { Sidebar } from "./sidebar"
 import { FlowCanvas } from "./flow-canvas"
 import { ChatModal } from "./chat-modal"
 import { FlowLoading } from "./flow-loading"
+import { UpgradeModal } from "./upgrade-modal"
 import { loadAllFlows, createFlow, saveFlow, toggleFlowActive, getActiveFlow } from "@/lib/db/flows"
 import { isSupabaseConfigured } from "@/lib/supabase"
 import { toast } from "sonner"
@@ -44,6 +45,7 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
   const [flows, setFlows] = useState<Flow[]>([])
   const [selectedFlow, setSelectedFlow] = useState<Flow | null>(null)
   const [showChatModal, setShowChatModal] = useState(false)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
   const [hasCheckedActiveFlow, setHasCheckedActiveFlow] = useState(false)
@@ -164,6 +166,7 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
       <div className="flex-1 flex flex-col min-w-0">
         <FlowCanvas 
           flow={selectedFlow}
+          flows={flows}
           onUpdateFlow={(updatedFlow) => {
             // Update local state only (no auto-save to database)
             setFlows(flows.map(f => f.id === updatedFlow.id ? updatedFlow : f))
@@ -202,10 +205,15 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
                   const { companyId } = await companyIdResponse.json()
                   const membershipResponse = await fetch(`/api/check-membership?companyId=${companyId}`)
                   if (membershipResponse.ok) {
-                    const { maxFlows: mFlows } = await membershipResponse.json()
+                    const { maxFlows: mFlows, membershipActive } = await membershipResponse.json()
                     // Check if user has reached flow limit
                     if (flows.length >= mFlows) {
-                      toast.error(`You've reached the limit of ${mFlows} flow${mFlows > 1 ? 's' : ''}. Upgrade to Premium for 3 flows.`)
+                      if (membershipActive) {
+                        toast.error("Plan limit reached")
+                      } else {
+                        toast.error(`You've reached the limit of ${mFlows} flow${mFlows > 1 ? 's' : ''}. Upgrade to Premium for 3 flows.`)
+                        setShowUpgradeModal(true)
+                      }
                       setShowChatModal(false)
                       return
                     }
@@ -227,6 +235,13 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
               toast.error(error instanceof Error ? error.message : 'Failed to create flow')
             }
           }}
+        />
+      )}
+
+      {showUpgradeModal && (
+        <UpgradeModal
+          onClose={() => setShowUpgradeModal(false)}
+          currentPlan="free"
         />
       )}
 

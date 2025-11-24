@@ -28,6 +28,7 @@ export default function OnboardingFlowView() {
   const [isMobile, setIsMobile] = useState(false)
   const [watchedVideos, setWatchedVideos] = useState<Set<string>>(new Set())
   const [videoViewingTimes, setVideoViewingTimes] = useState<Record<string, number>>({})
+  const [membershipActive, setMembershipActive] = useState(false)
 
   // Detect mobile
   useEffect(() => {
@@ -39,7 +40,7 @@ export default function OnboardingFlowView() {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
-  // Load user ID only (access level is checked server-side in layout)
+  // Load user ID and membership status
   useEffect(() => {
     async function loadUserData() {
       try {
@@ -48,6 +49,25 @@ export default function OnboardingFlowView() {
         const userIdData = await userIdResponse.json()
         if (userIdData.userId) {
           setUserId(userIdData.userId)
+          
+          // Check membership status
+          try {
+            const pathParts = window.location.pathname.split('/')
+            const expId = pathParts[pathParts.indexOf('experiences') + 1]
+            if (expId) {
+              const companyIdResponse = await fetch(`/api/get-company-id?experienceId=${expId}`)
+              if (companyIdResponse.ok) {
+                const { companyId } = await companyIdResponse.json()
+                const membershipResponse = await fetch(`/api/check-membership?companyId=${companyId}`)
+                if (membershipResponse.ok) {
+                  const { membershipActive: active } = await membershipResponse.json()
+                  setMembershipActive(active)
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error loading membership:', error)
+          }
         }
       } catch (error) {
         console.error('Error loading user data:', error)
@@ -423,10 +443,10 @@ export default function OnboardingFlowView() {
     setCurrentAnswer(value)
   }
 
-  // Start session when flow loads
+  // Start session when flow loads (only for premium users)
   useEffect(() => {
     async function initializeSession() {
-      if (!flow || !userId || sessionId) return
+      if (!flow || !userId || sessionId || !membershipActive) return
       
       try {
         // Clear any previous A/B test decisions for this flow when starting a new session
@@ -442,7 +462,7 @@ export default function OnboardingFlowView() {
           keysToRemove.forEach(key => sessionStorage.removeItem(key))
         }
         
-        // Start session if flow is active
+        // Start session if flow is active and user has premium
         const { startFlowSession } = await import('@/lib/db/sessions')
         const session = await startFlowSession(userId, flow.id)
         if (session) {
@@ -457,15 +477,15 @@ export default function OnboardingFlowView() {
         console.error('Error starting session:', error)
       }
     }
-    if (flow && userId && currentNodeId && !sessionId) {
+    if (flow && userId && currentNodeId && !sessionId && membershipActive) {
       initializeSession()
     }
-  }, [flow, userId, currentNodeId, sessionId])
+  }, [flow, userId, currentNodeId, sessionId, membershipActive])
 
-  // Track path when moving to next node (but don't save responses here)
+  // Track path when moving to next node (but don't save responses here) - only for premium users
   useEffect(() => {
     async function trackNavigation() {
-      if (!sessionId || !currentNodeId || !flow) return
+      if (!sessionId || !currentNodeId || !flow || !membershipActive) return
       
       try {
         // Find current node index in path
@@ -482,14 +502,14 @@ export default function OnboardingFlowView() {
         console.error('Error tracking navigation:', error)
       }
     }
-    if (currentNodeId && sessionId) {
+    if (currentNodeId && sessionId && membershipActive) {
       trackNavigation()
     }
-  }, [currentNodeId, sessionId, flow]) // Removed currentAnswer from dependencies
+  }, [currentNodeId, sessionId, flow, membershipActive]) // Removed currentAnswer from dependencies
 
   const handleNext = async () => {
-    // Save the answer before moving to next node
-    if (sessionId && currentNodeId && currentAnswer !== null && currentAnswer !== undefined) {
+    // Save the answer before moving to next node (only for premium users)
+    if (sessionId && currentNodeId && currentAnswer !== null && currentAnswer !== undefined && membershipActive) {
       try {
         const currentNode = getCurrentNode()
         if (currentNode) {
@@ -513,8 +533,8 @@ export default function OnboardingFlowView() {
       setCurrentAnswer(null)
       setWatchedVideos(new Set()) // Reset watched videos for new node
     } else {
-      // Flow complete - show success message and complete session
-      if (sessionId) {
+      // Flow complete - show success message and complete session (only for premium users)
+      if (sessionId && membershipActive) {
         try {
           const { completeFlowSession } = await import('@/lib/db/sessions')
           await completeFlowSession(sessionId)

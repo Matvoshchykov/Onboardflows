@@ -2,15 +2,15 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect, memo } from "react"
 import { clearFlowCache } from "@/lib/db/flows"
-import { FileText, Plus, Upload, X, Play, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ArrowUpDown, Eye, Trash2, Check, Minus, AlertTriangle, Crown } from 'lucide-react'
+import { Plus, Upload, X, Play, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ArrowUpDown, Eye, Check, Minus, AlertTriangle } from 'lucide-react'
 import { toast } from "sonner"
 import { toggleFlowActive } from "@/lib/db/flows"
 import { useTheme } from "./theme-provider"
 import type { Flow, FlowNode } from "./flow-builder"
 import { LogicBlockLibrary } from "./logic-block-library"
-import { PagePreview, ComponentRenderer } from "./page-preview"
+import { PagePreview } from "./page-preview"
 import { FlowAnalytics } from "./flow-analytics"
-import { ComponentLibrary } from "./component-library"
+
 import type { PageComponent, ComponentType } from "./page-editor"
 import { startFlowSession, updateSessionStep, completeFlowSession } from "@/lib/db/sessions"
 import { saveResponse } from "@/lib/db/responses"
@@ -22,25 +22,13 @@ import { deleteNodePaths } from "@/lib/db/paths"
 import { useRouter } from "next/navigation"
 import { UploadFlowModal } from "./upload-flow-modal"
 import { UpgradeModal } from "./upgrade-modal"
+import { TierInfo } from "./tier-info"
+import { FlowNodeComponent } from "./flow-node"
 
 type PortPoint = { x: number; y: number }
 
 // Flow block colors - same as analytics for consistency
-const FLOW_BLOCK_COLORS = [
-  "#10b981", // green
-  "#3b82f6", // blue
-  "#f59e0b", // amber
-  "#ef4444", // red
-  "#8b5cf6", // purple
-  "#ec4899", // pink
-  "#06b6d4", // cyan
-  "#14b8a6", // teal
-]
 
-// Get unique color for a flow block based on its index
-const getFlowBlockColor = (index: number): string => {
-  return FLOW_BLOCK_COLORS[index % FLOW_BLOCK_COLORS.length]
-}
 
 export type LogicBlock = {
   id: string
@@ -61,6 +49,7 @@ type FlowCanvasProps = {
   onUpdateFlow: (flow: Flow) => void
   onSaveToDatabase?: (flow: Flow) => Promise<void>
   experienceId?: string | null
+  flows?: Flow[]
 }
 
 // Helper function to normalize pageComponents to array format (handles both old and new formats)
@@ -81,7 +70,7 @@ function normalizePageComponents(pageComponents: any): PageComponent[] {
   return []
 }
 
-export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId }: FlowCanvasProps) {
+export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId, flows = [] }: FlowCanvasProps) {
   const [viewMode, setViewMode] = useState<"create" | "analytics">("create")
   const router = useRouter()
   const { theme } = useTheme()
@@ -457,6 +446,21 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
 
     const handleGlobalMouseUp = (e: MouseEvent) => {
       if (draggingLogicType && canvasRef.current) {
+        // Check block limit - enforce strictly
+        if (flow) {
+          const totalBlocks = flow.nodes.length + (flow.logicBlocks?.length || 0)
+          if (totalBlocks >= maxBlocksPerFlow) {
+            if (membershipActive) {
+              toast.error("Plan limit reached")
+            } else {
+              toast.error(`You've reached the limit of ${maxBlocksPerFlow} blocks per flow. Upgrade to Premium for 30 blocks per flow.`)
+              setShowUpgradeModal(true)
+            }
+            setDraggingLogicType(null)
+            return
+          }
+        }
+        
         const rect = canvasRef.current.getBoundingClientRect()
         const worldPos = {
           x: (e.clientX - rect.left - canvasOffset.x) / zoom,
@@ -483,7 +487,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
       window.removeEventListener('mousemove', handleGlobalMouseMove)
       window.removeEventListener('mouseup', handleGlobalMouseUp)
     }
-  }, [draggingLogicType, logicBlocks, handleLogicBlocksUpdate, canvasOffset, zoom])
+  }, [draggingLogicType, logicBlocks, handleLogicBlocksUpdate, canvasOffset, zoom, flow, maxBlocksPerFlow, membershipActive])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -841,11 +845,17 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
       
       if (!flow) return
       
-      // Check flow limit (count all flows, not just nodes in current flow)
-      // For now, we'll check the total nodes + logic blocks in current flow
+      // Check block limit - enforce strictly
       const totalBlocks = flow.nodes.length + (flow.logicBlocks?.length || 0)
-      // Note: We need to check total flows across all flows, but for now we'll check per-flow blocks
-      // The actual flow limit should be checked when creating new flows
+      if (totalBlocks >= maxBlocksPerFlow) {
+        if (membershipActive) {
+          toast.error("Plan limit reached")
+        } else {
+          toast.error(`You've reached the limit of ${maxBlocksPerFlow} blocks per flow. Upgrade to Premium for 30 blocks per flow.`)
+          setShowUpgradeModal(true)
+        }
+        return
+      }
       
       const sourceNode = flow.nodes.find(n => n.id === nodeId)
       if (!sourceNode) return
@@ -896,8 +906,10 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
       // Check block limit
       const totalBlocks = flow.nodes.length + (flow.logicBlocks?.length || 0)
       if (totalBlocks >= maxBlocksPerFlow) {
-        toast.error(`You've reached the limit of ${maxBlocksPerFlow} blocks per flow. ${membershipActive ? '' : 'Upgrade to Premium for 30 blocks per flow.'}`)
-        if (!membershipActive) {
+        if (membershipActive) {
+          toast.error("Plan limit reached")
+        } else {
+          toast.error(`You've reached the limit of ${maxBlocksPerFlow} blocks per flow. Upgrade to Premium for 30 blocks per flow.`)
           setShowUpgradeModal(true)
         }
         return
@@ -1234,8 +1246,10 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
     // Check block limit per flow based on membership
     const totalBlocksInFlow = flow.nodes.length + (flow.logicBlocks?.length || 0)
     if (totalBlocksInFlow >= maxBlocksPerFlow) {
-      toast.error(`You've reached the limit of ${maxBlocksPerFlow} blocks per flow. ${membershipActive ? '' : 'Upgrade to Premium for 30 blocks per flow.'}`)
-      if (!membershipActive) {
+      if (membershipActive) {
+        toast.error("Plan limit reached")
+      } else {
+        toast.error(`You've reached the limit of ${maxBlocksPerFlow} blocks per flow. Upgrade to Premium for 30 blocks per flow.`)
         setShowUpgradeModal(true)
       }
       return
@@ -1723,8 +1737,8 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
   if (viewMode === "analytics" && flow) {
   return (
     <>
-        <header className="bg-card px-2 sm:px-4 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 border-b border-border shadow-neumorphic-subtle relative">
-          <div className="flex items-center gap-3">
+        <header className="bg-card px-2 sm:px-4 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 shadow-neumorphic-subtle relative border-b border-gray-400 dark:border-gray-500" style={{ borderBottomWidth: '1px' }}>
+          <div className="flex items-center gap-3 flex-1">
             <div className="relative flex items-center gap-2">
               <input
                 type="text"
@@ -1737,12 +1751,6 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
                 }}
                 className="text-lg font-bold bg-card shadow-neumorphic-inset rounded-xl px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 text-foreground placeholder:text-muted-foreground"
               />
-              <button
-                onClick={() => setShowUpgradeModal(true)}
-                className="text-sm italic text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              >
-                upgrade
-              </button>
               {flow && (
                 <button
                   onClick={() => {
@@ -1772,41 +1780,55 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
               )}
             </div>
           </div>
-          {/* Mode Toggle Buttons - Right side - Fixed position to match create view */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center" style={{ gap: '5px', marginRight: '10px' }}>
+          {/* Mode Toggle Buttons - Centered */}
+          <div className="flex items-center justify-center flex-1">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setViewMode("create")}
-                className="text-[12px] text-muted-foreground hover:text-foreground transition-colors"
-                style={{ minWidth: '105px', marginLeft: '10px' }}
+                className="text-[12px] px-4 py-2 rounded-lg transition-all duration-300 text-muted-foreground hover:text-foreground"
+                style={{ minWidth: '105px' }}
               >
                 Flow Creation
               </button>
               <button
                 onClick={() => setViewMode("analytics")}
-                className="text-[12px] text-foreground"
+                className="text-[12px] px-4 py-2 rounded-lg transition-all duration-300 bg-card shadow-neumorphic-inset text-foreground"
                 style={{ minWidth: '105px' }}
               >
                 Data Analytics
               </button>
             </div>
-            {/* Placeholder for Save Changes button to maintain consistent spacing */}
+          </div>
+          {/* Right side - Save Changes button placeholder */}
+          <div className="flex items-center gap-3 flex-1 justify-end">
             {onSaveToDatabase && flow && (
               <div style={{ minWidth: '140px', minHeight: '32px' }} />
             )}
           </div>
         </header>
-        <FlowAnalytics flow={flow} />
+        <FlowAnalytics flow={flow} membershipActive={membershipActive} />
       </>
     )
   }
 
   return (
     <>
-        <header className="bg-card px-2 sm:px-4 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 border-b border-border shadow-neumorphic-subtle relative">
+        <header className="bg-card px-2 sm:px-4 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 shadow-neumorphic-subtle relative border-b border-gray-400 dark:border-gray-500" style={{ borderBottomWidth: '1px' }}>
         <div className="flex items-center gap-3 flex-1">
           <div className="relative flex items-center gap-2">
             {/* Enable/Disable button - above title input on the right */}
+            <input
+              type="text"
+              value={flowTitle}
+              onChange={(e) => {
+                setFlowTitle(e.target.value)
+                if (flow) {
+                  onUpdateFlow({ ...flow, title: e.target.value })
+                }
+              }}
+              className="text-lg font-bold bg-card shadow-neumorphic-inset rounded-xl px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 text-foreground placeholder:text-muted-foreground"
+            />
+            {/* Enable/Disable button - absolute right in title input */}
             {flow && (
               <button
                 onClick={() => {
@@ -1821,7 +1843,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
                     setShowUploadModal(true)
                   }
                 }}
-                className="w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-neumorphic-raised hover:shadow-neumorphic-pressed z-10"
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-neumorphic-raised hover:shadow-neumorphic-pressed z-10"
                 style={{
                   backgroundColor: flow.status === "Live" ? '#ef4444' : '#10b981',
                 }}
@@ -1834,38 +1856,38 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
                 )}
               </button>
             )}
-            <input
-              type="text"
-              value={flowTitle}
-              onChange={(e) => {
-                setFlowTitle(e.target.value)
-                if (flow) {
-                  onUpdateFlow({ ...flow, title: e.target.value })
-                }
-              }}
-              className="text-lg font-bold bg-card shadow-neumorphic-inset rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-300 text-foreground placeholder:text-muted-foreground"
-            />
           </div>
         </div>
         
-        <div className="flex items-center gap-3 flex-1 justify-end">
-          {/* Mode Toggle Buttons - Right side next to Save Changes */}
-          <div className="flex items-center" style={{ gap: '5px', marginRight: '10px' }}>
+        {/* Mode Toggle Buttons - Centered */}
+        <div className="flex items-center justify-center flex-1">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setViewMode("create")}
-              className="text-[12px] text-foreground"
-              style={{ minWidth: '105px', marginLeft: '10px' }}
+              className={`text-[12px] px-4 py-2 rounded-lg transition-all duration-300 ${
+                viewMode === "create"
+                  ? "bg-card shadow-neumorphic-inset text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              style={{ minWidth: '105px' }}
             >
               Flow Creation
             </button>
             <button
               onClick={() => setViewMode("analytics")}
-              className="text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+              className={`text-[12px] px-4 py-2 rounded-lg transition-all duration-300 ${
+                viewMode === "analytics"
+                  ? "bg-card shadow-neumorphic-inset text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
               style={{ minWidth: '105px' }}
             >
               Data Analytics
             </button>
           </div>
+        </div>
+        
+        <div className="flex items-center gap-3 flex-1 justify-end">
           {/* Save Changes Button */}
           {onSaveToDatabase && flow && (
             <button
@@ -1896,7 +1918,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
               style={{
                 backgroundColor: hasUnsavedChanges ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)',
                 color: hasUnsavedChanges ? '#f59e0b' : '#10b981',
-                minWidth: isMobile ? '100px' : '140px',
+                minWidth: isMobile ? '100px' : '210px',
                 minHeight: isMobile ? '44px' : '32px',
                 padding: isMobile ? '0 16px' : '0 12px',
                 fontSize: isMobile ? '0.75rem' : '0.827rem',
@@ -1921,7 +1943,10 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
                   <span>Unsaved changes</span>
                 </>
               ) : (
-                <span className="text-center w-full">All saved</span>
+                <>
+                  <Check className="w-4 h-4 mr-2" />
+                  <span>All saved</span>
+                </>
               )}
             </button>
           )}
@@ -1929,52 +1954,6 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Plan Limitation Progress Bar - Top Left (only show for premium plans) */}
-        {membershipActive && (
-          <div className="absolute top-4 left-4 z-20 bg-card rounded-xl p-4 shadow-neumorphic-raised min-w-[200px]">
-            <div className="text-xs font-semibold mb-3 text-muted-foreground">
-              Premium Plan
-            </div>
-            
-            {/* Flow Progress */}
-            <div className="mb-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-muted-foreground">Flows</span>
-                <span className="text-xs text-muted-foreground">
-                  {/* TODO: Get total flows count from API */}
-                  1 / {maxFlows}
-                </span>
-              </div>
-              <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-blue-500 transition-all duration-300 rounded-full"
-                  style={{ 
-                    width: `${Math.min(100, (1 / maxFlows) * 100)}%` 
-                  }}
-                />
-              </div>
-            </div>
-            
-            {/* Block Progress */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-muted-foreground">Blocks</span>
-                <span className="text-xs text-muted-foreground">
-                  {flow ? (flow.nodes.length + (flow.logicBlocks?.length || 0)) : 0} / {maxBlocksPerFlow}
-                </span>
-              </div>
-              <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-green-500 transition-all duration-300 rounded-full"
-                  style={{ 
-                    width: `${Math.min(100, ((flow ? (flow.nodes.length + (flow.logicBlocks?.length || 0)) : 0) / maxBlocksPerFlow) * 100)}%` 
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
         <div
           ref={canvasRef}
             className={`flex-1 bg-background relative overflow-hidden touch-none ${
@@ -1994,6 +1973,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
+          <TierInfo flows={flows} selectedFlow={flow} />
           {/* Mobile Controls - Floating buttons */}
           {isMobile && (
             <div className="absolute bottom-4 right-4 z-50 flex flex-col gap-2">
@@ -2266,396 +2246,75 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
           >
             {/* Flow blocks */}
             {flow.nodes.map((node, nodeIndex) => {
-              const hasConnection = node.connections.length > 0
               // Pre-calculate expensive operations once per render cycle
               const isConnectedAsTarget = flow.nodes.some(n => n.connections.includes(node.id)) || logicBlocks.some(b => b.connections.includes(node.id))
               const incomingColor = getIncomingColorForNode(node.id)
-              const blockColor = getFlowBlockColor(nodeIndex)
-              
-              const components = normalizePageComponents(node.pageComponents)
               
               return (
-                <div
+                <FlowNodeComponent
                   key={node.id}
-                  className={`node-card absolute ${selectedNodeId === node.id ? 'ring-2 ring-primary/50 rounded-xl' : ''}`}
-                  style={{
-                    left: node.position.x,
-                    top: node.position.y,
-                    zIndex: draggingNodeId === node.id ? 20 : 10,
-                    cursor: draggingNodeId === node.id ? 'grabbing' : 'grab',
-                  }}
-                  onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
-                  ref={(el) => {
-                    if (el) {
-                      // Only measure the card height, not including components section
-                      const card = el.querySelector('.flow-block-card')
-                      if (card) {
-                        const height = (card as HTMLElement).offsetHeight
-                      setFlowNodeSizes((prev) =>
-                        prev[node.id] === height ? prev : { ...prev, [node.id]: height }
-                      )
+                  node={node}
+                  index={nodeIndex}
+                  selected={selectedNodeId === node.id}
+                  dragging={draggingNodeId === node.id}
+                  isConnectedAsTarget={isConnectedAsTarget}
+                  incomingColor={incomingColor}
+                  isMobile={isMobile}
+                  theme={theme}
+                  collapsed={!!collapsedComponents[node.id]}
+                  showComponentLibrary={showComponentLibraryForNode === node.id}
+                  onMouseDown={handleNodeMouseDown}
+                  onStartConnection={handleStartConnection}
+                  onEndConnection={handleEndConnection}
+                  onPreview={(e) => {
+                    e.stopPropagation()
+                    // Clear A/B test decisions when starting a new preview session
+                    if (typeof window !== 'undefined' && flow) {
+                      const keysToRemove: string[] = []
+                      for (let i = 0; i < sessionStorage.length; i++) {
+                        const key = sessionStorage.key(i)
+                        if (key && key.startsWith(`ab-test-${flow.id}-`)) {
+                          keysToRemove.push(key)
+                        }
                       }
+                      keysToRemove.forEach(key => sessionStorage.removeItem(key))
+                    }
+                    // Find the node in flow.nodes and set preview to show that node
+                    const nodeIndex = flow.nodes.findIndex(n => n.id === node.id)
+                    if (nodeIndex !== -1) {
+                      setPreviewClickedNodeId(node.id) // Track the clicked node
+                      setPreviewNodeIndex(nodeIndex) // Start at the clicked node
+                      setShowPreview(true)
                     }
                   }}
-                >
-                  <div className="flow-block-card bg-card rounded-xl p-5 w-[300px] hover:shadow-neumorphic-pressed transition-all duration-300 shadow-neumorphic-raised relative">
-                    {/* Input port: vertically centered on the card only; grey when unconnected, colored when connected */}
-                  <div 
-                    className="connection-port absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full z-40 hover:scale-150 transition-transform cursor-crosshair"
-                    style={{
-                      backgroundColor: isConnectedAsTarget ? (incomingColor ?? "#10b981") : "var(--muted-foreground)",
-                      borderColor: isConnectedAsTarget ? (incomingColor ?? "#10b981") : "var(--muted-foreground)",
-                      borderWidth: "2px",
-                    }}
-                      title="Connection point"
-                      onMouseUp={(e) => handleEndConnection(e, node.id)}
-                    />
-                  
-                    {/* Eye button for preview - top right */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        // Clear A/B test decisions when starting a new preview session
-                        if (typeof window !== 'undefined' && flow) {
-                          const keysToRemove: string[] = []
-                          for (let i = 0; i < sessionStorage.length; i++) {
-                            const key = sessionStorage.key(i)
-                            if (key && key.startsWith(`ab-test-${flow.id}-`)) {
-                              keysToRemove.push(key)
-                            }
-                          }
-                          keysToRemove.forEach(key => sessionStorage.removeItem(key))
-                        }
-                        // Find the node in flow.nodes and set preview to show that node
-                        const nodeIndex = flow.nodes.findIndex(n => n.id === node.id)
-                        if (nodeIndex !== -1) {
-                          setPreviewClickedNodeId(node.id) // Track the clicked node
-                          setPreviewNodeIndex(nodeIndex) // Start at the clicked node
-                          setShowPreview(true)
-                        }
-                      }}
-                      onTouchStart={(e) => e.stopPropagation()}
-                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all duration-300 text-muted-foreground hover:text-foreground z-10 touch-manipulation"
-                      style={{
-                        minWidth: isMobile ? '44px' : 'auto',
-                        minHeight: isMobile ? '44px' : 'auto',
-                        touchAction: 'manipulation'
-                      }}
-                      title="Preview this page"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    
-                    <div className="flex items-start gap-3 mb-4">
-                      <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center flex-shrink-0 shadow-neumorphic-subtle p-2">
-                        <FileText className="w-5 h-5" />
-                      </div>
-                      <div className="flex-1 pr-8">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="relative flex-1">
-                            <h3 
-                              className="font-semibold text-sm cursor-text hover:opacity-80 transition-opacity"
-                              style={{ color: blockColor, visibility: editingNodeTitle === node.id ? 'hidden' : 'visible' }}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setEditingNodeTitle(node.id)
-                                setEditingNodeTitleValue(node.title)
-                              }}
-                            >
-                              {node.title}
-                            </h3>
-                            {editingNodeTitle === node.id && (
-                              <input
-                                type="text"
-                                value={editingNodeTitleValue}
-                                onChange={(e) => setEditingNodeTitleValue(e.target.value)}
-                                onBlur={() => {
-                                  if (editingNodeTitleValue.trim() && flow) {
-                                    const updatedNodes = flow.nodes.map(n =>
-                                      n.id === node.id ? { ...n, title: editingNodeTitleValue.trim() } : n
-                                    )
-                                    onUpdateFlow({ ...flow, nodes: updatedNodes })
-                                  }
-                                  setEditingNodeTitle(null)
-                                  setEditingNodeTitleValue("")
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault()
-                                    if (editingNodeTitleValue.trim() && flow) {
-                                      const updatedNodes = flow.nodes.map(n =>
-                                        n.id === node.id ? { ...n, title: editingNodeTitleValue.trim() } : n
-                                      )
-                                      onUpdateFlow({ ...flow, nodes: updatedNodes })
-                                    }
-                                    setEditingNodeTitle(null)
-                                    setEditingNodeTitleValue("")
-                                  } else if (e.key === 'Escape') {
-                                    setEditingNodeTitle(null)
-                                    setEditingNodeTitleValue("")
-                                  }
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="font-semibold text-sm bg-transparent border-none focus:outline-none absolute left-0 top-0 w-full caret-current"
-                                style={{ color: blockColor }}
-                                autoFocus
-                              />
-                            )}
-                          </div>
-                          {/* Upgrade button - beside title */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setShowUpgradeModal(true)
-                            }}
-                            className="flex items-center gap-1 text-blue-600 dark:text-blue-400 underline font-medium text-xs whitespace-nowrap flex-shrink-0"
-                          >
-                            <Crown className="w-3 h-3" />
-                            <span>Upgrade</span>
-                          </button>
-                        </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          {node.components} Components / {node.completion}% Complete
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Output port: always visible on all blocks - centered on card only */}
-                    <div
-                      className="connection-port absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 rounded-full z-40 hover:scale-150 transition-transform cursor-crosshair touch-manipulation"
-                      style={{
-                        backgroundColor: hasConnection ? "#10b981" : "var(--muted-foreground)",
-                        borderColor: hasConnection ? "#10b981" : "var(--muted-foreground)",
-                        borderWidth: "2px",
-                        width: isMobile ? '44px' : '12px',
-                        height: isMobile ? '44px' : '12px',
-                        touchAction: 'manipulation'
-                      }}
-                      title="Connect to another block"
-                      onMouseDown={(e) => {
-                        e.stopPropagation()
-                        handleStartConnection(e, node.id)
-                      }}
-                      onTouchStart={(e) => {
-                        e.stopPropagation()
-                        const touch = e.touches[0]
-                        const syntheticEvent = {
-                          ...e,
-                          clientX: touch.clientX,
-                          clientY: touch.clientY,
-                          stopPropagation: () => e.stopPropagation(),
-                          preventDefault: () => e.preventDefault()
-                        } as any
-                        handleStartConnection(syntheticEvent, node.id)
-                      }}
-                    />
-                    
-                    {/* Baby blue + circle button - halfway on flow block and halfway off (when no components) */}
-                    {components.length === 0 && (
-                      <div 
-                        className="absolute left-1/2 -translate-x-1/2 bottom-0 translate-y-1/2 z-50 flex flex-col items-center"
-                        style={{ transform: 'translate(-50%, calc(50% - 5px))' }}
-                      >
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setShowComponentLibraryForNode(showComponentLibraryForNode === node.id ? null : node.id)
-                          }}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          className="w-8 h-6 rounded-full text-white transition-colors flex items-center justify-center shadow-lg touch-manipulation"
-                          style={{ 
-                            backgroundColor: '#5DADE2',
-                            boxShadow: '0 2px 8px rgba(93, 173, 226, 0.4)',
-                            minWidth: isMobile ? '44px' : '32px',
-                            minHeight: isMobile ? '44px' : '24px',
-                            touchAction: 'manipulation'
-                          }}
-                          title="Add Component"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                        
-                        {/* Component Library Dropdown - always appears below the add button, same width as flow block */}
-                        {showComponentLibraryForNode === node.id && (
-                          <div 
-                            data-component-library-dropdown
-                            className="absolute top-full left-1/2 -translate-x-1/2 w-[300px] bg-card rounded-lg p-3 shadow-lg border border-border z-50 mt-2"
-                          >
-                            <ComponentLibrary 
-                              onAddComponent={(componentType) => handleAddComponent(node.id, componentType)}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Components section below the block (outside the card dimensions) - centered */}
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-[300px]">
-                    
-                    {/* Display components as previews with inline editing - equally spaced from each other and flow block */}
-                    {components.length > 0 && !collapsedComponents[node.id] && (
-                      <div className="pt-[25px] space-y-[25px]">
-                        {components.map((component, idx) => {
-                          const isLastComponent = idx === components.length - 1
-                          return (
-                            <div key={component.id} className="relative">
-                              <div
-                                className="relative group bg-card rounded-lg border border-border/30 shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {/* Delete button - hidden when editing */}
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    // Check if any input/textarea is focused (editing)
-                                    const activeElement = document.activeElement
-                                    if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
-                                      return
-                                    }
-                                    handleDeleteComponent(node.id, component.id)
-                                  }}
-                                  onTouchStart={(e) => e.stopPropagation()}
-                                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity p-1.5 rounded-lg bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed text-destructive z-10 touch-manipulation"
-                                  style={{
-                                    minWidth: isMobile ? '44px' : 'auto',
-                                    minHeight: isMobile ? '44px' : 'auto',
-                                    touchAction: 'manipulation'
-                                  }}
-                                  title="Delete component"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                                
-                                {/* Component Preview (editable inline) */}
-                                <div className="p-4">
-                                  <ComponentRenderer
-                                    component={component}
-                                    onUpdateComponent={(config) => handleUpdateComponent(node.id, component.id, config)}
-                                  />
-                                </div>
-                                
-                                {/* Baby blue + circle button - halfway on component and halfway off (only for last component) */}
-                                {isLastComponent && (
-                                  <div 
-                                    className="absolute left-1/2 -translate-x-1/2 bottom-0 translate-y-1/2 z-50 flex flex-col items-center"
-                                    style={{ transform: 'translate(-50%, calc(50% + 10px))' }}
-                                  >
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        setShowComponentLibraryForNode(showComponentLibraryForNode === node.id ? null : node.id)
-                                      }}
-                                      className="w-8 h-6 rounded-full text-white transition-colors flex items-center justify-center shadow-lg"
-                                      style={{ 
-                                        backgroundColor: '#5DADE2',
-                                        boxShadow: '0 2px 8px rgba(93, 173, 226, 0.4)'
-                                      }}
-                                      title="Add Component"
-                                    >
-                                      <Plus className="w-4 h-4" />
-                                    </button>
-                                    
-                                    {/* Retract/Expand arrow - flips based on state, positioned below add button */}
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        setCollapsedComponents(prev => ({
-                                          ...prev,
-                                          [node.id]: !prev[node.id]
-                                        }))
-                                      }}
-                                      onTouchStart={(e) => e.stopPropagation()}
-                                      className="mt-1 p-1 rounded-lg bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-muted-foreground hover:text-foreground touch-manipulation"
-                                      style={{
-                                        minWidth: isMobile ? '44px' : 'auto',
-                                        minHeight: isMobile ? '44px' : 'auto',
-                                        touchAction: 'manipulation'
-                                      }}
-                                      title={collapsedComponents[node.id] ? "Expand components" : "Collapse components"}
-                                    >
-                                      <ChevronDown 
-                                        className={`w-3 h-3 transition-transform ${collapsedComponents[node.id] ? 'rotate-180' : ''}`} 
-                                      />
-                                    </button>
-                                    
-                                    {/* Component Library Dropdown - always appears below the add button, same width as flow block */}
-                                    {showComponentLibraryForNode === node.id && (
-                                      <div 
-                                        data-component-library-dropdown
-                                        className="absolute top-full left-1/2 -translate-x-1/2 w-[300px] bg-card rounded-lg p-3 shadow-lg border border-border z-50 mt-2"
-                                      >
-                                        <ComponentLibrary 
-                                          onAddComponent={(componentType) => handleAddComponent(node.id, componentType)}
-                                        />
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                    
-                    {/* Baby blue + circle button - halfway on flow block when collapsed (components list is retracted) */}
-                    {components.length > 0 && collapsedComponents[node.id] && (
-                      <div 
-                        className="absolute left-1/2 -translate-x-1/2 top-0 -translate-y-1/2 z-50 flex flex-col items-center"
-                        style={{ transform: 'translate(-50%, calc(-50% + 10px))' }}
-                      >
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setShowComponentLibraryForNode(showComponentLibraryForNode === node.id ? null : node.id)
-                          }}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          className="w-8 h-6 rounded-full text-white transition-colors flex items-center justify-center shadow-lg touch-manipulation"
-                          style={{ 
-                            backgroundColor: '#5DADE2',
-                            boxShadow: '0 2px 8px rgba(93, 173, 226, 0.4)',
-                            minWidth: isMobile ? '44px' : '32px',
-                            minHeight: isMobile ? '44px' : '24px',
-                            touchAction: 'manipulation'
-                          }}
-                          title="Add Component"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                        
-                        {/* Retract/Expand arrow - flips based on state, positioned below add button */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setCollapsedComponents(prev => ({
-                              ...prev,
-                              [node.id]: !prev[node.id]
-                            }))
-                          }}
-                          className="mt-1 p-1 rounded-lg bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-muted-foreground hover:text-foreground"
-                          title="Expand components"
-                        >
-                          <ChevronDown 
-                            className={`w-3 h-3 transition-transform ${collapsedComponents[node.id] ? 'rotate-180' : ''}`} 
-                          />
-                        </button>
-                        
-                        {/* Component Library Dropdown - always appears below the add button, same width as flow block */}
-                        {showComponentLibraryForNode === node.id && (
-                          <div 
-                            data-component-library-dropdown
-                            className="absolute top-full left-1/2 -translate-x-1/2 w-[300px] bg-card rounded-lg p-3 shadow-lg border border-border z-50 mt-2"
-                          >
-                            <ComponentLibrary 
-                              onAddComponent={(componentType) => handleAddComponent(node.id, componentType)}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                  onUpdateTitle={(nodeId, title) => {
+                    if (flow) {
+                      const updatedNodes = flow.nodes.map(n =>
+                        n.id === nodeId ? { ...n, title } : n
+                      )
+                      onUpdateFlow({ ...flow, nodes: updatedNodes })
+                    }
+                  }}
+                  membershipActive={membershipActive}
+                  onUpgrade={() => setShowUpgradeModal(true)}
+                  onResize={(nodeId, height) => {
+                    setFlowNodeSizes((prev) =>
+                      prev[nodeId] === height ? prev : { ...prev, [nodeId]: height }
+                    )
+                  }}
+                  onToggleCollapse={() => {
+                    setCollapsedComponents(prev => ({
+                      ...prev,
+                      [node.id]: !prev[node.id]
+                    }))
+                  }}
+                  onToggleComponentLibrary={() => {
+                    setShowComponentLibraryForNode(prev => prev === node.id ? null : node.id)
+                  }}
+                  onAddComponent={(type) => handleAddComponent(node.id, type)}
+                  onUpdateComponent={(id, config) => handleUpdateComponent(node.id, id, config)}
+                  onDeleteComponent={(id) => handleDeleteComponent(node.id, id)}
+                />
               )
             })}
 
@@ -3128,7 +2787,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
         </div>
 
         {/* Logic block library - Dropdown (always visible, fixed position) */}
-        <div className="fixed z-40" style={{ top: '80px', bottom: '80px', right: '40px' }}>
+        <div className="fixed z-40" style={{ top: '80px', bottom: '80px', right: '20px' }}>
           <div className="relative h-full flex flex-col">
             {/* Dropdown button */}
             <button
@@ -3142,7 +2801,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
             
             {/* Dropdown content - aligned with button */}
             {isLogicLibraryExpanded && (
-              <div className="mt-2 w-[226px] bg-card rounded-lg pt-2 px-2 pb-2 shadow-lg flex flex-col" style={{ marginLeft: '0' }}>
+              <div className="mt-2 w-[226px] bg-card rounded-lg pt-2 px-2 pb-2 shadow-lg flex flex-col" style={{ marginLeft: '-20px' }}>
                 <LogicBlockLibrary onDragStart={handleLogicDragStart} />
               </div>
             )}
@@ -3180,6 +2839,18 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId 
               const newPosition = latestBlock
                 ? { x: latestBlock.position.x + 350, y: latestBlock.position.y }
                 : { x: 100, y: 100 }
+              
+              // Check block limit - enforce strictly
+              const totalBlocks = flow.nodes.length + (flow.logicBlocks?.length || 0)
+              if (totalBlocks >= maxBlocksPerFlow) {
+                if (membershipActive) {
+                  toast.error("Plan limit reached")
+                } else {
+                  toast.error(`You've reached the limit of ${maxBlocksPerFlow} blocks per flow. Upgrade to Premium for 30 blocks per flow.`)
+                  setShowUpgradeModal(true)
+                }
+                return
+              }
               
               const newNode: FlowNode = {
                 id: `node-${Date.now()}`,
