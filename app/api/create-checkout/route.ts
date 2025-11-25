@@ -6,13 +6,11 @@ import { whopsdk } from "@/lib/whop-sdk";
 const PRICING = {
   "premium-monthly": {
     renewalPrice: 3000, // $30.00 in cents
-    billingPeriod: 1,
-    billingPeriodUnit: "month" as const,
+    billingPeriod: 1, // 1 month interval
   },
   "premium-yearly": {
     renewalPrice: 28000, // $280.00 in cents
-    billingPeriod: 1,
-    billingPeriodUnit: "year" as const,
+    billingPeriod: 12, // 12 month (1 year) interval
   },
 };
 
@@ -108,10 +106,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
 
     // Create dynamic checkout configuration with plan object
-    // Following the recurring plan checklist:
+    // Following the recurring plan checklist for checkout configurations:
     // - Use cents for all amounts ✓
-    // - Set billing period correctly ✓
+    // - Set billing period correctly (number only, no billing_period_unit) ✓
     // - Plan type must be "renewal" ✓
+    // - Currency must be lowercase (e.g., "usd") ✓
     // - No initial_price (recurring only) ✓
     const checkoutConfiguration = await whopsdk.checkoutConfigurations.create({
       plan: {
@@ -119,8 +118,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         initial_price: 0, // No initial fee for recurring plans
         renewal_price: pricing.renewalPrice, // Price in cents per billing cycle
         plan_type: "renewal", // Required for recurring plans
-        billing_period: pricing.billingPeriod, // 1
-        billing_period_unit: pricing.billingPeriodUnit, // "month" or "year"
+        billing_period: pricing.billingPeriod, // 1 (number only, no billing_period_unit for checkout configs)
+        currency: "usd", // Required, must be lowercase
       } as any, // Type assertion needed as SDK types may be incomplete
       metadata: {
         user_id: userId,
