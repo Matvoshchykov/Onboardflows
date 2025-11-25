@@ -2,6 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { whopsdk } from "@/lib/whop-sdk";
 
+// Pricing in cents (from upgrade-modal.tsx)
+const PRICING = {
+  "premium-monthly": {
+    renewalPrice: 3000, // $30.00 in cents
+    billingPeriod: 1,
+    billingPeriodUnit: "month" as const,
+  },
+  "premium-yearly": {
+    renewalPrice: 28000, // $280.00 in cents
+    billingPeriod: 1,
+    billingPeriodUnit: "year" as const,
+  },
+};
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     // Verify user is authenticated
@@ -41,11 +55,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
     
-    // Get company ID that owns the app (biz_XXXXX)
-    // This should be set as an environment variable
-    let finalCompanyId = companyId || process.env.WHOP_APP_COMPANY_ID;
+    // Get company ID that owns the app (biz_XXXXX) - required for checkout configuration
+    const appCompanyId = process.env.WHOP_APP_COMPANY_ID;
     
-    if (!finalCompanyId) {
+    if (!appCompanyId) {
       return NextResponse.json(
         { 
           error: {
@@ -56,27 +69,64 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 400 }
       );
     }
+
+    // Validate plan type
+    if (planType !== "premium-monthly" && planType !== "premium-yearly") {
+      return NextResponse.json(
+        { 
+          error: {
+            message: `Invalid planType: ${planType}. Must be 'premium-monthly' or 'premium-yearly'.`,
+            type: "invalid_plan_type"
+          }
+        },
+        { status: 400 }
+      );
+    }
+
+    // Get pricing configuration for the plan
+    const pricing = PRICING[planType as keyof typeof PRICING];
     
-    // Use static plan IDs instead of creating dynamic plans
-    // Monthly plan: $30/month - plan_fRm4hsD3EmxaH
-    // Yearly plan: $280/year - plan_2lsaaTulZeLKY
-    const planId = planType === "premium-yearly" 
-      ? "plan_2lsaaTulZeLKY"  // Yearly plan ($280/year)
-      : "plan_fRm4hsD3EmxaH"; // Monthly plan ($30/month)
-    
-    console.log("Creating checkout configuration with static plan:", {
-      planId,
+    // Validate minimum recurring amount ($1.00 = 100 cents)
+    if (pricing.renewalPrice < 100) {
+      return NextResponse.json(
+        { 
+          error: {
+            message: "Recurring plan price must be at least $1.00 (100 cents).",
+            type: "invalid_price"
+          }
+        },
+        { status: 400 }
+      );
+    }
+
+    console.log("Creating dynamic checkout configuration:", {
       planType,
-      metadata: { user_id: userId, plan_type: planType, company_id: finalCompanyId }
+      pricing,
+      appCompanyId,
+      experienceId,
+      userId,
     });
-    
-    // Create checkout configuration using static plan ID
+
+    // Create dynamic checkout configuration with plan object
+    // Following the recurring plan checklist:
+    // - Use cents for all amounts ✓
+    // - Set billing period correctly ✓
+    // - Plan type must be "renewal" ✓
+    // - No initial_price (recurring only) ✓
     const checkoutConfiguration = await whopsdk.checkoutConfigurations.create({
-      plan_id: planId, // Use static plan ID instead of creating dynamic plan
+      plan: {
+        company_id: appCompanyId, // App owner's company ID (biz_XXXXX)
+        initial_price: 0, // No initial fee for recurring plans
+        renewal_price: pricing.renewalPrice, // Price in cents per billing cycle
+        plan_type: "renewal", // Required for recurring plans
+        billing_period: pricing.billingPeriod, // 1
+        billing_period_unit: pricing.billingPeriodUnit, // "month" or "year"
+      } as any, // Type assertion needed as SDK types may be incomplete
       metadata: {
         user_id: userId,
-        plan_type: planType,
-        company_id: finalCompanyId,
+        plan_type: planType, // 'premium-monthly' or 'premium-yearly'
+        company_id: appCompanyId, // App owner's company
+        experience_id: experienceId, // The whop company the user is accessing
       },
     });
     
@@ -84,7 +134,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     
     console.log("Checkout created successfully:", {
       id: checkoutConfig.id,
-      planId: checkoutConfig.plan_id || checkoutConfig.plan?.id || planId
+      planId: checkoutConfig.plan_id || checkoutConfig.plan?.id,
+      plan: checkoutConfig.plan,
     });
     
     // Return checkout ID and plan ID
@@ -92,8 +143,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       throw new Error("Invalid checkout configuration response: missing checkout ID");
     }
     
-    // Use the plan_id from response or fallback to the one we used
-    const responsePlanId = checkoutConfig.plan_id || checkoutConfig.plan?.id || planId;
+    // Extract plan ID from response
+    const responsePlanId = checkoutConfig.plan_id || checkoutConfig.plan?.id;
+    
+    if (!responsePlanId) {
+      throw new Error("Invalid checkout configuration response: missing plan ID");
+    }
     
     return NextResponse.json({
       checkoutId: checkoutConfig.id,
