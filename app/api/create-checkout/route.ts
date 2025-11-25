@@ -2,15 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { whopsdk } from "@/lib/whop-sdk";
 
-// Pricing in cents (from upgrade-modal.tsx)
+// Pricing in dollars (from upgrade-modal.tsx)
+// Note: Whop API expects prices in dollars, not cents for checkout configurations
 const PRICING = {
   "premium-monthly": {
-    renewalPrice: 3000, // $30.00 in cents
-    billingPeriod: 1, // 1 month interval
+    price: 30, // $30.00
+    billingPeriod: 30, // 30 days = 1 month (minimum for monthly subscriptions)
   },
   "premium-yearly": {
-    renewalPrice: 28000, // $280.00 in cents
-    billingPeriod: 12, // 12 month (1 year) interval
+    price: 280, // $280.00
+    billingPeriod: 365, // 365 days = 1 year (or use 12 months if supported)
   },
 };
 
@@ -84,12 +85,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Get pricing configuration for the plan
     const pricing = PRICING[planType as keyof typeof PRICING];
     
-    // Validate minimum recurring amount ($1.00 = 100 cents)
-    if (pricing.renewalPrice < 100) {
+    // Validate minimum recurring amount ($1.00)
+    if (pricing.price < 1) {
       return NextResponse.json(
         { 
           error: {
-            message: "Recurring plan price must be at least $1.00 (100 cents).",
+            message: "Recurring plan price must be at least $1.00.",
             type: "invalid_price"
           }
         },
@@ -107,18 +108,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // Create dynamic checkout configuration with plan object
     // Following the recurring plan checklist for checkout configurations:
-    // - Use cents for all amounts ✓
-    // - Set billing period correctly (number only, no billing_period_unit) ✓
+    // - Prices in dollars (not cents) for checkout configurations ✓
+    // - Set billing period correctly (minimum 30 days for monthly) ✓
     // - Plan type must be "renewal" ✓
     // - Currency must be lowercase (e.g., "usd") ✓
-    // - No initial_price (recurring only) ✓
+    // - initial_price: 0 for recurring plans (renewal_price is the recurring amount) ✓
     const checkoutConfiguration = await whopsdk.checkoutConfigurations.create({
       plan: {
         company_id: appCompanyId, // App owner's company ID (biz_XXXXX)
         initial_price: 0, // No initial fee for recurring plans
-        renewal_price: pricing.renewalPrice, // Price in cents per billing cycle
+        renewal_price: pricing.price, // Price in dollars per billing cycle ($30/month or $280/year)
         plan_type: "renewal", // Required for recurring plans
-        billing_period: pricing.billingPeriod, // 1 (number only, no billing_period_unit for checkout configs)
+        billing_period: pricing.billingPeriod, // 30 days for monthly, 365 days for yearly (minimum 30 for monthly)
         currency: "usd", // Required, must be lowercase
       } as any, // Type assertion needed as SDK types may be incomplete
       metadata: {
