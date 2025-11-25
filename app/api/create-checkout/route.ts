@@ -17,6 +17,29 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 400 }
       );
     }
+
+    // Verify experienceId is provided
+    if (!experienceId) {
+      return NextResponse.json(
+        { error: { message: "Missing experienceId", type: "bad_request" } },
+        { status: 400 }
+      );
+    }
+
+    // Verify user has access to the experience (both customer and admin can create checkouts)
+    const access = await whopsdk.users.checkAccess(experienceId, { id: userId });
+    
+    if (!access.has_access) {
+      return NextResponse.json(
+        { 
+          error: {
+            message: "You do not have access to this experience.",
+            type: "permission_denied"
+          }
+        },
+        { status: 403 }
+      );
+    }
     
     // Get company ID that owns the app (biz_XXXXX)
     // This should be set as an environment variable
