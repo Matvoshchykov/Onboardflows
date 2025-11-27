@@ -111,16 +111,8 @@ async function handlePaymentSucceeded(payment: Payment) {
 		
 		// Update or create user membership
 		// Function signature: upsertUserMembership(userId: string, membershipActive: boolean, paymentId?: string, planType?: string)
-		// Explicitly type the function call to prevent TypeScript parameter confusion during build
-		type UpsertFunction = (
-			userId: string,
-			membershipActive: boolean,
-			paymentId?: string,
-			planType?: string
-		) => Promise<UserMembership | null>;
-		
-		const upsertFn: UpsertFunction = upsertUserMembership;
-		const result = await upsertFn(
+		// Call directly - TypeScript will use the actual function signature from the source
+		const result = await upsertUserMembership(
 			finalUserId,
 			true,
 			paymentId,
