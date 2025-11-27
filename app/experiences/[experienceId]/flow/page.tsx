@@ -82,8 +82,9 @@ export default function OnboardingFlowView() {
       setIsLoading(true)
       try {
         // Load the active flow (flows have their own IDs, not experienceId)
+        if (!experienceId) return
         const { getActiveFlow } = await import('@/lib/db/flows')
-        const dbFlow = await getActiveFlow()
+        const dbFlow = await getActiveFlow(experienceId)
         
         if (dbFlow) {
           setFlow(dbFlow)

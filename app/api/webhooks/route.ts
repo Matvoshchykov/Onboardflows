@@ -110,7 +110,6 @@ async function handlePaymentSucceeded(payment: Payment) {
 		// Update or create user membership
 		const result = await upsertUserMembership(
 			finalUserId,
-			finalCompanyId,
 			true, // membership_active = true
 			paymentId,
 			planType

@@ -21,21 +21,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // Get access to retrieve company information
     const access = await whopsdk.users.checkAccess(experienceId, { id: userId });
     
-    // For checkout, we need the company ID that owns the app (biz_XXXXX)
-    // This should be set as an environment variable
-    // The experienceId is NOT the same as the company_id for checkout
-    const appCompanyId = process.env.WHOP_APP_COMPANY_ID;
-    
-    if (!appCompanyId) {
+    if (!access.has_access) {
       return NextResponse.json(
-        { 
-          error: "WHOP_APP_COMPANY_ID environment variable is not set. Please set it to your app's company ID (biz_XXXXX)."
-        },
+        { error: "User does not have access to this experience" },
+        { status: 403 }
+      );
+    }
+    
+    // Get the actual company_id from the experience using Whop SDK
+    const experience = await whopsdk.experiences.retrieve(experienceId);
+    const companyId = (experience as any).company_id || (experience as any).company?.id;
+    
+    if (!companyId) {
+      console.error("Experience does not have a company_id:", experience);
+      return NextResponse.json(
+        { error: "Experience does not have a company_id" },
         { status: 500 }
       );
     }
     
-    return NextResponse.json({ companyId: appCompanyId });
+    return NextResponse.json({ 
+      companyId: companyId,
+      experienceId: experienceId
+    });
   } catch (error) {
     console.error("Error getting company ID:", error);
     return NextResponse.json(

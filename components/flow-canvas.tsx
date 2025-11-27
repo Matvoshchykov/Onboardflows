@@ -51,6 +51,7 @@ type FlowCanvasProps = {
   onSaveToDatabase?: (flow: Flow) => Promise<void>
   experienceId?: string | null
   flows?: Flow[]
+  membershipActive?: boolean // Pass membership status from parent
 }
 
 // Helper function to normalize pageComponents to array format (handles both old and new formats)
@@ -71,7 +72,7 @@ function normalizePageComponents(pageComponents: any): PageComponent[] {
   return []
 }
 
-export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId, flows = [] }: FlowCanvasProps) {
+export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId, flows = [], membershipActive: propMembershipActive }: FlowCanvasProps) {
   const [viewMode, setViewMode] = useState<"create" | "analytics">("create")
   const router = useRouter()
   const { theme } = useTheme()
@@ -85,13 +86,41 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
   const [membershipActive, setMembershipActive] = useState(false)
   const [maxFlows, setMaxFlows] = useState(1)
   const [maxBlocksPerFlow, setMaxBlocksPerFlow] = useState(5)
-  const [companyId, setCompanyId] = useState<string | null>(null)
   
-  // Load membership status
+  // Load membership status - use prop if provided, otherwise fetch
   useEffect(() => {
+    // If membership status is provided as prop, use it
+    if (propMembershipActive !== undefined) {
+      setMembershipActive(propMembershipActive)
+      // Still need to fetch limits
+      async function fetchLimits() {
+        try {
+          let expId = experienceId
+          if (!expId) {
+            const pathParts = window.location.pathname.split('/')
+            expId = pathParts[pathParts.indexOf('experiences') + 1]
+          }
+          if (!expId) return
+          
+          const membershipResponse = await fetch(`/api/check-membership?experienceId=${expId}`)
+          if (membershipResponse.ok) {
+            const { maxFlows: mFlows, maxBlocksPerFlow: mBlocks } = await membershipResponse.json()
+            setMaxFlows(mFlows)
+            setMaxBlocksPerFlow(mBlocks)
+            setCurrentPlan(propMembershipActive ? "premium-monthly" : "free")
+          }
+        } catch (error) {
+          console.error("Error loading membership limits:", error)
+        }
+      }
+      fetchLimits()
+      return
+    }
+    
+    // Otherwise fetch membership status
     async function loadMembership() {
       try {
-        // Get experienceId from URL or prop (it's the companyId in Whop)
+        // Get experienceId from URL or prop
         let expId = experienceId
         if (!expId) {
           const pathParts = window.location.pathname.split('/')
@@ -99,15 +128,8 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
         }
         if (!expId) return
         
-        setCompanyId(expId)
-        
-        // Get company ID
-        const companyIdResponse = await fetch(`/api/get-company-id?experienceId=${expId}`)
-        if (!companyIdResponse.ok) return
-        const { companyId: cId } = await companyIdResponse.json()
-        
-        // Check membership
-        const membershipResponse = await fetch(`/api/check-membership?companyId=${cId}`)
+        // Check membership (per experience_id)
+        const membershipResponse = await fetch(`/api/check-membership?experienceId=${expId}`)
         if (membershipResponse.ok) {
           const { membershipActive: active, maxFlows: mFlows, maxBlocksPerFlow: mBlocks } = await membershipResponse.json()
           setMembershipActive(active)
@@ -121,9 +143,14 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
       }
     }
     loadMembership()
-  }, [experienceId])
+  }, [experienceId, propMembershipActive])
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null)
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+  const dragOffsetRef = useRef({ x: 0, y: 0 })
+  const dragStartPosRef = useRef<{ x: number; y: number } | null>(null)
+  const dragStartNodePosRef = useRef<{ x: number; y: number } | null>(null)
+  const dragCanvasStateRef = useRef<{ offset: { x: number; y: number }, zoom: number, rect: DOMRect | null } | null>(null)
+  const pendingDragNodeIdRef = useRef<string | null>(null)
+  const pendingDragLogicIdRef = useRef<string | null>(null)
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
   const [panStart, setPanStart] = useState({ x: 0, y: 0 })
@@ -159,6 +186,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
   const [showVariableDropdown, setShowVariableDropdown] = useState<Record<string, boolean>>({})
   const [logicBlockSizes, setLogicBlockSizes] = useState<Record<string, number>>({})
   const [logicBlockPortPositions, setLogicBlockPortPositions] = useState<Record<string, { input?: PortPoint; outputs: Array<PortPoint | undefined> }>>({})
+  const [flowNodePortPositions, setFlowNodePortPositions] = useState<Record<string, { input: PortPoint; output: PortPoint }>>({})
   const [flowNodeSizes, setFlowNodeSizes] = useState<Record<string, number>>({})
   const [lastCreatedBlockId, setLastCreatedBlockId] = useState<string | null>(null)
   const [showLogicLibrary, setShowLogicLibrary] = useState(true)
@@ -424,21 +452,46 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
   }, [canvasOffset, zoom])
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent, nodeId: string) => {
+    // Only start dragging on left mouse button
+    if (e.button !== 0) return
+    
     e.stopPropagation()
+    e.preventDefault()
     
     if (!flow) return
     const node = flow.nodes.find(n => n.id === nodeId)
     if (!node) return
     
     setSelectedNodeId(nodeId)
-    setDraggingNodeId(nodeId)
+    setSelectedLogicId(null) // Deselect logic block if flow node is selected
     
-    const worldPos = screenToWorld(e.clientX, e.clientY)
-    setDragOffset({
-      x: worldPos.x - node.position.x,
-      y: worldPos.y - node.position.y
-    })
-  }, [flow, screenToWorld])
+    // Capture canvas offset at drag start - CRITICAL to prevent jolting
+    // But we'll use CURRENT zoom during drag so block stays under mouse at any zoom level
+    if (!canvasRef.current) return
+    const rect = canvasRef.current.getBoundingClientRect()
+    dragCanvasStateRef.current = {
+      offset: { x: canvasOffset.x, y: canvasOffset.y },
+      zoom: zoom, // Store for reference, but we'll use current zoom during drag
+      rect: rect
+    }
+    
+    // Calculate offset in world coordinates (zoom-independent)
+    const screenX = e.clientX
+    const screenY = e.clientY
+    const worldX = (screenX - rect.left - canvasOffset.x) / zoom
+    const worldY = (screenY - rect.top - canvasOffset.y) / zoom
+    
+    dragOffsetRef.current = {
+      x: worldX - node.position.x,
+      y: worldY - node.position.y
+    }
+    dragStartNodePosRef.current = { x: node.position.x, y: node.position.y }
+    dragStartPosRef.current = { x: screenX, y: screenY }
+    
+    // Start dragging immediately - block should stick to mouse
+    pendingDragNodeIdRef.current = nodeId
+    setDraggingNodeId(nodeId)
+  }, [flow, canvasOffset, zoom])
 
   // Global mouse move handler for dragging logic blocks from library
   useEffect(() => {
@@ -596,6 +649,43 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
     })
   }, [logicBlocks, logicBlockSizes, canvasOffset.x, canvasOffset.y, zoom, screenToWorld])
 
+  // Measure port positions for flow nodes
+  useLayoutEffect(() => {
+    if (!flow?.nodes) return
+
+    const updates: Record<string, { input: PortPoint; output: PortPoint }> = {}
+    
+    flow.nodes.forEach(node => {
+      const inputEl = document.querySelector(`.connection-port[data-port-type="input"][data-node-id="${node.id}"]`)
+      const outputEl = document.querySelector(`.connection-port[data-port-type="output"][data-node-id="${node.id}"]`)
+      
+      let inputPos: PortPoint
+      let outputPos: PortPoint
+      
+      if (inputEl) {
+        const rect = inputEl.getBoundingClientRect()
+        inputPos = screenToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      } else {
+        // Fallback
+        const height = flowNodeSizes[node.id] ?? 150
+        inputPos = { x: node.position.x, y: node.position.y + height / 2 }
+      }
+      
+      if (outputEl) {
+        const rect = outputEl.getBoundingClientRect()
+        outputPos = screenToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      } else {
+        // Fallback
+        const height = flowNodeSizes[node.id] ?? 150
+        outputPos = { x: node.position.x + 300, y: node.position.y + height / 2 }
+      }
+      
+      updates[node.id] = { input: inputPos, output: outputPos }
+    })
+    
+    setFlowNodePortPositions(updates)
+  }, [flow?.nodes, flowNodeSizes, canvasOffset.x, canvasOffset.y, zoom, screenToWorld])
+
   // Handle Ctrl+Z for undo - using refs to avoid closure issues
   // This MUST be before any early returns to maintain hook order
   useEffect(() => {
@@ -679,6 +769,9 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
   }
 
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    // Only handle left mouse button
+    if (e.button !== 0) return
+    
     // If we're currently drawing a connection, a simple click cancels it
     if (connectingFrom) {
       setConnectingFrom(null)
@@ -688,15 +781,18 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
       return
     }
 
-    // If clicking on a block or port, don't deselect
+    // If clicking on a block or port, don't deselect or start panning
     if ((e.target as HTMLElement).closest('.node-card, .logic-block, .connection-port')) return
     
     // Deselect blocks when clicking elsewhere on canvas
     setSelectedNodeId(null)
     setSelectedLogicId(null)
     
-    setIsPanning(true)
-    setPanStart({ x: e.clientX - canvasOffset.x, y: e.clientY - canvasOffset.y })
+    // Only start panning if left button is pressed
+    if (e.buttons === 1) {
+      setIsPanning(true)
+      setPanStart({ x: e.clientX - canvasOffset.x, y: e.clientY - canvasOffset.y })
+    }
   }
 
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
@@ -714,7 +810,8 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
         setDragCursorPosition({ x: e.clientX, y: e.clientY })
       }
       
-      if (isPanning && !draggingNodeId && !draggingLogicId && !connectingFrom) {
+      // Only pan if left button is held and not dragging anything
+      if (isPanning && !draggingNodeId && !draggingLogicId && !connectingFrom && e.buttons === 1) {
         setCanvasOffset({ 
           x: e.clientX - panStart.x, 
           y: e.clientY - panStart.y 
@@ -728,47 +825,92 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
         return
       }
       
-      if (draggingNodeId && e.buttons === 1) {
-        const worldPos = screenToWorld(e.clientX, e.clientY)
+      // Drag flow block - block should stick to mouse cursor
+      if (draggingNodeId && e.buttons === 1 && dragCanvasStateRef.current) {
+        // Use captured offset (to prevent jolting) but CURRENT zoom (so it works at any zoom level)
+        const { offset } = dragCanvasStateRef.current
+        if (!canvasRef.current) return
+        const currentRect = canvasRef.current.getBoundingClientRect()
+        
+        // Calculate world position using captured offset but CURRENT zoom
+        // This ensures block stays exactly under mouse cursor at any zoom level
+        const currentWorldPos = {
+          x: (e.clientX - currentRect.left - offset.x) / zoom,
+          y: (e.clientY - currentRect.top - offset.y) / zoom
+        }
+        
+        // Calculate new position: mouse world pos minus the offset from where user clicked
+        // Offset is in world coordinates (zoom-independent), so this works at any zoom
+        const newPosition = {
+          x: currentWorldPos.x - dragOffsetRef.current.x,
+          y: currentWorldPos.y - dragOffsetRef.current.y
+        }
+        
         const updatedNodes = flow.nodes.map(n => {
           if (n.id === draggingNodeId) {
             return {
               ...n,
-              position: {
-                x: worldPos.x - dragOffset.x,
-                y: worldPos.y - dragOffset.y
-              }
+              position: newPosition
             }
           }
           return n
         })
         onUpdateFlow({ ...flow, nodes: updatedNodes })
-      } else if (draggingNodeId && e.buttons === 0) {
+      } else if (draggingNodeId && e.buttons !== 1) {
+        // Stop dragging if button is released
         setDraggingNodeId(null)
+        pendingDragNodeIdRef.current = null
+        dragStartPosRef.current = null
+        dragStartNodePosRef.current = null
+        dragCanvasStateRef.current = null
       }
       
-      if (draggingLogicId && e.buttons === 1) {
-        const worldPos = screenToWorld(e.clientX, e.clientY)
+      // Drag logic block - block should stick to mouse cursor
+      if (draggingLogicId && e.buttons === 1 && dragCanvasStateRef.current) {
+        // Use captured offset (to prevent jolting) but CURRENT zoom (so it works at any zoom level)
+        const { offset } = dragCanvasStateRef.current
+        if (!canvasRef.current) return
+        const currentRect = canvasRef.current.getBoundingClientRect()
+        
+        // Calculate world position using captured offset but CURRENT zoom
+        // This ensures block stays exactly under mouse cursor at any zoom level
+        const currentWorldPos = {
+          x: (e.clientX - currentRect.left - offset.x) / zoom,
+          y: (e.clientY - currentRect.top - offset.y) / zoom
+        }
+        
+        // Calculate new position: mouse world pos minus the offset from where user clicked
+        // Offset is in world coordinates (zoom-independent), so this works at any zoom
+        const newPosition = {
+          x: currentWorldPos.x - dragOffsetRef.current.x,
+          y: currentWorldPos.y - dragOffsetRef.current.y
+        }
+        
         const updatedLogicBlocks = logicBlocks.map(b => {
           if (b.id === draggingLogicId) {
             return {
               ...b,
-              position: {
-                x: worldPos.x - dragOffset.x,
-                y: worldPos.y - dragOffset.y
-              }
+              position: newPosition
             }
           }
           return b
         })
         handleLogicBlocksUpdate(updatedLogicBlocks)
-      } else if (draggingLogicId && e.buttons === 0) {
+      } else if (draggingLogicId && e.buttons !== 1) {
+        // Stop dragging if button is released
         setDraggingLogicId(null)
+        pendingDragLogicIdRef.current = null
+        dragStartPosRef.current = null
+        dragStartNodePosRef.current = null
+        dragCanvasStateRef.current = null
       }
     })
   }
   
   const handleCanvasMouseUp = (e: React.MouseEvent) => {
+    // Only handle left mouse button
+    if (e.button !== 0) return
+    
     if (draggingVariable) {
       // Check if dropped on a drop target (condition/path input)
       const dropTarget = (e.target as HTMLElement).closest('[data-drop-target]') as HTMLElement | null
@@ -809,6 +951,11 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
     setIsPanning(false)
     setDraggingNodeId(null)
     setDraggingLogicId(null)
+    pendingDragNodeIdRef.current = null
+    pendingDragLogicIdRef.current = null
+    dragStartPosRef.current = null
+    dragStartNodePosRef.current = null
+    dragCanvasStateRef.current = null
     
     if (plusClickTimer) {
       clearTimeout(plusClickTimer)
@@ -817,20 +964,44 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
   }
 
   const handleLogicBlockMouseDown = (e: React.MouseEvent, blockId: string) => {
+    // Only start dragging on left mouse button
+    if (e.button !== 0) return
+    
     e.stopPropagation()
+    e.preventDefault()
     
     const block = logicBlocks.find(b => b.id === blockId)
     if (!block) return
     
     setSelectedLogicId(blockId)
     setSelectedNodeId(null) // Deselect node if logic block is selected
-    setDraggingLogicId(blockId)
     
-    const worldPos = screenToWorld(e.clientX, e.clientY)
-    setDragOffset({
-      x: worldPos.x - block.position.x,
-      y: worldPos.y - block.position.y
-    })
+    // Capture canvas offset at drag start - CRITICAL to prevent jolting
+    // But we'll use CURRENT zoom during drag so block stays under mouse at any zoom level
+    if (!canvasRef.current) return
+    const rect = canvasRef.current.getBoundingClientRect()
+    dragCanvasStateRef.current = {
+      offset: { x: canvasOffset.x, y: canvasOffset.y },
+      zoom: zoom, // Store for reference, but we'll use current zoom during drag
+      rect: rect
+    }
+    
+    // Calculate offset in world coordinates (zoom-independent)
+    const screenX = e.clientX
+    const screenY = e.clientY
+    const worldX = (screenX - rect.left - canvasOffset.x) / zoom
+    const worldY = (screenY - rect.top - canvasOffset.y) / zoom
+    
+    dragOffsetRef.current = {
+      x: worldX - block.position.x,
+      y: worldY - block.position.y
+    }
+    dragStartNodePosRef.current = { x: block.position.x, y: block.position.y }
+    dragStartPosRef.current = { x: screenX, y: screenY }
+    
+    // Start dragging immediately - block should stick to mouse
+    pendingDragLogicIdRef.current = blockId
+    setDraggingLogicId(blockId)
   }
 
   const handlePlusMouseDown = (e: React.MouseEvent, nodeId: string) => {
@@ -888,7 +1059,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
       // Update source node so it's connected to the new node
       const updatedNodes = flow.nodes.map(n =>
         n.id === nodeId
-          ? { ...n, connections: [...n.connections, newNode.id] }
+          ? { ...n, connections: [...(n.connections || []), newNode.id] }
           : n
       )
       setLastCreatedBlockId(newNode.id)
@@ -1028,10 +1199,41 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
       }
     }
     
-    // For flow nodes, use mouse position
-    const worldPos = screenToWorld(e.clientX, e.clientY)
-    setConnectionLineStart(worldPos)
-    setConnectionLineEnd(worldPos)
+    // For flow nodes, use the exact port center
+    // Priority: 1. Measured positions (fastest/most consistent) 2. DOM query (most accurate if fresh) 3. Calculation (fallback)
+    const measuredPorts = flowNodePortPositions[nodeId]
+    
+    if (measuredPorts) {
+      setConnectionLineStart(measuredPorts.output)
+      setConnectionLineEnd(measuredPorts.output)
+      return
+    }
+    
+    const portElement = document.querySelector(`.connection-port[data-port-type="output"][data-node-id="${nodeId}"]`) as HTMLElement
+    
+    if (portElement && canvasRef.current) {
+      const portRect = portElement.getBoundingClientRect()
+      const portCenterScreenX = portRect.left + portRect.width / 2
+      const portCenterScreenY = portRect.top + portRect.height / 2
+      const worldPos = screenToWorld(portCenterScreenX, portCenterScreenY)
+      setConnectionLineStart(worldPos)
+      setConnectionLineEnd(worldPos)
+    } else {
+      // Fallback to calculated position
+      const node = flow?.nodes.find(n => n.id === nodeId)
+      if (node) {
+        const nodeHeight = flowNodeSizes[nodeId] ?? 150
+        const startX = node.position.x + 300 // Width of card
+        const startY = node.position.y + nodeHeight / 2
+        const worldPos = { x: startX, y: startY }
+        setConnectionLineStart(worldPos)
+        setConnectionLineEnd(worldPos)
+      } else {
+        const worldPos = screenToWorld(e.clientX, e.clientY)
+        setConnectionLineStart(worldPos)
+        setConnectionLineEnd(worldPos)
+      }
+    }
   }
 
   // Get options from the previous flow block connected to a logic block
@@ -1214,8 +1416,11 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
       }
       // Flow block to flow block connection
       else if (sourceNode && targetNode) {
+        // Ensure connections array exists
+        const currentConnections = sourceNode.connections || []
+        
         // Prevent a flow block from having multiple outgoing connections
-        if (sourceNode.connections.length > 0) {
+        if (currentConnections.length > 0) {
           toast.error("Cannot connect", {
             description: "A flow block can only have one outgoing connection.",
           })
@@ -1226,7 +1431,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
           return
         }
         // Prevent multiple connections to same target
-        if (sourceNode.connections.includes(targetNodeId)) {
+        if (currentConnections.includes(targetNodeId)) {
           setConnectingFrom(null)
           setConnectionLineEnd(null)
           setConnectingPortIndex(undefined)
@@ -1235,10 +1440,20 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
         }
         const updatedNodes = flow.nodes.map(node => {
           if (node.id === connectingFrom) {
-            return { ...node, connections: [...node.connections, targetNodeId] }
+            const newConnections = [...currentConnections, targetNodeId]
+            console.log('[FLOW-TO-FLOW] Creating connection:', {
+              from: connectingFrom,
+              to: targetNodeId,
+              oldConnections: currentConnections,
+              newConnections: newConnections,
+              nodeBefore: node,
+              nodeAfter: { ...node, connections: newConnections }
+            })
+            return { ...node, connections: newConnections }
           }
           return node
         })
+        console.log('[FLOW-TO-FLOW] Updating flow with nodes:', updatedNodes.map(n => ({ id: n.id, connections: n.connections })))
         onUpdateFlow({ ...flow, nodes: updatedNodes })
         setSelectedNodeId(null) // Deselect after drop
       }
@@ -1778,8 +1993,8 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
               {flow && (
                 <button
                   onClick={() => {
-                    if (flow.status === "Live") {
-                      toggleFlowActive(flow.id, false).then((success) => {
+                    if (flow.status === "Live" && experienceId) {
+                      toggleFlowActive(flow.id, false, experienceId).then((success) => {
                         if (success && onUpdateFlow) {
                           onUpdateFlow({ ...flow, status: "Draft" as const })
                           toast.success("Flow disabled successfully")
@@ -1857,12 +2072,14 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
               <button
                 onClick={() => {
                   if (flow.status === "Live") {
-                    toggleFlowActive(flow.id, false).then((success) => {
-                      if (success && onUpdateFlow) {
-                        onUpdateFlow({ ...flow, status: "Draft" as const })
-                        toast.success("Flow disabled successfully")
-                      }
-                    })
+                    if (experienceId) {
+                      toggleFlowActive(flow.id, false, experienceId).then((success) => {
+                        if (success && onUpdateFlow) {
+                          onUpdateFlow({ ...flow, status: "Draft" as const })
+                          toast.success("Flow disabled successfully")
+                        }
+                      })
+                    }
                   } else {
                     setShowUploadModal(true)
                   }
@@ -1997,7 +2214,13 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
-          <TierInfo flows={flows} selectedFlow={flow} />
+          <TierInfo 
+            flows={flows} 
+            selectedFlow={flow}
+            membershipActive={membershipActive}
+            maxFlows={maxFlows}
+            maxBlocksPerFlow={maxBlocksPerFlow}
+          />
           {/* Mobile Controls - Floating buttons */}
           {isMobile && (
             <div className="absolute bottom-4 right-4 z-50 flex flex-col gap-2">
@@ -2042,53 +2265,67 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
           >
             <g transform={`translate(${canvasOffset.x}, ${canvasOffset.y}) scale(${zoom})`}>
               {/* Flow block to flow block connections */}
-              {flow.nodes.map((node) =>
-                node.connections.map((targetId) => {
-                  const targetNode = flow.nodes.find((n) => n.id === targetId)
-                  if (!targetNode) return null
+              {(() => {
+                const connections = flow.nodes.flatMap((node) => {
+                  const nodeConnections = node.connections || []
+                  if (!Array.isArray(nodeConnections) || nodeConnections.length === 0) return []
                   
-                  const nodeHeight = flowNodeSizes[node.id] ?? 150
-                  const startX = node.position.x + 300
-                  const startY = node.position.y + nodeHeight / 2
+                  return nodeConnections.map((targetId) => {
+                    const targetNode = flow.nodes.find((n) => n.id === targetId)
+                    if (!targetNode) {
+                      console.warn('[RENDER] Flow-to-flow: Target node not found', { nodeId: node.id, targetId })
+                      return null
+                    }
+                    
+                    const nodeHeight = flowNodeSizes[node.id] ?? 150
+                    const startX = node.position.x + 300
+                    const startY = node.position.y + nodeHeight / 2
 
-                  const targetHeight = flowNodeSizes[targetNode.id] ?? 150
-                  const endX = targetNode.position.x
-                  const endY = targetNode.position.y + targetHeight / 2
-                  
-                  const controlX1 = startX + (endX - startX) / 3
-                  const controlX2 = startX + (2 * (endX - startX)) / 3
+                    const targetHeight = flowNodeSizes[targetNode.id] ?? 150
+                    const endX = targetNode.position.x
+                    const endY = targetNode.position.y + targetHeight / 2
+                    
+                    const controlX1 = startX + (endX - startX) / 3
+                    const controlX2 = startX + (2 * (endX - startX)) / 3
 
-                  const d = `M ${startX} ${startY} C ${controlX1} ${startY}, ${controlX2} ${endY}, ${endX} ${endY}`
-                  
-                  // Calculate midpoint of the curve for delete button
-                  const midX = startX + (endX - startX) / 2
-                  const midY = (startY + endY) / 2
-                  
-                  return (
-                    <g key={`${node.id}-${targetId}`}>
-                      {/* Visible line */}
-                      <path
-                        d={d}
-                        stroke="#10b981"
-                        strokeWidth="3"
-                        fill="none"
-                        vectorEffect="non-scaling-stroke"
-                      />
-                      {/* Delete button at midpoint */}
-                      <g transform={`translate(${midX}, ${midY})`} pointerEvents="all">
-                        {/* Large invisible hit area */}
-                        <circle cx="0" cy="0" r="15" fill="transparent" stroke="none" className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleDeleteConnection(e, node.id, targetId); }} />
-                        {/* Visible button */}
-                        <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleDeleteConnection(e, node.id, targetId); }}>
-                          <circle cx="0" cy="0" r="10" fill="hsl(var(--background))" stroke="hsl(var(--destructive))" strokeWidth="2" />
-                          <line x1="-4" y1="-4" x2="4" y2="4" stroke="hsl(var(--destructive))" strokeWidth="2" strokeLinecap="round" />
-                          <line x1="4" y1="-4" x2="-4" y2="4" stroke="hsl(var(--destructive))" strokeWidth="2" strokeLinecap="round" />
+                    const d = `M ${startX} ${startY} C ${controlX1} ${startY}, ${controlX2} ${endY}, ${endX} ${endY}`
+                    
+                    // Calculate midpoint of the curve for delete button
+                    const midX = startX + (endX - startX) / 2
+                    const midY = (startY + endY) / 2
+                    
+                    return (
+                      <g key={`flow-flow-${node.id}-${targetId}`}>
+                        {/* Visible line */}
+                        <path
+                          d={d}
+                          stroke="#10b981"
+                          strokeWidth="3"
+                          fill="none"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                        {/* Delete button at midpoint */}
+                        <g transform={`translate(${midX}, ${midY})`} pointerEvents="all">
+                          {/* Large invisible hit area */}
+                          <circle cx="0" cy="0" r="15" fill="transparent" stroke="none" className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleDeleteConnection(e, node.id, targetId); }} />
+                          {/* Visible button */}
+                          <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleDeleteConnection(e, node.id, targetId); }}>
+                            <circle cx="0" cy="0" r="10" fill="hsl(var(--background))" stroke="hsl(var(--destructive))" strokeWidth="2" />
+                            <line x1="-4" y1="-4" x2="4" y2="4" stroke="hsl(var(--destructive))" strokeWidth="2" strokeLinecap="round" />
+                            <line x1="4" y1="-4" x2="-4" y2="4" stroke="hsl(var(--destructive))" strokeWidth="2" strokeLinecap="round" />
+                          </g>
                         </g>
                       </g>
-                    </g>
-                  )
+                    )
+                  }).filter(Boolean)
                 })
-              )}
+                
+                if (connections.length > 0) {
+                  console.log('[RENDER] Flow-to-flow connections found:', connections.length, flow.nodes.map(n => ({ id: n.id, connections: n.connections })))
+                }
+                
+                return connections
+              })()}
 
               {/* Flow block to logic block connections */}
               {flow.nodes.map((node) =>
@@ -2991,6 +3228,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
           onClose={() => setShowUploadModal(false)}
           flowId={flow.id}
           flowTitle={flow.title}
+          experienceId={experienceId || ""}
           onSuccess={() => {
             // Refresh the flow status after upload
             if (onUpdateFlow) {

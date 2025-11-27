@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useParams } from "next/navigation"
 import { Sidebar } from "./sidebar"
 import { FlowCanvas } from "./flow-canvas"
 import { ChatModal } from "./chat-modal"
@@ -39,10 +39,19 @@ export type Flow = {
 
 type FlowBuilderProps = {
   isAdmin?: boolean
+  experienceId?: string
+  userId?: string
+  membershipActive?: boolean
 }
 
-export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) {
+export default function FlowBuilder({ 
+  isAdmin = false, 
+  experienceId: propExperienceId,
+  userId: propUserId,
+  membershipActive: propMembershipActive
+}: FlowBuilderProps = {}) {
   const router = useRouter()
+  const params = useParams()
   const [flows, setFlows] = useState<Flow[]>([])
   const [selectedFlow, setSelectedFlow] = useState<Flow | null>(null)
   const [showChatModal, setShowChatModal] = useState(false)
@@ -52,16 +61,70 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
   const [hasCheckedActiveFlow, setHasCheckedActiveFlow] = useState(false)
+  const [currentExperienceId, setCurrentExperienceId] = useState<string | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(propUserId || null)
+  const [membershipActive, setMembershipActive] = useState<boolean>(propMembershipActive ?? false)
+  
+  // Get experienceId from prop or URL params
+  useEffect(() => {
+    const expId = propExperienceId || (params?.experienceId as string) || null
+    setCurrentExperienceId(expId)
+  }, [propExperienceId, params])
+
+  // Fetch current user ID if not provided as prop, and sync membership status
+  useEffect(() => {
+    if (propUserId) {
+      setCurrentUserId(propUserId)
+      // Always use prop value if provided (from server-side check)
+      if (propMembershipActive !== undefined) {
+        setMembershipActive(propMembershipActive)
+      }
+      return
+    }
+    
+    async function fetchUser() {
+      try {
+        const response = await fetch('/api/get-current-user')
+        if (response.ok) {
+          const userData = await response.json()
+          setCurrentUserId(userData.userId)
+          
+          // Only fetch membership status if not provided as prop
+          if (propMembershipActive === undefined && currentExperienceId) {
+            const membershipResponse = await fetch(`/api/check-membership?experienceId=${currentExperienceId}`)
+            if (membershipResponse.ok) {
+              const membershipData = await membershipResponse.json()
+              setMembershipActive(membershipData.membershipActive)
+            }
+          } else if (propMembershipActive !== undefined) {
+            // Use prop value if provided
+            setMembershipActive(propMembershipActive)
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user:', error)
+      }
+    }
+    fetchUser()
+  }, [propUserId, propMembershipActive, currentExperienceId])
+
+  // Sync membership status when prop changes
+  useEffect(() => {
+    if (propMembershipActive !== undefined) {
+      setMembershipActive(propMembershipActive)
+    }
+  }, [propMembershipActive])
 
   // For non-admin users, redirect to active flow experience
   useEffect(() => {
-    if (!isAdmin) {
+    if (!isAdmin && currentExperienceId) {
       async function redirectToActiveFlow() {
         setIsLoading(true)
         try {
-          const activeFlow = await getActiveFlow()
+          if (!currentExperienceId) return
+          const activeFlow = await getActiveFlow(currentExperienceId)
           if (activeFlow) {
-            router.push(`/experiences/${activeFlow.id}/flow`)
+            router.push(`/experiences/${currentExperienceId}/flow`)
           } else {
             setHasCheckedActiveFlow(true)
           }
@@ -74,7 +137,7 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
       }
       redirectToActiveFlow()
     }
-  }, [isAdmin, router])
+  }, [isAdmin, router, currentExperienceId])
 
   // Show message for non-admin users while redirecting or if no active flow
   if (!isAdmin) {
@@ -102,19 +165,20 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
 
   // Load flows from database on mount (only for admin users)
   useEffect(() => {
-    if (!isAdmin) return
+    if (!isAdmin || !currentExperienceId) return
 
     async function loadFlows() {
       setIsLoading(true)
       try {
-        const loadedFlows = await loadAllFlows()
+        if (!currentExperienceId) return
+        const loadedFlows = await loadAllFlows(currentExperienceId)
         setFlows(loadedFlows)
         if (loadedFlows.length > 0) {
           const firstFlow = loadedFlows[0]
           // If flow doesn't have nodes (minimal data), load full flow
-          if (!firstFlow.nodes || firstFlow.nodes.length === 0) {
+          if ((!firstFlow.nodes || firstFlow.nodes.length === 0) && currentExperienceId) {
             const { loadFlow } = await import('@/lib/db/flows')
-            const fullFlow = await loadFlow(firstFlow.id)
+            const fullFlow = await loadFlow(firstFlow.id, currentExperienceId)
             if (fullFlow) {
               setSelectedFlow(fullFlow)
               setFlows(loadedFlows.map(f => f.id === fullFlow.id ? fullFlow : f))
@@ -126,24 +190,30 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
           }
         } else {
           // No flows found - this is OK, user can create one
-          toast.info('No flows found. Create your first flow to get started!')
+          console.log('No flows found. User can create their first flow.')
         }
       } catch (error) {
-        console.error('Error loading flows:', error)
-        const errorMessage = error instanceof Error ? error.message : 'Failed to load flows from database'
-        toast.error(errorMessage, { duration: 8000 })
+        // Only show error for critical issues (like table doesn't exist)
+        if (error instanceof Error && error.message.includes('does not exist')) {
+          console.error('Error loading flows:', error)
+          toast.error(error.message, { duration: 8000 })
+        } else {
+          // For other errors, just log and continue (loadAllFlows returns empty array)
+          console.warn('Could not load flows, but continuing:', error)
+        }
         
-        // Still allow the user to see the UI and try creating a flow
+        // Always allow the user to see the UI and try creating a flow
         setFlows([])
       } finally {
         setIsLoading(false)
       }
     }
     loadFlows()
-  }, [isAdmin])
+  }, [isAdmin, currentExperienceId])
 
   return (
     <div className="flex h-full overflow-hidden bg-background relative">
+      <div className="flex-1 flex overflow-hidden">
       <Sidebar 
         flows={flows}
         selectedFlow={selectedFlow}
@@ -151,9 +221,9 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
           setSelectedFlow(flow)
           
           // If flow doesn't have nodes (minimal data), load full flow
-          if (!flow.nodes || flow.nodes.length === 0) {
+          if ((!flow.nodes || flow.nodes.length === 0) && currentExperienceId) {
             const { loadFlow } = await import('@/lib/db/flows')
-            const fullFlow = await loadFlow(flow.id)
+            const fullFlow = await loadFlow(flow.id, currentExperienceId)
             if (fullFlow) {
               setSelectedFlow(fullFlow)
               // Update in flows list too
@@ -188,7 +258,9 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
             })
           }}
           experienceId={null} // Will be determined from URL in FlowCanvas
+          membershipActive={membershipActive} // Pass membership status to FlowCanvas
         />
+      </div>
       </div>
 
       {showChatModal && (
@@ -196,50 +268,70 @@ export default function FlowBuilder({ isAdmin = false }: FlowBuilderProps = {}) 
           onClose={() => setShowChatModal(false)}
           onCreateFlow={async (name: string) => {
             try {
-              // Check flow limit before creating
-              // Get experienceId from URL
-              const pathParts = window.location.pathname.split('/')
-              const expId = pathParts[pathParts.indexOf('experiences') + 1]
+              // Get experienceId and companyId RIGHT BEFORE creating the flow
+              const expId = currentExperienceId || propExperienceId || (params?.experienceId as string)
               
-              if (expId) {
-                // Get company ID and check membership
-                const companyIdResponse = await fetch(`/api/get-company-id?experienceId=${expId}`)
-                if (companyIdResponse.ok) {
-                  const { companyId } = await companyIdResponse.json()
-                  const membershipResponse = await fetch(`/api/check-membership?companyId=${companyId}`)
-                  if (membershipResponse.ok) {
-                    const { maxFlows: mFlows, membershipActive } = await membershipResponse.json()
-                    setMaxFlows(mFlows)
-                    // Check if user has reached flow limit
-                    if (flows.length >= mFlows) {
-                      if (membershipActive) {
-                        toast.error("Plan limit reached")
-                      } else {
-                        toast.error(`You've reached the limit of ${mFlows} flow${mFlows > 1 ? 's' : ''}. Upgrade to Premium for 3 flows.`)
-                        // Wait 1 second before showing popup
-                        setTimeout(() => {
-                          setShowLimitPopup(true)
-                        }, 1000)
-                      }
-                      setShowChatModal(false)
-                      return
-                    }
+              if (!expId) {
+                toast.error('Experience ID not found. Cannot create flow.')
+                return
+              }
+              
+              // Check flow limit before creating (per experience_id) - always fetch fresh to ensure accuracy
+              const membershipResponse = await fetch(`/api/check-membership?experienceId=${expId}`)
+              if (membershipResponse.ok) {
+                const { maxFlows: mFlows, membershipActive: fetchedMembershipActive, currentFlowCount } = await membershipResponse.json()
+                setMaxFlows(mFlows)
+                // Sync membership status with fetched value to ensure consistency
+                setMembershipActive(fetchedMembershipActive)
+                // Check if user has reached flow limit for this experience
+                if (currentFlowCount >= mFlows) {
+                  if (fetchedMembershipActive) {
+                    toast.error("Plan limit reached")
+                  } else {
+                    toast.error(`You've reached the limit of ${mFlows} flow${mFlows > 1 ? 's' : ''}. Upgrade to Premium for 5 flows.`)
+                    setTimeout(() => {
+                      setShowLimitPopup(true)
+                    }, 1000)
                   }
+                  setShowChatModal(false)
+                  return
                 }
               }
               
-              const newFlow = await createFlow(name)
+              console.log(`Creating flow "${name}" with experienceId: ${expId}`)
+              const newFlow = await createFlow(name, expId)
+              
               if (newFlow) {
+                console.log(`Successfully created flow "${name}" with ID: ${newFlow.id}`)
                 setFlows([...flows, newFlow])
                 setSelectedFlow(newFlow)
                 setShowChatModal(false)
                 toast.success('Flow created successfully')
               } else {
-                toast.error('Failed to create flow')
+                console.error('createFlow returned null')
+                toast.error('Failed to create flow: No flow returned')
               }
             } catch (error) {
               console.error('Error creating flow:', error)
-              toast.error(error instanceof Error ? error.message : 'Failed to create flow')
+              
+              // Extract error message
+              let errorMessage = 'Failed to create flow'
+              if (error instanceof Error) {
+                errorMessage = error.message
+              } else if (error && typeof error === 'object') {
+                // Try to extract message from error object
+                const err = error as any
+                errorMessage = err.message || err.error || JSON.stringify(error)
+              }
+              
+              console.error('Error details:', {
+                error,
+                message: errorMessage,
+                type: typeof error,
+                isError: error instanceof Error
+              })
+              
+              toast.error(errorMessage, { duration: 5000 })
             }
           }}
         />
