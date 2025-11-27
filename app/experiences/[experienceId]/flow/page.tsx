@@ -16,7 +16,8 @@ import { trackPathNode } from "@/lib/db/paths"
 export default function OnboardingFlowView() {
   const params = useParams()
   const router = useRouter()
-  const experienceId = params.experienceId as string
+  // Safely extract experienceId with fallback
+  const experienceId = (params?.experienceId as string) || (typeof window !== 'undefined' ? window.location.pathname.split('/experiences/')[1]?.split('/')[0] : null) || null
   const [currentNodeId, setCurrentNodeId] = useState<string | null>(null)
   const [flow, setFlow] = useState<Flow | null>(null)
   const [userAnswers, setUserAnswers] = useState<Record<string, any>>({})
@@ -134,6 +135,9 @@ export default function OnboardingFlowView() {
     }
     if (experienceId) {
       loadFlow()
+    } else {
+      setIsLoading(false)
+      setFlowLoadError('Experience ID not found')
     }
   }, [experienceId])
 
