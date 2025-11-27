@@ -78,9 +78,9 @@ async function handlePaymentSucceeded(payment: Payment) {
 		// - payment.company.id or payment.company_id for companyId
 		// - payment.metadata for custom metadata
 		// - payment.id for payment ID
-		const userId = (payment as any).user?.id || (payment as any).user_id || (payment as any).customer_id;
-		const companyId = (payment as any).company?.id || (payment as any).company_id;
-		const paymentId = payment.id || (payment as any).receipt_id;
+		const userId: string | undefined = (payment as any).user?.id || (payment as any).user_id || (payment as any).customer_id;
+		const companyId: string | undefined = (payment as any).company?.id || (payment as any).company_id;
+		const paymentId: string | undefined = payment.id || (payment as any).receipt_id;
 		const metadata = (payment.metadata || {}) as {
 			user_id?: string;
 			plan_type?: string;
@@ -88,9 +88,10 @@ async function handlePaymentSucceeded(payment: Payment) {
 		};
 		
 		// Use metadata if available, otherwise use direct fields
-		const finalUserId = metadata.user_id || userId;
-		const finalCompanyId = metadata.company_id || companyId;
-		const planType = metadata.plan_type || "premium-monthly";
+		// Explicitly type as string after validation
+		const finalUserId: string = metadata.user_id || userId || '';
+		const finalCompanyId: string = metadata.company_id || companyId || '';
+		const planType: string = metadata.plan_type || "premium-monthly";
 		
 		console.log("[PAYMENT DATA]", {
 			userId: finalUserId,
@@ -100,14 +101,9 @@ async function handlePaymentSucceeded(payment: Payment) {
 			metadata
 		});
 		
+		// Validate required fields
 		if (!finalUserId || !finalCompanyId) {
 			console.error("Missing user_id or company_id in payment. Payment object:", payment);
-			return;
-		}
-		
-		// Ensure types are correct for function call
-		if (typeof finalUserId !== 'string') {
-			console.error("Invalid userId type:", typeof finalUserId);
 			return;
 		}
 		
@@ -115,11 +111,12 @@ async function handlePaymentSucceeded(payment: Payment) {
 		
 		// Update or create user membership
 		// Function signature: upsertUserMembership(userId: string, membershipActive: boolean, paymentId?: string, planType?: string)
+		const membershipActive: boolean = true;
 		const result = await upsertUserMembership(
 			finalUserId,
-			true, // membership_active = true (boolean)
-			typeof paymentId === 'string' ? paymentId : undefined,
-			typeof planType === 'string' ? planType : undefined
+			membershipActive,
+			paymentId,
+			planType
 		);
 		
 		if (result) {
