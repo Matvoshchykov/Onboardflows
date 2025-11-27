@@ -1978,22 +1978,39 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
               />
               {flow && (
                 <button
-                  onClick={() => {
-                    if (flow.status === "Live" && experienceId) {
-                      // Use type assertion to bypass build cache type issues
-                      (toggleFlowActive as any)(flow.id, false, experienceId)
-                        .then((success: boolean) => {
+                  onClick={async () => {
+                    console.log('[Disable Button 2] Clicked - flow.status:', flow.status, 'experienceId:', experienceId)
+                    
+                    if (flow.status === "Live") {
+                      // Get experienceId from URL if not provided as prop
+                      let expId = experienceId
+                      if (!expId) {
+                        const pathParts = window.location.pathname.split('/')
+                        expId = pathParts[pathParts.indexOf('experiences') + 1]
+                      }
+                      
+                      console.log('[Disable Button 2] Using experienceId:', expId)
+                      
+                      if (expId) {
+                        try {
+                          // Use type assertion to bypass build cache type issues
+                          const success = await (toggleFlowActive as any)(flow.id, false, expId)
+                          console.log('[Disable Button 2] toggleFlowActive result:', success)
+                          
                           if (success && onUpdateFlow) {
                             onUpdateFlow({ ...flow, status: "Draft" as const })
                             toast.success("Flow disabled successfully")
                           } else {
                             toast.error("Failed to disable flow")
                           }
-                        })
-                        .catch((error: any) => {
-                          console.error("Error disabling flow:", error)
+                        } catch (error: any) {
+                          console.error("[Disable Button 2] Error disabling flow:", error)
                           toast.error("Failed to disable flow")
-                        })
+                        }
+                      } else {
+                        console.error("[Disable Button 2] No experienceId found")
+                        toast.error("Cannot disable flow: Experience ID not found")
+                      }
                     } else {
                       setShowUploadModal(true)
                     }
@@ -2064,23 +2081,38 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
             {/* Enable/Disable button - absolute right in title input */}
             {flow && (
               <button
-                onClick={() => {
+                onClick={async () => {
+                  console.log('[Disable Button] Clicked - flow.status:', flow.status, 'experienceId:', experienceId)
+                  
                   if (flow.status === "Live") {
-                    if (experienceId) {
-                      // Use type assertion to bypass build cache type issues
-                      (toggleFlowActive as any)(flow.id, false, experienceId)
-                        .then((success: boolean) => {
-                          if (success && onUpdateFlow) {
-                            onUpdateFlow({ ...flow, status: "Draft" as const })
-                            toast.success("Flow disabled successfully")
-                          } else {
-                            toast.error("Failed to disable flow")
-                          }
-                        })
-                        .catch((error: any) => {
-                          console.error("Error disabling flow:", error)
+                    // Get experienceId from URL if not provided as prop
+                    let expId = experienceId
+                    if (!expId) {
+                      const pathParts = window.location.pathname.split('/')
+                      expId = pathParts[pathParts.indexOf('experiences') + 1]
+                    }
+                    
+                    console.log('[Disable Button] Using experienceId:', expId)
+                    
+                    if (expId) {
+                      try {
+                        // Use type assertion to bypass build cache type issues
+                        const success = await (toggleFlowActive as any)(flow.id, false, expId)
+                        console.log('[Disable Button] toggleFlowActive result:', success)
+                        
+                        if (success && onUpdateFlow) {
+                          onUpdateFlow({ ...flow, status: "Draft" as const })
+                          toast.success("Flow disabled successfully")
+                        } else {
                           toast.error("Failed to disable flow")
-                        })
+                        }
+                      } catch (error: any) {
+                        console.error("[Disable Button] Error disabling flow:", error)
+                        toast.error("Failed to disable flow")
+                      }
+                    } else {
+                      console.error("[Disable Button] No experienceId found")
+                      toast.error("Cannot disable flow: Experience ID not found")
                     }
                   } else {
                     setShowUploadModal(true)
@@ -3746,26 +3778,54 @@ function PreviewModal({
   const handleNext = async () => {
     if (!currentPreviewNode) return
     
+    // Clear previewClickedNodeId when navigating - we want to follow the normal flow path now
+    if (previewClickedNodeId) {
+      setPreviewClickedNodeId(null)
+      // Rebuild path from the current node to follow normal flow
+      const newPath = buildPathFromAnswers()
+      if (newPath.length > 0) {
+        // Find current node in the new path
+        const currentIndex = newPath.findIndex(n => n.id === currentPreviewNode.id)
+        if (currentIndex !== -1) {
+          setActualPathTaken(newPath)
+          setPreviewNodeIndex(currentIndex)
+        } else {
+          // Current node not in path, rebuild from scratch
+          setActualPathTaken(newPath)
+          setPreviewNodeIndex(0)
+        }
+      }
+      // Wait a tick for state to update, then continue
+      await new Promise(resolve => setTimeout(resolve, 0))
+    }
+    
+    // Get the current node again (might have changed after clearing previewClickedNodeId)
+    const currentNode = previewClickedNodeId 
+      ? flow.nodes.find(n => n.id === previewClickedNodeId) || currentPreviewNode
+      : (actualPathTaken[previewNodeIndex] || currentPreviewNode)
+    
+    if (!currentNode) return
+    
     // Get fresh answer from state - always proceed even without answer
-    const freshAnswer = previewAnswers[currentPreviewNode.id]
+    const freshAnswer = previewAnswers[currentNode.id]
     
     // Save answer to temporary database (localStorage) if we have one
     if (freshAnswer !== undefined) {
       setPreviewAnswers(prev => {
-        const updated = { ...prev, [currentPreviewNode.id]: freshAnswer }
+        const updated = { ...prev, [currentNode.id]: freshAnswer }
         // Save to localStorage (temporary database)
         if (typeof window !== 'undefined') {
           localStorage.setItem(`preview-answers-${flow.id}`, JSON.stringify(updated))
         }
         return updated
       })
-      
-      // Don't save answer in preview mode - preview is for creator testing only
     }
     
     // Get next node based on answer - use saved answer or undefined
     const answerToUse = freshAnswer
-    const nextNode = getNextNodeFromCurrent(currentPreviewNode, answerToUse)
+    const nextNode = getNextNodeFromCurrent(currentNode, answerToUse)
+    
+    console.log('Preview handleNext - Current node:', currentNode.id, 'Next node:', nextNode?.id)
     
     if (nextNode) {
       // Check if next node is already in the path

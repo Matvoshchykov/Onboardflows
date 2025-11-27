@@ -51,19 +51,16 @@ export default function OnboardingFlowView() {
         if (userIdData.userId) {
           setUserId(userIdData.userId)
           
-          // Check membership status
+          // Check membership status - use experienceId directly
           try {
             const pathParts = window.location.pathname.split('/')
             const expId = pathParts[pathParts.indexOf('experiences') + 1]
             if (expId) {
-              const companyIdResponse = await fetch(`/api/get-company-id?experienceId=${expId}`)
-              if (companyIdResponse.ok) {
-                const { companyId } = await companyIdResponse.json()
-                const membershipResponse = await fetch(`/api/check-membership?companyId=${companyId}`)
-                if (membershipResponse.ok) {
-                  const { membershipActive: active } = await membershipResponse.json()
-                  setMembershipActive(active)
-                }
+              // Use experienceId directly, not companyId
+              const membershipResponse = await fetch(`/api/check-membership?experienceId=${expId}`)
+              if (membershipResponse.ok) {
+                const { membershipActive: active } = await membershipResponse.json()
+                setMembershipActive(active)
               }
             }
           } catch (error) {

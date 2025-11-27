@@ -463,26 +463,51 @@ export async function toggleFlowActive(flowId: string, active: boolean, experien
   }
 
   try {
+    console.log(`[toggleFlowActive] Starting - flowId: ${flowId}, active: ${active}, experienceId: ${experienceId}`)
+    
     // If setting a flow to active, first deactivate all other flows for this experience
     if (active) {
+      console.log(`[toggleFlowActive] Deactivating other flows for experience ${experienceId}`)
       const { error: deactivateError, data: deactivateData } = await supabase
         .from('flows')
         .update({ active: false })
         .eq('experience_id', experienceId)
-        .not('experience_id', 'is', null)
         .neq('id', flowId)
         .select()
 
       if (deactivateError) {
-        console.error('Error deactivating other flows:', deactivateError)
-        console.error('Deactivate error details:', JSON.stringify(deactivateError, null, 2))
+        console.error('[toggleFlowActive] Error deactivating other flows:', deactivateError)
+        console.error('[toggleFlowActive] Deactivate error details:', JSON.stringify(deactivateError, null, 2))
         return false
       }
-      console.log('Deactivated other flows:', deactivateData)
+      console.log('[toggleFlowActive] Deactivated other flows:', deactivateData?.length || 0, 'flows')
     }
 
-    // Use update (not upsert) since we're only changing the active status
-    // Upsert would require all NOT NULL fields like 'title' which we don't have here
+    // First, verify the flow exists and get its current state
+    const { data: existingFlow, error: fetchError } = await supabase
+      .from('flows')
+      .select('id, active, experience_id')
+      .eq('id', flowId)
+      .single()
+
+    if (fetchError) {
+      console.error('[toggleFlowActive] Error fetching flow:', fetchError)
+      return false
+    }
+
+    if (!existingFlow) {
+      console.error('[toggleFlowActive] Flow not found:', flowId)
+      return false
+    }
+
+    console.log('[toggleFlowActive] Existing flow state:', {
+      id: existingFlow.id,
+      active: existingFlow.active,
+      experience_id: existingFlow.experience_id
+    })
+
+    // Update the flow by ID - when disabling, we don't need experience_id check
+    // When enabling, we already deactivated others above
     const { error, data } = await supabase
       .from('flows')
       .update({ 
@@ -490,17 +515,20 @@ export async function toggleFlowActive(flowId: string, active: boolean, experien
         updated_at: new Date().toISOString()
       })
       .eq('id', flowId)
-      .eq('experience_id', experienceId)
-      .not('experience_id', 'is', null)
       .select()
 
     if (error) {
-      console.error('Error toggling flow active:', error)
-      console.error('Update error details:', JSON.stringify(error, null, 2))
+      console.error('[toggleFlowActive] Error updating flow:', error)
+      console.error('[toggleFlowActive] Update error details:', JSON.stringify(error, null, 2))
       return false
     }
 
-    console.log(`Successfully set flow ${flowId} active status to ${active}`, data)
+    if (!data || data.length === 0) {
+      console.error('[toggleFlowActive] No data returned from update')
+      return false
+    }
+
+    console.log(`[toggleFlowActive] Successfully updated flow ${flowId} active status to ${active}`, data)
     
     // Verify the update was successful by reading it back
     const { data: verifyData, error: verifyError } = await supabase
@@ -510,11 +538,13 @@ export async function toggleFlowActive(flowId: string, active: boolean, experien
       .single()
     
     if (verifyError) {
-      console.error('Error verifying flow active status:', verifyError)
+      console.error('[toggleFlowActive] Error verifying flow active status:', verifyError)
+      return false
     } else {
-      console.log('Verified flow active status:', verifyData?.active, 'Expected:', active)
+      console.log('[toggleFlowActive] Verified flow active status:', verifyData?.active, 'Expected:', active)
       if (verifyData?.active !== active) {
-        console.error('WARNING: Flow active status mismatch! Database shows:', verifyData?.active, 'but expected:', active)
+        console.error('[toggleFlowActive] WARNING: Flow active status mismatch! Database shows:', verifyData?.active, 'but expected:', active)
+        return false
       }
     }
 
@@ -523,10 +553,10 @@ export async function toggleFlowActive(flowId: string, active: boolean, experien
 
     return true
   } catch (error) {
-    console.error('Error toggling flow active:', error)
+    console.error('[toggleFlowActive] Exception:', error)
     if (error instanceof Error) {
-      console.error('Error message:', error.message)
-      console.error('Error stack:', error.stack)
+      console.error('[toggleFlowActive] Error message:', error.message)
+      console.error('[toggleFlowActive] Error stack:', error.stack)
     }
     return false
   }
