@@ -29,6 +29,7 @@ export default function OnboardingFlowView() {
   const [watchedVideos, setWatchedVideos] = useState<Set<string>>(new Set())
   const [videoViewingTimes, setVideoViewingTimes] = useState<Record<string, number>>({})
   const [membershipActive, setMembershipActive] = useState(false)
+  const [flowLoadError, setFlowLoadError] = useState<string | null>(null)
 
   // Detect mobile
   useEffect(() => {
@@ -82,10 +83,18 @@ export default function OnboardingFlowView() {
       setIsLoading(true)
       try {
         // Load the active flow (flows have their own IDs, not experienceId)
-        if (!experienceId) return
+        if (!experienceId) {
+          console.error('No experienceId provided')
+          setIsLoading(false)
+          return
+        }
+        
+        console.log('Loading active flow for experienceId:', experienceId)
         const { getActiveFlow } = await import('@/lib/db/flows')
         // Use type assertion to bypass build cache type issues
         const dbFlow = await (getActiveFlow as any)(experienceId)
+        
+        console.log('Active flow loaded:', dbFlow ? 'Found' : 'Not found', dbFlow)
         
         if (dbFlow) {
           setFlow(dbFlow)
@@ -111,15 +120,24 @@ export default function OnboardingFlowView() {
           }
         } else {
           // No active flow found
-          console.error('No active flow found')
+          console.error('No active flow found for experienceId:', experienceId)
+          setFlowLoadError('No active flow found. Please contact support.')
         }
       } catch (error) {
         console.error('Error loading flow:', error)
+        if (error instanceof Error) {
+          console.error('Error details:', error.message, error.stack)
+          setFlowLoadError(`Error loading flow: ${error.message}`)
+        } else {
+          setFlowLoadError('Failed to load flow. Please try again later.')
+        }
       } finally {
         setIsLoading(false)
       }
     }
-    loadFlow()
+    if (experienceId) {
+      loadFlow()
+    }
   }, [experienceId])
 
   const getCurrentNode = (): FlowNode | null => {
@@ -549,8 +567,27 @@ export default function OnboardingFlowView() {
   }
 
   // Show loading screen
-  if (isLoading || !flow) {
+  if (isLoading) {
     return <FlowLoading message="Loading onboarding flow..." />
+  }
+
+  if (flowLoadError || !flow) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="text-center max-w-md">
+          <h1 className="text-2xl font-bold mb-4 text-foreground">Flow Not Available</h1>
+          <p className="text-muted-foreground mb-6">
+            {flowLoadError || "No active onboarding flow found. Please contact support."}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
   }
 
   const currentNode = getCurrentNode()

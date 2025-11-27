@@ -1995,12 +1995,19 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
                   onClick={() => {
                     if (flow.status === "Live" && experienceId) {
                       // Use type assertion to bypass build cache type issues
-                      (toggleFlowActive as any)(flow.id, false, experienceId).then((success: boolean) => {
-                        if (success && onUpdateFlow) {
-                          onUpdateFlow({ ...flow, status: "Draft" as const })
-                          toast.success("Flow disabled successfully")
-                        }
-                      })
+                      (toggleFlowActive as any)(flow.id, false, experienceId)
+                        .then((success: boolean) => {
+                          if (success && onUpdateFlow) {
+                            onUpdateFlow({ ...flow, status: "Draft" as const })
+                            toast.success("Flow disabled successfully")
+                          } else {
+                            toast.error("Failed to disable flow")
+                          }
+                        })
+                        .catch((error: any) => {
+                          console.error("Error disabling flow:", error)
+                          toast.error("Failed to disable flow")
+                        })
                     } else {
                       setShowUploadModal(true)
                     }
@@ -2075,12 +2082,19 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
                   if (flow.status === "Live") {
                     if (experienceId) {
                       // Use type assertion to bypass build cache type issues
-                      (toggleFlowActive as any)(flow.id, false, experienceId).then((success: boolean) => {
-                        if (success && onUpdateFlow) {
-                          onUpdateFlow({ ...flow, status: "Draft" as const })
-                          toast.success("Flow disabled successfully")
-                        }
-                      })
+                      (toggleFlowActive as any)(flow.id, false, experienceId)
+                        .then((success: boolean) => {
+                          if (success && onUpdateFlow) {
+                            onUpdateFlow({ ...flow, status: "Draft" as const })
+                            toast.success("Flow disabled successfully")
+                          } else {
+                            toast.error("Failed to disable flow")
+                          }
+                        })
+                        .catch((error: any) => {
+                          console.error("Error disabling flow:", error)
+                          toast.error("Failed to disable flow")
+                        })
                     }
                   } else {
                     setShowUploadModal(true)
