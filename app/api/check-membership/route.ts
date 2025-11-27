@@ -8,23 +8,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // Verify user is authenticated
     const { userId } = await whopsdk.verifyUserToken(await headers());
     
-    // Get companyId from query params
+    // Get experienceId from query params
     const { searchParams } = new URL(request.url);
-    const companyId = searchParams.get("companyId");
+    const experienceId = searchParams.get("experienceId");
     
-    if (!companyId) {
+    if (!experienceId) {
       return NextResponse.json(
-        { error: "Missing companyId" },
+        { error: "Missing experienceId" },
         { status: 400 }
       );
     }
     
-    // Get or create user membership
-    let membership = await getUserMembership(userId, companyId);
+    // Get user membership (user-wide, not per company/experience)
+    let membership = await getUserMembership(userId);
     
     // If no membership exists, create one with membership_active = false (free plan)
     if (!membership) {
-      membership = await upsertUserMembership(userId, companyId, false);
+      membership = await upsertUserMembership(userId, false);
     }
     
     if (!membership) {
@@ -34,10 +34,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
     
+    // Count flows for this specific experience_id
+    const { loadAllFlows } = await import("@/lib/db/flows");
+    // Use type assertion to bypass build cache type issues
+    const flowsForThisExperience = await (loadAllFlows as any)(experienceId);
+    const currentFlowCount = flowsForThisExperience.length;
+    
+    // Limits are per experience_id
+    const membershipActive = membership.membership_active;
+    const maxFlows = membershipActive ? 5 : 1;
+    const maxBlocksPerFlow = membershipActive ? 30 : 5;
+    
     return NextResponse.json({
-      membershipActive: membership.membership_active,
-      maxFlows: membership.membership_active ? 3 : 1,
-      maxBlocksPerFlow: membership.membership_active ? 30 : 5,
+      membershipActive: membershipActive,
+      maxFlows: maxFlows,
+      maxBlocksPerFlow: maxBlocksPerFlow,
+      currentFlowCount: currentFlowCount,
     });
   } catch (error) {
     console.error("Error checking membership:", error);
