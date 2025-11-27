@@ -3510,47 +3510,54 @@ function PreviewModal({
     const connectedLogicBlock = logicBlocks.find(lb => node.connections.includes(lb.id))
     
     if (connectedLogicBlock) {
-      // For A/B test, always evaluate even without answer
-      if (connectedLogicBlock.type === "a-b-test") {
-        const targetId = evaluateLogicBlock(connectedLogicBlock, answer)
-        if (targetId) {
-          return flow.nodes.find(n => n.id === targetId) || null
-        }
-        return null
-      }
-      
-      if (answer !== undefined && answer !== null) {
-        const targetId = evaluateLogicBlock(connectedLogicBlock, answer)
-        if (targetId) {
-          return flow.nodes.find(n => n.id === targetId) || null
+      // Always evaluate the logic block with the answer (even if null/undefined for A/B tests)
+      const targetId = evaluateLogicBlock(connectedLogicBlock, answer)
+      if (targetId) {
+        const targetNode = flow.nodes.find(n => n.id === targetId)
+        if (targetNode) {
+          return targetNode
         }
       }
+      // If evaluation failed, check if logic block has connections as fallback
       if (connectedLogicBlock.connections.length > 0) {
         const firstTargetId = connectedLogicBlock.connections[0]
-        return flow.nodes.find(n => n.id === firstTargetId) || null
+        const firstTargetNode = flow.nodes.find(n => n.id === firstTargetId)
+        if (firstTargetNode) {
+          return firstTargetNode
+        }
       }
       return null
     }
     
+    // Direct connection to next node (no logic block)
     if (node.connections.length > 0) {
       const nextId = node.connections[0]
       const isLogicBlock = logicBlocks.some(lb => lb.id === nextId)
       if (!isLogicBlock) {
-        return flow.nodes.find(n => n.id === nextId) || null
-      }
-      const nextLogicBlock = logicBlocks.find(lb => lb.id === nextId)
-      if (nextLogicBlock) {
-        // For A/B test, always evaluate even without answer
-        if (nextLogicBlock.type === "a-b-test") {
+        const nextNode = flow.nodes.find(n => n.id === nextId)
+        if (nextNode) {
+          return nextNode
+        }
+      } else {
+        // If it's a logic block, we need to evaluate it with the answer
+        const nextLogicBlock = logicBlocks.find(lb => lb.id === nextId)
+        if (nextLogicBlock) {
+          // Always evaluate the logic block with the answer (even if null/undefined for A/B tests)
           const targetId = evaluateLogicBlock(nextLogicBlock, answer)
           if (targetId) {
-            return flow.nodes.find(n => n.id === targetId) || null
+            const targetNode = flow.nodes.find(n => n.id === targetId)
+            if (targetNode) {
+              return targetNode
+            }
           }
-          return null
-        }
-        if (nextLogicBlock.connections.length > 0) {
-          const firstTargetId = nextLogicBlock.connections[0]
-          return flow.nodes.find(n => n.id === firstTargetId) || null
+          // Fallback to first connection of logic block if evaluation failed
+          if (nextLogicBlock.connections.length > 0) {
+            const firstTargetId = nextLogicBlock.connections[0]
+            const firstTargetNode = flow.nodes.find(n => n.id === firstTargetId)
+            if (firstTargetNode) {
+              return firstTargetNode
+            }
+          }
         }
       }
     }
@@ -3766,20 +3773,16 @@ function PreviewModal({
       
       if (nextNodeIndex !== -1) {
         // Node already exists in path, just move to that index
-        // Don't track in preview mode
         setPreviewNodeIndex(nextNodeIndex)
       } else {
         // Node not in path yet, add it and move to it
         const newPath = [...actualPathTaken, nextNode]
         setActualPathTaken(newPath)
-      
-      // Don't track next node visit in preview mode
-      
-      // Move to next index
-        setPreviewNodeIndex(actualPathTaken.length)
+        // Move to the new node's index (which is the last index in the new path)
+        setPreviewNodeIndex(newPath.length - 1)
       }
     } else {
-      // Don't complete session in preview mode
+      // Flow complete - close preview
       setShowPreview(false)
       setPreviewClickedNodeId(null) // Reset clicked node when closing
     }

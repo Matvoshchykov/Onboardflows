@@ -516,31 +516,43 @@ export default function OnboardingFlowView() {
   }, [currentNodeId, sessionId, flow, membershipActive]) // Removed currentAnswer from dependencies
 
   const handleNext = async () => {
+    const currentNode = getCurrentNode()
+    if (!currentNode) {
+      console.error('No current node found')
+      return
+    }
+    
+    console.log('handleNext - Current node:', currentNode.id, currentNode.title)
+    console.log('handleNext - Current answer:', currentAnswer)
+    console.log('handleNext - Current node connections:', currentNode.connections)
+    
     // Save the answer before moving to next node (only for premium users)
     if (sessionId && currentNodeId && currentAnswer !== null && currentAnswer !== undefined && membershipActive) {
       try {
-        const currentNode = getCurrentNode()
-        if (currentNode) {
-          const allComponents = normalizePageComponents(currentNode.pageComponents)
-          const questionComponent = allComponents.find(
-            comp => ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider", "long-answer"].includes(comp.type)
-          )
-          if (questionComponent) {
-            const { saveResponse } = await import('@/lib/db/responses')
-            await saveResponse(sessionId, currentNodeId, questionComponent.type, currentAnswer)
-          }
+        const allComponents = normalizePageComponents(currentNode.pageComponents)
+        const questionComponent = allComponents.find(
+          comp => ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider", "long-answer"].includes(comp.type)
+        )
+        if (questionComponent) {
+          const { saveResponse } = await import('@/lib/db/responses')
+          await saveResponse(sessionId, currentNodeId, questionComponent.type, currentAnswer)
         }
       } catch (error) {
         console.error('Error saving response:', error)
       }
     }
     
+    // Get next node - always pass answer (even if null/undefined) to allow logic block evaluation
     const nextNode = getNextNode(currentAnswer)
+    console.log('handleNext - Next node found:', nextNode ? `${nextNode.id} - ${nextNode.title}` : 'null')
+    
     if (nextNode) {
+      console.log('handleNext - Moving to next node:', nextNode.id)
       setCurrentNodeId(nextNode.id)
       setCurrentAnswer(null)
       setWatchedVideos(new Set()) // Reset watched videos for new node
     } else {
+      console.log('handleNext - No next node found, flow complete')
       // Flow complete - show success message and complete session (only for premium users)
       if (sessionId && membershipActive) {
         try {
