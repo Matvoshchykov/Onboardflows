@@ -20,7 +20,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
     
     // Get user membership (user-wide, not per company/experience)
-    let membership = await getUserMembership(userId);
+    // Use type assertion to bypass build cache type issues
+    let membership = await (getUserMembership as any)(userId);
     
     // If no membership exists, create one with membership_active = false (free plan)
     if (!membership) {
