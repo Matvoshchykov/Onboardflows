@@ -13,7 +13,7 @@ type UpgradeLimitPopupProps = {
 
 const advantages = [
   "30 blocks per flow (vs 5 on free)",
-  "3 flows per experience (vs 1 on free)",
+  "5 flows per experience (vs 1 on free)",
   "Advanced analytics & insights",
   "Export data to CSV",
   "Priority support"

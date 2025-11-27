@@ -33,6 +33,7 @@ export interface FlowRecord {
   title: string
   active: boolean
   flow_data: FlowData
+  experience_id?: string
   created_at: string
   updated_at: string
 }
@@ -104,15 +105,29 @@ export async function saveFlow(flow: Flow): Promise<FlowRecord | null> {
           }
           const flowId = flow.id || generateFlowId()
 
+          // First, get the existing flow to preserve experience_id
+          const { data: existingFlow } = await supabase
+            .from('flows')
+            .select('experience_id')
+            .eq('id', flowId)
+            .single()
+          
+          const upsertData: any = {
+            id: flowId,
+            title: flow.title,
+            active: flow.status === 'Live',
+            flow_data: flowData,
+            updated_at: new Date().toISOString()
+          }
+          
+          // Preserve experience_id if it exists
+          if (existingFlow?.experience_id) {
+            upsertData.experience_id = existingFlow.experience_id
+          }
+          
           await supabase
             .from('flows')
-            .upsert({
-              id: flowId,
-              title: flow.title,
-              active: flow.status === 'Live',
-              flow_data: flowData,
-              updated_at: new Date().toISOString()
-            }, {
+            .upsert(upsertData, {
               onConflict: 'id'
             })
         } catch (error) {
@@ -127,9 +142,9 @@ export async function saveFlow(flow: Flow): Promise<FlowRecord | null> {
 }
 
 /**
- * Load a flow from the database by ID (optimized with caching)
+ * Load a flow from the database by ID and experience_id (optimized with caching)
  */
-export async function loadFlow(flowId: string): Promise<Flow | null> {
+export async function loadFlow(flowId: string, experienceId: string): Promise<Flow | null> {
   if (!isSupabaseConfigured || !supabase) {
     console.warn('Supabase not configured, cannot load flow')
     return null
@@ -151,11 +166,13 @@ export async function loadFlow(flowId: string): Promise<Flow | null> {
   }
 
   try {
-    // Only select needed fields for faster queries
+    // Only select needed fields for faster queries - filter by experience_id
     const { data, error } = await supabase
       .from('flows')
-      .select('id, title, active, flow_data, created_at, updated_at')
+      .select('id, title, active, flow_data, experience_id, created_at, updated_at')
       .eq('id', flowId)
+      .eq('experience_id', experienceId)
+      .not('experience_id', 'is', null)
       .single()
 
     if (error) {
@@ -191,45 +208,63 @@ export async function loadFlow(flowId: string): Promise<Flow | null> {
   }
 }
 
-// Cache for all flows list
-let allFlowsCache: { flows: Flow[]; timestamp: number } | null = null
+// Cache for all flows list (keyed by experienceId)
+let allFlowsCache: { flows: Flow[]; timestamp: number; experienceId: string } | null = null
 const ALL_FLOWS_CACHE_TTL = 3000 // 3 seconds cache
 
 /**
- * Load all flows from the database (optimized with caching and minimal data)
+ * Load all flows from the database for a specific experience_id (optimized with caching and minimal data)
  */
-export async function loadAllFlows(): Promise<Flow[]> {
+export async function loadAllFlows(experienceId: string): Promise<Flow[]> {
   if (!isSupabaseConfigured || !supabase) {
     const errorMsg = 'Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.'
     console.error(errorMsg)
     throw new Error(errorMsg)
   }
 
-  // Check cache first
-  if (allFlowsCache && (Date.now() - allFlowsCache.timestamp) < ALL_FLOWS_CACHE_TTL) {
+  if (!experienceId || experienceId.trim() === '') {
+    console.warn('[loadAllFlows] experienceId is required')
+    return []
+  }
+
+  // Check cache first (keyed by experienceId)
+  const cacheKey = experienceId
+  if (allFlowsCache && allFlowsCache.experienceId === cacheKey && (Date.now() - allFlowsCache.timestamp) < ALL_FLOWS_CACHE_TTL) {
     return allFlowsCache.flows
   }
 
   try {
-      // Only select minimal fields needed for list view - this is MUCH faster
+      // Only select minimal fields needed for list view - filter by experience_id
       const { data, error } = await supabase
         .from('flows')
-        .select('id, title, active, created_at, updated_at')
+        .select('id, title, active, experience_id, created_at, updated_at')
+        .eq('experience_id', experienceId)
+        .not('experience_id', 'is', null)
         .order('updated_at', { ascending: false })
         .limit(50) // Reduced from 100
 
     if (error) {
-      let errorMsg = `Error loading flows from database: ${error.message}`
+      // Only throw for critical errors (table doesn't exist)
       if (error.code === 'PGRST205') {
-        errorMsg = 'Database table "flows" does not exist. Please run the SQL schema from supabase/schema.sql in your Supabase SQL editor.'
-      } else if (error.code === 'PGRST301' || error.code === 'PGRST302') {
-        errorMsg = 'Database connection error. Please check your Supabase configuration.'
+        const errorMsg = 'Database table "flows" does not exist. Please run the SQL schema from supabase/schema.sql in your Supabase SQL editor.'
+        console.error('Error loading flows:', errorMsg)
+        throw new Error(errorMsg)
       }
-      console.error('Error loading flows:', error)
-      throw new Error(errorMsg)
+      // For other errors, log but return empty array to allow flow creation
+      console.warn('Error loading flows from database:', error.message || error)
+      console.warn('Returning empty array - you can still create new flows')
+      // Update cache with empty array (keyed by experienceId)
+      allFlowsCache = { flows: [], timestamp: Date.now(), experienceId: cacheKey }
+      return []
     }
 
-    if (!data) return []
+    // If no data, return empty array (no flows exist yet)
+    if (!data || data.length === 0) {
+      console.log('No flows found in database')
+      // Update cache with empty array (keyed by experienceId)
+      allFlowsCache = { flows: [], timestamp: Date.now(), experienceId: cacheKey }
+      return []
+    }
 
     // Minimal processing - no flow_data parsing for list view
     const flows = data.map((flowRecord: any) => ({
@@ -241,25 +276,32 @@ export async function loadAllFlows(): Promise<Flow[]> {
       logicBlocks: [] // Will be loaded when flow is selected
     }))
 
-    // Update cache
-    allFlowsCache = { flows, timestamp: Date.now() }
+    // Update cache (keyed by experienceId)
+    allFlowsCache = { flows, timestamp: Date.now(), experienceId: cacheKey }
 
     return flows
   } catch (error) {
-    // Re-throw if it's already an Error with message
-    if (error instanceof Error && error.message.includes('Error loading flows')) {
+    // Only re-throw critical errors (table doesn't exist)
+    if (error instanceof Error && error.message.includes('does not exist')) {
       throw error
     }
     
+    // For network errors or other issues, log and return empty array
+    // This allows users to still create flows even if fetching fails
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-      const errorMsg = 'Network error: Failed to connect to Supabase. Please check your network connection and Supabase configuration.'
-      console.error(errorMsg)
-      throw new Error(errorMsg)
+      console.warn('Network error loading flows. Returning empty array - you can still create new flows')
+      console.warn('Original error:', error)
     } else if (error instanceof Error) {
-      console.error('Error loading flows:', error.message)
-      throw new Error(`Failed to load flows: ${error.message}`)
+      console.warn('Error loading flows:', error.message)
+      console.warn('Returning empty array - you can still create new flows')
+    } else {
+      console.warn('Unknown error loading flows:', error)
+      console.warn('Returning empty array - you can still create new flows')
     }
-    throw new Error('Unknown error occurred while loading flows')
+    
+    // Update cache with empty array (keyed by experienceId)
+    allFlowsCache = { flows: [], timestamp: Date.now(), experienceId: cacheKey }
+    return []
   }
 }
 
@@ -278,9 +320,13 @@ export function clearFlowCache(flowId?: string): void {
 /**
  * Create a new flow in the database
  */
-export async function createFlow(title: string): Promise<Flow | null> {
+export async function createFlow(title: string, experienceId: string): Promise<Flow | null> {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error('Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY')
+  }
+
+  if (!experienceId || experienceId.trim() === '') {
+    throw new Error('experienceId is required to create a flow')
   }
 
   try {
@@ -297,25 +343,58 @@ export async function createFlow(title: string): Promise<Flow | null> {
       logicBlocks: []
     }
 
+    const insertData: any = {
+      id: flowId,
+      title,
+      active: false,
+      flow_data: newFlow,
+      experience_id: experienceId
+    }
+
+    console.log(`[createFlow] Creating flow "${title}" with experienceId: ${experienceId}`)
+    console.log(`[createFlow] Insert data (before insert):`, JSON.stringify(insertData, null, 2))
+
     const { data, error } = await supabase
       .from('flows')
-      .insert({
-        id: flowId,
-        title,
-        active: false,
-        flow_data: newFlow
-      })
+      .insert(insertData)
       .select()
       .single()
 
     if (error) {
-      console.error('Error creating flow in database:', error)
-      console.error('Error code:', error.code)
-      console.error('Error message:', error.message)
-      throw error // Throw error instead of silently failing
+      // Handle Supabase errors
+      let errorMsg = `Failed to create flow: ${error.message || 'Unknown error'}`
+      
+      if (error.code === 'PGRST205') {
+        errorMsg = 'Database table "flows" does not exist. Please run the SQL schema from supabase/schema.sql in your Supabase SQL editor.'
+      } else if (error.code === '23505') {
+        errorMsg = 'A flow with this ID already exists. Please try again.'
+      } else if (error.code === 'PGRST301' || error.code === 'PGRST302') {
+        errorMsg = 'Database connection error. Please check your Supabase configuration.'
+      }
+      
+      console.error('Error creating flow in database:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      })
+      
+      throw new Error(errorMsg)
+    }
+
+    if (!data) {
+      throw new Error('Failed to create flow: No data returned from database')
     }
 
     const flowRecord = data as FlowRecord
+    console.log(`[createFlow] Successfully created flow "${title}" with ID: ${flowRecord.id}`)
+    console.log(`[createFlow] Saved flow experience_id: ${flowRecord.experience_id || 'NULL'}`)
+    
+    // Verify the saved experience_id matches what we sent
+    if (flowRecord.experience_id !== experienceId) {
+      console.error(`[createFlow] ERROR: experience_id mismatch! Expected: ${experienceId}, Got: ${flowRecord.experience_id}`)
+    }
+    
     return {
       id: flowRecord.id,
       title: flowRecord.title,
@@ -325,24 +404,42 @@ export async function createFlow(title: string): Promise<Flow | null> {
       logicBlocks: flowRecord.flow_data.logicBlocks || []
     }
   } catch (error) {
-    console.error('Error creating flow:', error)
-    if (error instanceof Error) {
-      console.error('Error message:', error.message)
-      console.error('Error stack:', error.stack)
+    // Handle network errors (TypeError: Failed to fetch)
+    if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+      const errorMsg = 'Network error: Failed to connect to Supabase. Please check:\n1. Your NEXT_PUBLIC_SUPABASE_URL is correct\n2. Your Supabase project is active\n3. There are no network restrictions'
+      console.error('Network error creating flow:', errorMsg)
+      console.error('Original error:', error)
+      throw new Error(errorMsg)
     }
-    throw error // Re-throw to let caller handle it
+    
+    // Handle other errors
+    if (error instanceof Error) {
+      console.error('Error creating flow:', error.message)
+      console.error('Error stack:', error.stack)
+      // Re-throw if it already has a good message
+      if (error.message.includes('Failed to create flow') || error.message.includes('Database')) {
+        throw error
+      }
+      throw new Error(`Failed to create flow: ${error.message}`)
+    }
+    
+    // Handle empty or unknown error objects
+    console.error('Unknown error creating flow:', error)
+    throw new Error('Failed to create flow: Unknown error occurred')
   }
 }
 
 /**
  * Delete a flow from the database
  */
-export async function deleteFlow(flowId: string): Promise<boolean> {
+export async function deleteFlow(flowId: string, experienceId: string): Promise<boolean> {
   try {
     const { error } = await supabase
       .from('flows')
       .delete()
       .eq('id', flowId)
+      .eq('experience_id', experienceId)
+      .not('experience_id', 'is', null)
 
     if (error) {
       console.error('Error deleting flow:', error)
@@ -359,18 +456,20 @@ export async function deleteFlow(flowId: string): Promise<boolean> {
 /**
  * Toggle flow active status
  */
-export async function toggleFlowActive(flowId: string, active: boolean): Promise<boolean> {
+export async function toggleFlowActive(flowId: string, active: boolean, experienceId: string): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) {
     console.warn('Supabase not configured, cannot toggle flow active')
     return false
   }
 
   try {
-    // If setting a flow to active, first deactivate all other flows
+    // If setting a flow to active, first deactivate all other flows for this experience
     if (active) {
       const { error: deactivateError, data: deactivateData } = await supabase
         .from('flows')
         .update({ active: false })
+        .eq('experience_id', experienceId)
+        .not('experience_id', 'is', null)
         .neq('id', flowId)
         .select()
 
@@ -391,6 +490,8 @@ export async function toggleFlowActive(flowId: string, active: boolean): Promise
         updated_at: new Date().toISOString()
       })
       .eq('id', flowId)
+      .eq('experience_id', experienceId)
+      .not('experience_id', 'is', null)
       .select()
 
     if (error) {
@@ -432,9 +533,9 @@ export async function toggleFlowActive(flowId: string, active: boolean): Promise
 }
 
 /**
- * Find the active flow (where active = true)
+ * Find the active flow (where active = true) for a specific experience
  */
-export async function getActiveFlow(): Promise<Flow | null> {
+export async function getActiveFlow(experienceId: string): Promise<Flow | null> {
   if (!isSupabaseConfigured || !supabase) {
     console.warn('Supabase not configured, cannot get active flow')
     return null
@@ -443,8 +544,10 @@ export async function getActiveFlow(): Promise<Flow | null> {
   try {
     const { data, error } = await supabase
       .from('flows')
-      .select('id, title, active, flow_data, created_at, updated_at')
+      .select('id, title, active, flow_data, experience_id, created_at, updated_at')
       .eq('active', true)
+      .eq('experience_id', experienceId)
+      .not('experience_id', 'is', null)
       .limit(1)
       .single()
 

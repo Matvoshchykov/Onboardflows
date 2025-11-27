@@ -23,7 +23,7 @@ const pricingPlans = [
     period: "per month",
     description: "Ideal for growing communities",
     features: [
-      "3 flows per whop community",
+      "5 flows per whop community",
       "20 blocks per flow",
       "Advanced analytics",
       "Priority support",
@@ -36,7 +36,7 @@ const pricingPlans = [
     period: "per year",
     description: "Best value for long-term growth",
     features: [
-      "3 flows per whop community",
+      "5 flows per whop community",
       "20 blocks per flow",
       "Advanced analytics",
       "Priority support",

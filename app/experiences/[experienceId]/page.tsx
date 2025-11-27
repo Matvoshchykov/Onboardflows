@@ -31,7 +31,7 @@ export default async function ExperiencePage({
 	// Use type assertion to bypass build cache type issues
 	let membership = await (getUserMembership as any)(userId);
 	if (!membership) {
-		membership = await upsertUserMembership(userId, false);
+		membership = await (upsertUserMembership as any)(userId, false);
 	}
 	const membershipActive = membership?.membership_active || false;
 

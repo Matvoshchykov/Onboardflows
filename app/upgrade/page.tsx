@@ -38,7 +38,7 @@ const pricingPlans = [
     flows: 3,
     blocks: 20,
     features: [
-      "3 flows per shop/community",
+      "5 flows per shop/community",
       "Up to 20 blocks per flow",
       "All premium components",
       "Advanced logic blocks",
@@ -58,7 +58,7 @@ const pricingPlans = [
     flows: 3,
     blocks: 20,
     features: [
-      "3 flows per shop/community",
+      "5 flows per shop/community",
       "Up to 20 blocks per flow",
       "All premium components",
       "Advanced logic blocks",

@@ -113,7 +113,7 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
       const height = cardRef.current.offsetHeight
       onResize(node.id, height)
     }
-  }, [node.id, node.components, node.completion, onResize])
+  }, [node.id, node.components, node.completion, collapsed, onResize])
 
   const handleTitleSubmit = () => {
     if (titleValue.trim() && titleValue !== node.title) {
@@ -147,6 +147,8 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
             borderColor: isConnectedAsTarget ? (incomingColor ?? "#10b981") : "var(--muted-foreground)",
             borderWidth: "2px",
           }}
+          data-port-type="input"
+          data-node-id={node.id}
           title="Connection point"
           onMouseUp={(e) => onEndConnection(e, node.id)}
         />
@@ -238,6 +240,8 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
             height: isMobile ? '44px' : '12px',
             touchAction: 'manipulation'
           }}
+          data-port-type="output"
+          data-node-id={node.id}
           title="Connect to another block"
           onMouseDown={(e) => onStartConnection(e, node.id)}
           onTouchStart={(e) => {

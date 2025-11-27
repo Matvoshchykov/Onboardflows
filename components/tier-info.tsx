@@ -1,45 +1,17 @@
 "use client"
 
-import { useState, useEffect } from "react"
 import type { Flow } from "./flow-builder"
 
 type TierInfoProps = {
   flows: Flow[]
   selectedFlow: Flow | null
+  membershipActive: boolean
+  maxFlows: number
+  maxBlocksPerFlow: number
 }
 
-export function TierInfo({ flows, selectedFlow }: TierInfoProps) {
-  const [tier, setTier] = useState<"free" | "premium">("free")
-  const [maxFlows, setMaxFlows] = useState(1)
-  const [maxBlocksPerFlow, setMaxBlocksPerFlow] = useState(5)
-
-  useEffect(() => {
-    async function loadMembership() {
-      try {
-        // Get experienceId from URL
-        const pathParts = window.location.pathname.split('/')
-        const expId = pathParts[pathParts.indexOf('experiences') + 1]
-        if (!expId) return
-        
-        // Get company ID
-        const companyIdResponse = await fetch(`/api/get-company-id?experienceId=${expId}`)
-        if (!companyIdResponse.ok) return
-        const { companyId } = await companyIdResponse.json()
-        
-        // Check membership
-        const membershipResponse = await fetch(`/api/check-membership?companyId=${companyId}`)
-        if (membershipResponse.ok) {
-          const { membershipActive, maxFlows: mFlows, maxBlocksPerFlow: mBlocks } = await membershipResponse.json()
-          setTier(membershipActive ? "premium" : "free")
-          setMaxFlows(mFlows)
-          setMaxBlocksPerFlow(mBlocks)
-        }
-      } catch (error) {
-        console.error("Error loading membership:", error)
-      }
-    }
-    loadMembership()
-  }, [])
+export function TierInfo({ flows, selectedFlow, membershipActive, maxFlows, maxBlocksPerFlow }: TierInfoProps) {
+  const tier = membershipActive ? "premium" : "free"
 
   // Calculate current counts
   const currentFlows = flows.length

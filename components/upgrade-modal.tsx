@@ -33,10 +33,10 @@ const pricingPlans = [
     description: "Ideal for growing teams and businesses",
     monthlyPrice: 30,
     yearlyPrice: 280,
-    flows: 3,
+    flows: 5,
     blocks: 30,
     features: [
-      "3 flows per whop",
+      "5 flows per whop",
       "30 blocks per flow",
       "Advanced analytics",
       "Export data",
@@ -50,10 +50,10 @@ const pricingPlans = [
     description: "Best value for long-term growth",
     monthlyPrice: 30,
     yearlyPrice: 280, // $30 * 12 * 0.78 = $280 (approximately 22% savings)
-    flows: 3,
+    flows: 5,
     blocks: 30,
     features: [
-      "3 flows per whop",
+      "5 flows per whop",
       "30 blocks per flow",
       "Advanced analytics",
       "Export data",
