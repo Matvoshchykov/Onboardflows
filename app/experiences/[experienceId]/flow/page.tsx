@@ -376,17 +376,15 @@ export default function OnboardingFlowView() {
         return null
       }
       
-      // If we have an answer, evaluate the logic block
-      if (answer !== undefined && answer !== null) {
-        const targetId = evaluateLogicBlock(connectedLogicBlock, answer)
-        if (targetId) {
-          const targetNode = flow.nodes.find(n => n.id === targetId)
-          if (targetNode) {
-            return targetNode
-          }
+      // Evaluate the logic block with the answer (even if null/undefined for A/B tests)
+      const targetId = evaluateLogicBlock(connectedLogicBlock, answer)
+      if (targetId) {
+        const targetNode = flow.nodes.find(n => n.id === targetId)
+        if (targetNode) {
+          return targetNode
         }
       }
-      // If no answer yet, or evaluation failed, check if logic block has connections
+      // If evaluation failed, check if logic block has connections as fallback
       if (connectedLogicBlock.connections.length > 0) {
         const firstTargetId = connectedLogicBlock.connections[0]
         const firstTargetNode = flow.nodes.find(n => n.id === firstTargetId)
@@ -412,26 +410,15 @@ export default function OnboardingFlowView() {
         const nextLogicBlock = flow.logicBlocks?.find(lb => lb.id === nextId)
         if (nextLogicBlock) {
           // For A/B test, always evaluate even without answer
-          if (nextLogicBlock.type === "a-b-test") {
-            const targetId = evaluateLogicBlock(nextLogicBlock, answer)
-            if (targetId) {
-              const targetNode = flow.nodes.find(n => n.id === targetId)
-              if (targetNode) {
-                return targetNode
-              }
-            }
-            return null
-          }
-          if (answer !== undefined && answer !== null) {
-            const targetId = evaluateLogicBlock(nextLogicBlock, answer)
-            if (targetId) {
-              const targetNode = flow.nodes.find(n => n.id === targetId)
-              if (targetNode) {
-                return targetNode
-              }
+          // Evaluate the logic block with the answer (even if null/undefined for A/B tests)
+          const targetId = evaluateLogicBlock(nextLogicBlock, answer)
+          if (targetId) {
+            const targetNode = flow.nodes.find(n => n.id === targetId)
+            if (targetNode) {
+              return targetNode
             }
           }
-          // Fallback to first connection of logic block
+          // Fallback to first connection of logic block if evaluation failed
           if (nextLogicBlock.connections.length > 0) {
             const firstTargetId = nextLogicBlock.connections[0]
             const firstTargetNode = flow.nodes.find(n => n.id === firstTargetId)
@@ -450,12 +437,13 @@ export default function OnboardingFlowView() {
     const current = getCurrentNode()
     if (!current || !flow) return null
 
-    // Save current answer
-    if (answer !== undefined && current) {
+    // Save current answer (even if null/undefined, save it to track state)
+    if (current) {
       setUserAnswers((prev) => ({ ...prev, [current.id]: answer }))
     }
 
-    // Use the same logic as preview flow
+    // Use the same logic as preview flow - always pass answer (even if null/undefined)
+    // This ensures logic blocks can evaluate properly (e.g., A/B tests work without answers)
     return getNextNodeFromCurrent(current, answer)
   }
 

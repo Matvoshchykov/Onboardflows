@@ -1477,22 +1477,8 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
 
     const currentComponents = normalizePageComponents(node.pageComponents)
     
-    // Check block limit per flow based on membership
-    const totalBlocksInFlow = flow.nodes.length + (flow.logicBlocks?.length || 0)
-    if (totalBlocksInFlow >= maxBlocksPerFlow) {
-      if (membershipActive) {
-        toast.error("Plan limit reached")
-      } else {
-        toast.error(`You've reached the limit of ${maxBlocksPerFlow} blocks per flow. Upgrade to Premium for 30 blocks per flow.`)
-        // Wait 1 second before showing popup
-        setTimeout(() => {
-          setLimitPopupType("blocks")
-          setLimitPopupCount({ current: totalBlocksInFlow, max: maxBlocksPerFlow })
-          setShowLimitPopup(true)
-        }, 1000)
-      }
-      return
-    }
+    // Note: Components don't count toward block limit - only flow nodes and logic blocks do
+    // Block limit is checked when adding nodes/logic blocks, not components
     
     // Validation logic
     const videoCount = currentComponents.filter(c => c.type === "video-step").length
