@@ -105,14 +105,21 @@ async function handlePaymentSucceeded(payment: Payment) {
 			return;
 		}
 		
+		// Ensure types are correct for function call
+		if (typeof finalUserId !== 'string') {
+			console.error("Invalid userId type:", typeof finalUserId);
+			return;
+		}
+		
 		console.log(`[ACTIVATING MEMBERSHIP] User: ${finalUserId}, Company: ${finalCompanyId}, Plan: ${planType}`);
 		
 		// Update or create user membership
+		// Function signature: upsertUserMembership(userId: string, membershipActive: boolean, paymentId?: string, planType?: string)
 		const result = await upsertUserMembership(
 			finalUserId,
-			true, // membership_active = true
-			paymentId,
-			planType
+			true, // membership_active = true (boolean)
+			typeof paymentId === 'string' ? paymentId : undefined,
+			typeof planType === 'string' ? planType : undefined
 		);
 		
 		if (result) {
