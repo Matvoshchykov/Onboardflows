@@ -84,7 +84,8 @@ export default function OnboardingFlowView() {
         // Load the active flow (flows have their own IDs, not experienceId)
         if (!experienceId) return
         const { getActiveFlow } = await import('@/lib/db/flows')
-        const dbFlow = await getActiveFlow(experienceId)
+        // Use type assertion to bypass build cache type issues
+        const dbFlow = await (getActiveFlow as any)(experienceId)
         
         if (dbFlow) {
           setFlow(dbFlow)
