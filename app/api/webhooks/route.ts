@@ -1,7 +1,7 @@
 import type { Payment } from "@whop/sdk/resources.js";
 import type { NextRequest } from "next/server";
 import { whopsdk } from "@/lib/whop-sdk";
-import { upsertUserMembership } from "@/lib/db/memberships";
+import { upsertUserMembership, type UserMembership } from "@/lib/db/memberships";
 
 export async function POST(request: NextRequest): Promise<Response> {
 	try {
@@ -111,10 +111,18 @@ async function handlePaymentSucceeded(payment: Payment) {
 		
 		// Update or create user membership
 		// Function signature: upsertUserMembership(userId: string, membershipActive: boolean, paymentId?: string, planType?: string)
-		const membershipActive: boolean = true;
-		const result = await upsertUserMembership(
+		// Explicitly type the function call to prevent TypeScript parameter confusion during build
+		type UpsertFunction = (
+			userId: string,
+			membershipActive: boolean,
+			paymentId?: string,
+			planType?: string
+		) => Promise<UserMembership | null>;
+		
+		const upsertFn: UpsertFunction = upsertUserMembership;
+		const result = await upsertFn(
 			finalUserId,
-			membershipActive,
+			true,
 			paymentId,
 			planType
 		);
