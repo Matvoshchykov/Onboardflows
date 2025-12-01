@@ -8,7 +8,7 @@ import { ChatModal } from "./chat-modal"
 import { FlowLoading } from "./flow-loading"
 import { UpgradeModal } from "./upgrade-modal"
 import { UpgradeLimitPopup } from "./upgrade-limit-popup"
-import { loadAllFlows, createFlow, saveFlow, toggleFlowActive, getActiveFlow } from "@/lib/db/flows"
+import { loadAllFlows, createFlow, saveFlow, toggleFlowActive } from "@/lib/db/flows"
 import { isSupabaseConfigured } from "@/lib/supabase"
 import { toast } from "sonner"
 import type { PageComponent } from "./page-editor"
@@ -123,10 +123,15 @@ export default function FlowBuilder({
         setIsLoading(true)
         try {
           if (!currentExperienceId) return
-          // Use type assertion to bypass build cache type issues
-          const activeFlow = await (getActiveFlow as any)(currentExperienceId)
-          if (activeFlow) {
-            router.push(`/experiences/${currentExperienceId}/flow`)
+          // Use API route instead of direct import
+          const response = await fetch(`/api/get-active-flow?experienceId=${currentExperienceId}`)
+          if (response.ok) {
+            const { flow: activeFlow } = await response.json()
+            if (activeFlow) {
+              router.push(`/experiences/${currentExperienceId}/flow`)
+            } else {
+              setHasCheckedActiveFlow(true)
+            }
           } else {
             setHasCheckedActiveFlow(true)
           }

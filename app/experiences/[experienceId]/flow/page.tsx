@@ -88,10 +88,22 @@ export default function OnboardingFlowView() {
         }
         
         console.log('Loading active flow for experienceId:', experienceId)
-        const { getActiveFlow } = await import('@/lib/db/flows')
-        // Use type assertion to bypass build cache type issues
-        const dbFlow = await (getActiveFlow as any)(experienceId)
+        // Use API route instead of direct import
+        const response = await fetch(`/api/get-active-flow?experienceId=${experienceId}`)
         
+        if (!response.ok) {
+          if (response.status === 404) {
+            console.error('No active flow found for experienceId:', experienceId)
+            setFlowLoadError('No active flow found. Please contact support.')
+          } else {
+            const errorData = await response.json().catch(() => ({}))
+            throw new Error(errorData.error || `Failed to load flow: ${response.statusText}`)
+          }
+          setIsLoading(false)
+          return
+        }
+        
+        const { flow: dbFlow } = await response.json()
         console.log('Active flow loaded:', dbFlow ? 'Found' : 'Not found', dbFlow)
         
         if (dbFlow) {
