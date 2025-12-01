@@ -15,8 +15,6 @@ const getLogicBlockDisplayName = (type: LogicBlock['type']): string => {
       return "SCORE CHECK"
     case "a-b-test":
       return "A/B TEST"
-    default:
-      return type.toUpperCase()
   }
 }
 
@@ -30,8 +28,6 @@ const getLogicBlockGlowColor = (type: LogicBlock['type']): string => {
       return "#f59e0b" // Amber/Orange
     case "a-b-test":
       return "#8b5cf6" // Purple
-    default:
-      return "#10b981"
   }
 }
 
