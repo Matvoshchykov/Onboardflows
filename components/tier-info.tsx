@@ -20,12 +20,10 @@ export function TierInfo({ flows, selectedFlow, membershipActive, maxFlows, maxB
     : 0
 
   return (
-    <div className="absolute bottom-4 left-4 z-50">
-      <div className="flex items-center gap-4 text-[0.65rem] font-bold italic text-foreground opacity-70 bg-card/80 backdrop-blur-sm px-3 py-2 rounded-lg shadow-neumorphic-subtle">
-        <span>Tier: <strong className="font-bold">{tier === "premium" ? "Premium" : "Free"}</strong></span>
-        <span>Flow: {currentFlows}/{maxFlows}</span>
-        <span>Block: {currentBlocks}/{maxBlocksPerFlow}</span>
-      </div>
+    <div className="flex items-center gap-4 text-[0.65rem] font-bold italic text-foreground opacity-70 bg-card/80 backdrop-blur-sm px-3 py-2 rounded-lg shadow-neumorphic-subtle">
+      <span>Tier: <strong className="font-bold">{tier === "premium" ? "Premium" : "Free"}</strong></span>
+      <span>Flow: {currentFlows}/{maxFlows}</span>
+      <span>Block: {currentBlocks}/{maxBlocksPerFlow}</span>
     </div>
   )
 }

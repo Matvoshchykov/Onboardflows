@@ -35,6 +35,7 @@ export type Flow = {
   status: "Live" | "Draft" | "Archived"
   nodes: FlowNode[]
   logicBlocks?: LogicBlock[]
+  icon_url?: string
 }
 
 type FlowBuilderProps = {
@@ -272,7 +273,7 @@ export default function FlowBuilder({
       {showChatModal && (
         <ChatModal 
           onClose={() => setShowChatModal(false)}
-          onCreateFlow={async (name: string) => {
+          onCreateFlow={async (name: string, iconUrl?: string) => {
             try {
               // Get experienceId and companyId RIGHT BEFORE creating the flow
               const expId = currentExperienceId || propExperienceId || (params?.experienceId as string)
@@ -306,7 +307,7 @@ export default function FlowBuilder({
               
               console.log(`Creating flow "${name}" with experienceId: ${expId}`)
               // Use type assertion to bypass build cache type issues
-              const newFlow = await (createFlow as any)(name, expId)
+              const newFlow = await (createFlow as any)(name, expId, iconUrl)
               
               if (newFlow) {
                 console.log(`Successfully created flow "${name}" with ID: ${newFlow.id}`)

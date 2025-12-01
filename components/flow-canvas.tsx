@@ -151,6 +151,9 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
   const dragCanvasStateRef = useRef<{ offset: { x: number; y: number }, zoom: number, rect: DOMRect | null } | null>(null)
   const pendingDragNodeIdRef = useRef<string | null>(null)
   const pendingDragLogicIdRef = useRef<string | null>(null)
+  const lastMousePosRef = useRef<{ x: number; y: number } | null>(null)
+  const autoConnectTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const hoveredPortRef = useRef<{ nodeId: string; portType?: string; portIndex?: number } | null>(null)
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
   const [panStart, setPanStart] = useState({ x: 0, y: 0 })
@@ -488,6 +491,9 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
     dragStartNodePosRef.current = { x: node.position.x, y: node.position.y }
     dragStartPosRef.current = { x: screenX, y: screenY }
     
+    // Initialize last mouse position to current position
+    lastMousePosRef.current = { x: screenX, y: screenY }
+    
     // Start dragging immediately - block should stick to mouse
     pendingDragNodeIdRef.current = nodeId
     setDraggingNodeId(nodeId)
@@ -594,6 +600,8 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
         setConnectingFrom(null)
         setConnectionLineEnd(null)
         setConnectingPortIndex(undefined)
+        setConnectionLineStart(null)
+        clearConnectionState()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -778,6 +786,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
       setConnectionLineEnd(null)
       setConnectingPortIndex(undefined)
       setConnectionLineStart(null)
+      clearConnectionState()
       return
     }
 
@@ -827,24 +836,38 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
       
       // Drag flow block - block should stick to mouse cursor
       if (draggingNodeId && e.buttons === 1 && dragCanvasStateRef.current) {
-        // Use captured offset (to prevent jolting) but CURRENT zoom (so it works at any zoom level)
-        const { offset } = dragCanvasStateRef.current
+        // Only move if mouse has actually moved
+        const currentMousePos = { x: e.clientX, y: e.clientY }
+        const lastPos = lastMousePosRef.current
+        
+        if (lastPos && lastPos.x === currentMousePos.x && lastPos.y === currentMousePos.y) {
+          // Mouse hasn't moved, don't update position
+          return
+        }
+        
         if (!canvasRef.current) return
         const currentRect = canvasRef.current.getBoundingClientRect()
         
-        // Calculate world position using captured offset but CURRENT zoom
-        // This ensures block stays exactly under mouse cursor at any zoom level
-        const currentWorldPos = {
-          x: (e.clientX - currentRect.left - offset.x) / zoom,
-          y: (e.clientY - currentRect.top - offset.y) / zoom
+        // Calculate delta in screen coordinates
+        const deltaX = lastPos ? currentMousePos.x - lastPos.x : 0
+        const deltaY = lastPos ? currentMousePos.y - lastPos.y : 0
+        
+        // Convert screen delta to world delta (divide by zoom)
+        const worldDeltaX = deltaX / zoom
+        const worldDeltaY = deltaY / zoom
+        
+        // Find the current node position
+        const currentNode = flow.nodes.find(n => n.id === draggingNodeId)
+        if (!currentNode) return
+        
+        // Update position by adding the delta (smooth incremental movement)
+        const newPosition = {
+          x: currentNode.position.x + worldDeltaX,
+          y: currentNode.position.y + worldDeltaY
         }
         
-        // Calculate new position: mouse world pos minus the offset from where user clicked
-        // Offset is in world coordinates (zoom-independent), so this works at any zoom
-        const newPosition = {
-          x: currentWorldPos.x - dragOffsetRef.current.x,
-          y: currentWorldPos.y - dragOffsetRef.current.y
-        }
+        // Update last mouse position
+        lastMousePosRef.current = currentMousePos
         
         const updatedNodes = flow.nodes.map(n => {
           if (n.id === draggingNodeId) {
@@ -863,28 +886,43 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
         dragStartPosRef.current = null
         dragStartNodePosRef.current = null
         dragCanvasStateRef.current = null
+        lastMousePosRef.current = null
       }
       
       // Drag logic block - block should stick to mouse cursor
       if (draggingLogicId && e.buttons === 1 && dragCanvasStateRef.current) {
-        // Use captured offset (to prevent jolting) but CURRENT zoom (so it works at any zoom level)
-        const { offset } = dragCanvasStateRef.current
+        // Only move if mouse has actually moved
+        const currentMousePos = { x: e.clientX, y: e.clientY }
+        const lastPos = lastMousePosRef.current
+        
+        if (lastPos && lastPos.x === currentMousePos.x && lastPos.y === currentMousePos.y) {
+          // Mouse hasn't moved, don't update position
+          return
+        }
+        
         if (!canvasRef.current) return
         const currentRect = canvasRef.current.getBoundingClientRect()
         
-        // Calculate world position using captured offset but CURRENT zoom
-        // This ensures block stays exactly under mouse cursor at any zoom level
-        const currentWorldPos = {
-          x: (e.clientX - currentRect.left - offset.x) / zoom,
-          y: (e.clientY - currentRect.top - offset.y) / zoom
+        // Calculate delta in screen coordinates
+        const deltaX = lastPos ? currentMousePos.x - lastPos.x : 0
+        const deltaY = lastPos ? currentMousePos.y - lastPos.y : 0
+        
+        // Convert screen delta to world delta (divide by zoom)
+        const worldDeltaX = deltaX / zoom
+        const worldDeltaY = deltaY / zoom
+        
+        // Find the current block position
+        const currentBlock = logicBlocks.find(b => b.id === draggingLogicId)
+        if (!currentBlock) return
+        
+        // Update position by adding the delta (smooth incremental movement)
+        const newPosition = {
+          x: currentBlock.position.x + worldDeltaX,
+          y: currentBlock.position.y + worldDeltaY
         }
         
-        // Calculate new position: mouse world pos minus the offset from where user clicked
-        // Offset is in world coordinates (zoom-independent), so this works at any zoom
-        const newPosition = {
-          x: currentWorldPos.x - dragOffsetRef.current.x,
-          y: currentWorldPos.y - dragOffsetRef.current.y
-        }
+        // Update last mouse position
+        lastMousePosRef.current = currentMousePos
         
         const updatedLogicBlocks = logicBlocks.map(b => {
           if (b.id === draggingLogicId) {
@@ -903,6 +941,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
         dragStartPosRef.current = null
         dragStartNodePosRef.current = null
         dragCanvasStateRef.current = null
+        lastMousePosRef.current = null
       }
     })
   }
@@ -956,6 +995,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
     dragStartPosRef.current = null
     dragStartNodePosRef.current = null
     dragCanvasStateRef.current = null
+    lastMousePosRef.current = null
     
     if (plusClickTimer) {
       clearTimeout(plusClickTimer)
@@ -998,6 +1038,9 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
     }
     dragStartNodePosRef.current = { x: block.position.x, y: block.position.y }
     dragStartPosRef.current = { x: screenX, y: screenY }
+    
+    // Initialize last mouse position to current position
+    lastMousePosRef.current = { x: screenX, y: screenY }
     
     // Start dragging immediately - block should stick to mouse
     pendingDragLogicIdRef.current = blockId
@@ -1462,6 +1505,51 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
     setConnectionLineEnd(null)
     setConnectingPortIndex(undefined)
     setConnectionLineStart(null)
+    clearConnectionState()
+  }
+
+  const clearConnectionState = () => {
+    // Clear auto-connect timer
+    if (autoConnectTimerRef.current) {
+      clearTimeout(autoConnectTimerRef.current)
+      autoConnectTimerRef.current = null
+    }
+    hoveredPortRef.current = null
+  }
+
+  const handlePortMouseEnter = (nodeId: string, portType?: string, portIndex?: number) => {
+    // Only auto-connect if we're currently connecting from somewhere
+    if (!connectingFrom || connectingFrom === nodeId) return
+    
+    // Store the hovered port
+    hoveredPortRef.current = { nodeId, portType, portIndex }
+    
+    // Clear any existing timer
+    if (autoConnectTimerRef.current) {
+      clearTimeout(autoConnectTimerRef.current)
+    }
+    
+    // Start auto-connect timer (200ms = 0.2 seconds)
+    autoConnectTimerRef.current = setTimeout(() => {
+      // Create a synthetic mouse event for handleEndConnection
+      const syntheticEvent = {
+        stopPropagation: () => {},
+        preventDefault: () => {},
+      } as React.MouseEvent
+      
+      handleEndConnection(syntheticEvent, nodeId)
+      autoConnectTimerRef.current = null
+      hoveredPortRef.current = null
+    }, 200)
+  }
+
+  const handlePortMouseLeave = () => {
+    // Clear the timer when mouse leaves the port
+    if (autoConnectTimerRef.current) {
+      clearTimeout(autoConnectTimerRef.current)
+      autoConnectTimerRef.current = null
+    }
+    hoveredPortRef.current = null
   }
 
   const handleLogicDragStart = (type: LogicBlock['type'], e: React.MouseEvent) => {
@@ -2232,7 +2320,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
         <div
           ref={canvasRef}
             className={`flex-1 bg-background relative overflow-hidden touch-none ${
-            isPanning ? 'cursor-grabbing' : draggingNodeId || draggingLogicId ? 'cursor-grabbing' : 'cursor-grab'
+            isPanning ? 'cursor-grabbing' : draggingNodeId ? 'cursor-crosshair' : draggingLogicId ? 'cursor-grabbing' : 'cursor-grab'
           }`}
           style={{
             backgroundImage: `radial-gradient(circle, rgba(100, 100, 100, 0.3) 1px, transparent 1px)`,
@@ -2248,13 +2336,20 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
-          <TierInfo 
-            flows={flows} 
-            selectedFlow={flow}
-            membershipActive={membershipActive}
-            maxFlows={maxFlows}
-            maxBlocksPerFlow={maxBlocksPerFlow}
-          />
+          <div className="absolute bottom-4 left-4 z-50 flex items-center gap-3">
+            <TierInfo 
+              flows={flows} 
+              selectedFlow={flow}
+              membershipActive={membershipActive}
+              maxFlows={maxFlows}
+              maxBlocksPerFlow={maxBlocksPerFlow}
+            />
+            <LogicBlockLibrary 
+              onDragStart={handleLogicDragStart}
+              isExpanded={isLogicLibraryExpanded}
+              onToggle={() => setIsLogicLibraryExpanded(!isLogicLibraryExpanded)}
+            />
+          </div>
           {/* Mobile Controls - Floating buttons */}
           {isMobile && (
             <div className="absolute bottom-4 right-4 z-50 flex flex-col gap-2">
@@ -2561,6 +2656,8 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
                   onMouseDown={handleNodeMouseDown}
                   onStartConnection={handleStartConnection}
                   onEndConnection={handleEndConnection}
+                  onPortMouseEnter={handlePortMouseEnter}
+                  onPortMouseLeave={handlePortMouseLeave}
                   onPreview={(e) => {
                     e.stopPropagation()
                     // Clear A/B test decisions when starting a new preview session
@@ -2660,6 +2757,8 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
                     }}
                     title="Input port"
                     onMouseUp={(e) => handleEndConnection(e, block.id)}
+                    onMouseEnter={() => handlePortMouseEnter(block.id, "input")}
+                    onMouseLeave={() => handlePortMouseLeave()}
                   />
                   
                   {/* Output ports - only show for paths that have content */}
@@ -2688,6 +2787,8 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
                           e.stopPropagation()
                           handleStartConnection(e, block.id, idx)
                         }}
+                        onMouseEnter={() => handlePortMouseEnter(block.id, "output", idx)}
+                        onMouseLeave={() => handlePortMouseLeave()}
                       />
                     )
                     })
@@ -3081,27 +3182,6 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
           </div>
         </div>
 
-        {/* Logic block library - Dropdown (always visible, fixed position) */}
-        <div className="fixed z-40" style={{ top: '80px', bottom: '80px', right: '20px' }}>
-          <div className="relative h-full flex flex-col">
-            {/* Dropdown button */}
-            <button
-              onClick={() => setIsLogicLibraryExpanded(!isLogicLibraryExpanded)}
-              className="w-[210px] h-8 bg-background/80 backdrop-blur-sm rounded-lg shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all border border-border/30 flex items-center justify-center gap-2 px-3 flex-shrink-0"
-              title={isLogicLibraryExpanded ? "Collapse Logic Blocks" : "Expand Logic Blocks"}
-            >
-              <span className="text-xs font-medium text-muted-foreground text-center flex-1">Logic Blocks</span>
-              <ChevronDown className={`w-3 h-3 transition-transform flex-shrink-0 ${isLogicLibraryExpanded ? 'rotate-180' : ''}`} />
-            </button>
-            
-            {/* Dropdown content - aligned with button */}
-            {isLogicLibraryExpanded && (
-              <div className="mt-2 w-[226px] bg-card rounded-lg pt-2 px-2 pb-2 shadow-lg flex flex-col" style={{ marginLeft: '-20px' }}>
-                <LogicBlockLibrary onDragStart={handleLogicDragStart} />
-              </div>
-            )}
-          </div>
-        </div>
 
         {/* Add button - above zoom */}
         <div className="fixed bottom-[80px] right-6 z-[100] pointer-events-auto">

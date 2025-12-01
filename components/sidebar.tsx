@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, FileText, Moon, Sun } from 'lucide-react'
+import { Plus, Moon, Sun } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { useTheme } from "./theme-provider"
 import type { Flow } from "./flow-builder"
@@ -89,16 +89,22 @@ export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, isCol
             key={flow.id}
             onClick={() => onSelectFlow(flow)}
             className={cn(
-              "w-full rounded-xl p-2 min-h-[44px] shadow-[4px_4px_8px_rgba(0,0,0,0.1),-4px_-4px_8px_rgba(255,255,255,0.9)] dark:shadow-[4px_4px_8px_rgba(0,0,0,0.4),-4px_-4px_8px_rgba(255,255,255,0.02)] transition-all hover:shadow-[2px_2px_4px_rgba(0,0,0,0.05),-2px_-2px_4px_rgba(255,255,255,0.8)] dark:hover:shadow-[2px_2px_4px_rgba(0,0,0,0.3),-2px_-2px_4px_rgba(255,255,255,0.01)] cursor-pointer flex items-center justify-center group relative",
+              "w-full aspect-square rounded-xl p-0 shadow-[4px_4px_8px_rgba(0,0,0,0.1),-4px_-4px_8px_rgba(255,255,255,0.9)] dark:shadow-[4px_4px_8px_rgba(0,0,0,0.4),-4px_-4px_8px_rgba(255,255,255,0.02)] transition-all hover:shadow-[2px_2px_4px_rgba(0,0,0,0.05),-2px_-2px_4px_rgba(255,255,255,0.8)] dark:hover:shadow-[2px_2px_4px_rgba(0,0,0,0.3),-2px_-2px_4px_rgba(255,255,255,0.01)] cursor-pointer flex items-center justify-center group relative overflow-hidden",
               selectedFlow?.id === flow.id && "shadow-[inset_4px_4px_8px_rgba(0,0,0,0.1),inset_-4px_-4px_8px_rgba(255,255,255,0.9)] dark:shadow-[inset_4px_4px_8px_rgba(0,0,0,0.4),inset_-4px_-4px_8px_rgba(255,255,255,0.02)]"
             )}
           >
-            <div className={cn(
-              "rounded-lg shadow-[2px_2px_4px_rgba(0,0,0,0.15)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.3)]",
-              "bg-neutral-300 dark:bg-neutral-700 p-2"
-            )}>
-              <FileText className="h-4 w-4 text-neutral-700 dark:text-neutral-300" />
-            </div>
+            {flow.icon_url ? (
+              <img
+                src={flow.icon_url}
+                alt={flow.title}
+                className="w-full h-full object-cover rounded-xl"
+              />
+            ) : (
+              <div className={cn(
+                "w-full h-full rounded-xl shadow-[2px_2px_4px_rgba(0,0,0,0.15)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.3)]",
+                "bg-neutral-300 dark:bg-neutral-700"
+              )} />
+            )}
             {/* Tooltip on hover - opposite theme */}
             <div className="absolute left-full ml-2 px-2 py-1 bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
               {flow.title}

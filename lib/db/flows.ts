@@ -33,6 +33,7 @@ export interface FlowRecord {
   title: string
   active: boolean
   flow_data: FlowData
+  icon_url?: string
   experience_id?: string
   created_at: string
   updated_at: string
@@ -75,6 +76,7 @@ export async function saveFlow(flow: Flow): Promise<FlowRecord | null> {
     title: flow.title,
     active: flow.status === 'Live',
     flow_data: flowData,
+    icon_url: flow.icon_url,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   }
@@ -117,7 +119,8 @@ export async function saveFlow(flow: Flow): Promise<FlowRecord | null> {
             title: flow.title,
             active: flow.status === 'Live',
             flow_data: flowData,
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
+            ...(flow.icon_url && { icon_url: flow.icon_url })
           }
           
           // Preserve experience_id if it exists
@@ -161,7 +164,8 @@ export async function loadFlow(flowId: string, experienceId: string): Promise<Fl
       status: flowRecord.active ? 'Live' : 'Draft',
       nodes: flowRecord.flow_data.nodes || [],
       logicBlocks: flowRecord.flow_data.logicBlocks || [],
-      collapsedComponents: flowRecord.flow_data.collapsedComponents || {}
+      collapsedComponents: flowRecord.flow_data.collapsedComponents || {},
+      icon_url: flowRecord.icon_url
     } as Flow & { collapsedComponents?: Record<string, boolean> }
   }
 
@@ -169,7 +173,7 @@ export async function loadFlow(flowId: string, experienceId: string): Promise<Fl
     // Only select needed fields for faster queries - filter by experience_id
     const { data, error } = await supabase
       .from('flows')
-      .select('id, title, active, flow_data, experience_id, created_at, updated_at')
+      .select('id, title, active, flow_data, experience_id, icon_url, created_at, updated_at')
       .eq('id', flowId)
       .eq('experience_id', experienceId)
       .not('experience_id', 'is', null)
@@ -237,7 +241,7 @@ export async function loadAllFlows(experienceId: string): Promise<Flow[]> {
       // Only select minimal fields needed for list view - filter by experience_id
       const { data, error } = await supabase
         .from('flows')
-        .select('id, title, active, experience_id, created_at, updated_at')
+        .select('id, title, active, experience_id, icon_url, created_at, updated_at')
         .eq('experience_id', experienceId)
         .not('experience_id', 'is', null)
         .order('updated_at', { ascending: false })
@@ -273,7 +277,8 @@ export async function loadAllFlows(experienceId: string): Promise<Flow[]> {
       dateCreated: new Date(flowRecord.created_at).toISOString().split('T')[0],
       status: flowRecord.active ? 'Live' : 'Draft',
       nodes: [], // Will be loaded when flow is selected
-      logicBlocks: [] // Will be loaded when flow is selected
+      logicBlocks: [], // Will be loaded when flow is selected
+      icon_url: flowRecord.icon_url
     }))
 
     // Update cache (keyed by experienceId)
@@ -320,7 +325,7 @@ export function clearFlowCache(flowId?: string): void {
 /**
  * Create a new flow in the database
  */
-export async function createFlow(title: string, experienceId: string): Promise<Flow | null> {
+export async function createFlow(title: string, experienceId: string, iconUrl?: string): Promise<Flow | null> {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error('Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY')
   }
@@ -348,7 +353,8 @@ export async function createFlow(title: string, experienceId: string): Promise<F
       title,
       active: false,
       flow_data: newFlow,
-      experience_id: experienceId
+      experience_id: experienceId,
+      ...(iconUrl && { icon_url: iconUrl })
     }
 
     console.log(`[createFlow] Creating flow "${title}" with experienceId: ${experienceId}`)
@@ -401,7 +407,8 @@ export async function createFlow(title: string, experienceId: string): Promise<F
       dateCreated: new Date(flowRecord.created_at).toISOString().split('T')[0],
       status: 'Draft',
       nodes: flowRecord.flow_data.nodes || [],
-      logicBlocks: flowRecord.flow_data.logicBlocks || []
+      logicBlocks: flowRecord.flow_data.logicBlocks || [],
+      icon_url: flowRecord.icon_url
     }
   } catch (error) {
     // Handle network errors (TypeError: Failed to fetch)

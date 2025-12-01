@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS flows (
   title TEXT NOT NULL,
   active BOOLEAN DEFAULT false,
   flow_data JSONB NOT NULL, -- Stores entire flow structure (nodes, logic blocks, connections, etc.)
+  icon_url TEXT, -- URL to the flow icon stored in Supabase storage
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

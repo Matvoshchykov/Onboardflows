@@ -57,6 +57,8 @@ type FlowNodeComponentProps = {
   onMouseDown: (e: React.MouseEvent, nodeId: string) => void
   onStartConnection: (e: React.MouseEvent, nodeId: string) => void
   onEndConnection: (e: React.MouseEvent, nodeId: string) => void
+  onPortMouseEnter?: (nodeId: string, portType?: string) => void
+  onPortMouseLeave?: () => void
   onPreview: (e: React.MouseEvent, nodeId: string) => void
   onUpdateTitle: (nodeId: string, title: string) => void
   onUpgrade: () => void
@@ -83,6 +85,8 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
   onMouseDown,
   onStartConnection,
   onEndConnection,
+  onPortMouseEnter,
+  onPortMouseLeave,
   onPreview,
   onUpdateTitle,
   onUpgrade,
@@ -131,7 +135,7 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
         left: node.position.x,
         top: node.position.y,
         zIndex: dragging ? 20 : 10,
-        cursor: dragging ? 'grabbing' : 'grab',
+        cursor: 'crosshair',
       }}
       onMouseDown={(e) => onMouseDown(e, node.id)}
     >
@@ -151,6 +155,8 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
           data-node-id={node.id}
           title="Connection point"
           onMouseUp={(e) => onEndConnection(e, node.id)}
+          onMouseEnter={() => onPortMouseEnter?.(node.id, "input")}
+          onMouseLeave={() => onPortMouseLeave?.()}
         />
       
         {/* Eye button for preview */}
@@ -244,6 +250,8 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
           data-node-id={node.id}
           title="Connect to another block"
           onMouseDown={(e) => onStartConnection(e, node.id)}
+          onMouseEnter={() => onPortMouseEnter?.(node.id, "output")}
+          onMouseLeave={() => onPortMouseLeave?.()}
           onTouchStart={(e) => {
             e.stopPropagation()
             const touch = e.touches[0]
