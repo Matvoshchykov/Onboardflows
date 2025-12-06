@@ -967,7 +967,8 @@ export default function OnboardingFlowView() {
       {showRestartModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowRestartModal(false)}>
           <div 
-            className="bg-card rounded-xl p-6 max-w-md w-full mx-4 shadow-neumorphic-raised border border-border"
+            className="bg-card rounded-lg p-6 max-w-md w-full mx-4 border border-border"
+            style={{ boxShadow: 'none' }}
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold text-foreground mb-2">Flow Already Completed</h3>

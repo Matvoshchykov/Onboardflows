@@ -211,7 +211,7 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
 
   return (
     <div 
-      className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm" 
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" 
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose()
@@ -219,7 +219,8 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
       }}
     >
       <div 
-        className="bg-background rounded-2xl shadow-2xl w-full max-w-5xl mx-4 relative"
+        className="bg-background rounded-lg border border-border w-full max-w-4xl mx-4 relative max-h-[90vh] overflow-y-auto"
+        style={{ boxShadow: 'none' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close button */}
@@ -233,53 +234,62 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
 
         <div className="p-6 sm:p-8">
           {/* Header */}
-          <div className="text-center mb-8">
-            <h1 className="text-3xl sm:text-4xl font-bold text-balance mb-4">
-              Choose Your Plan
+          <div className="text-center mb-6">
+            <h1 className="text-2xl sm:text-3xl font-bold text-balance mb-2">
+              Upgrade to Premium
             </h1>
-            <p className="text-lg text-muted-foreground text-balance mb-6">
-              Select the perfect plan for your onboarding needs. Upgrade or downgrade at any time.
+            <p className="text-sm text-muted-foreground text-balance">
+              Unlock advanced features and analytics
             </p>
           </div>
 
-          {/* Pricing Cards */}
-          <div className="grid md:grid-cols-3 gap-6" role="list" aria-label="Pricing plans">
-            {displayedPlans.map((plan, index) => {
-              const price = plan.id === "free" 
-                ? 0 
-                : (plan.id === "premium-yearly" ? plan.yearlyPrice : plan.monthlyPrice)
-              const period = plan.id === "free" 
-                ? "Forever" 
-                : (plan.id === "premium-yearly" ? "per year" : "per month")
+          {/* Pricing Cards - Only show Premium plans */}
+          <div className="grid md:grid-cols-2 gap-4" role="list" aria-label="Pricing plans">
+            {displayedPlans.filter(plan => plan.id !== "free").map((plan, index) => {
+              const price = plan.id === "premium-yearly" ? plan.yearlyPrice : plan.monthlyPrice
+              const period = plan.id === "premium-yearly" ? "per year" : "per month"
+              const isYearly = plan.id === "premium-yearly"
 
               return (
                 <Card
                   key={plan.id}
-                  className="relative flex flex-col h-[600px]"
+                  className="relative flex flex-col"
+                  style={{
+                    border: isYearly ? '2px solid rgba(59, 130, 246, 0.5)' : '1px solid rgba(0, 0, 0, 0.1)',
+                    boxShadow: isYearly ? '0 0 20px rgba(59, 130, 246, 0.3)' : 'none',
+                    animation: isYearly ? 'pulseHighlight 2s ease-in-out infinite' : 'none'
+                  }}
                   role="listitem"
                 >
+                  {isYearly && (
+                    <style>{`
+                      @keyframes pulseHighlight {
+                        0%, 100% {
+                          box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+                        }
+                        50% {
+                          box-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
+                        }
+                      }
+                    `}</style>
+                  )}
 
-                  <CardHeader className="text-center pb-8">
-                    <CardTitle className="text-2xl font-bold">
-                      {plan.name}
+                  <CardHeader className="text-center pb-4">
+                    <CardTitle className="text-xl font-bold" style={{ color: '#3b82f6', fontWeight: '700' }}>
+                      Premium
                     </CardTitle>
-                    <CardDescription className="text-balance">
-                      {plan.description}
-                    </CardDescription>
-                    <div className="mt-4">
-                      <span className="text-4xl font-bold">
+                    <div className="mt-3">
+                      <span className="text-3xl font-bold">
                         ${price}
                       </span>
-                      {period !== "Forever" && (
-                        <span className="text-muted-foreground">
-                          /{period}
-                        </span>
-                      )}
-                      {period === "per year" && (
-                        <div className="text-sm text-muted-foreground mt-1">
+                      <span className="text-muted-foreground text-lg">
+                        /{period}
+                      </span>
+                      {isYearly && (
+                        <div className="text-xs text-muted-foreground mt-1">
                           ${Math.round(plan.yearlyPrice / 12)}/month billed annually
-                          <div className="text-primary font-medium mt-1">
-                            Save 22% vs monthly
+                          <div className="text-[#3b82f6] font-medium mt-0.5">
+                            Save 22%
                           </div>
                         </div>
                       )}
@@ -287,20 +297,10 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
                   </CardHeader>
 
                   <CardContent className="flex-grow">
-                    <div className="mb-6 space-y-2">
-                      <div className="flex items-center gap-2 text-base">
-                        <Check className="w-5 h-5 text-[#3b82f6] flex-shrink-0" />
-                        <span className="font-medium">{plan.flows} flow{plan.flows > 1 ? 's' : ''}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-base">
-                        <Check className="w-5 h-5 text-[#3b82f6] flex-shrink-0" />
-                        <span className="font-medium">Up to {plan.blocks} blocks per flow</span>
-                      </div>
-                    </div>
-                    <ul className="space-y-3" aria-label={`${plan.name} plan features`}>
-                      {plan.features.map((feature, featureIndex) => (
-                        <li key={featureIndex} className="flex items-start gap-3">
-                          <Check className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" aria-hidden="true" />
+                    <ul className="space-y-2" aria-label="Premium plan features">
+                      {plan.features.filter(f => f !== "Save 22%").map((feature, featureIndex) => (
+                        <li key={featureIndex} className="flex items-start gap-2">
+                          <Check className="h-4 w-4 text-[#3b82f6] mt-0.5 flex-shrink-0" aria-hidden="true" />
                           <span className="text-sm">{feature}</span>
                         </li>
                       ))}

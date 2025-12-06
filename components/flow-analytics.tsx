@@ -409,13 +409,14 @@ export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsP
         className="fixed right-4 z-50 font-medium transition-all duration-300 flex items-center justify-center shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
         style={{
           top: 'calc(3.5rem + 8px - 50px)',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          backgroundColor: 'rgba(59, 130, 246, 0.15)',
           color: '#3b82f6',
+          border: '1px solid rgba(59, 130, 246, 0.5)',
           minWidth: isMobile ? '80px' : '190px',
-          minHeight: isMobile ? '44px' : '32px',
+          minHeight: isMobile ? '48.6px' : '37.8px',
           padding: isMobile ? '0 16px' : '0 12px',
           fontSize: isMobile ? '0.75rem' : '0.827rem',
-          borderRadius: '10px'
+          borderRadius: '16px'
         }}
         title={!membershipActive ? "Premium only - Upgrade to export" : "Export CSV"}
       >
