@@ -742,6 +742,33 @@ export default function OnboardingFlowView() {
     return (!needsAnswer || currentAnswer !== null) && allRequiredVideosWatched
   }, [needsAnswer, currentAnswer, allRequiredVideosWatched])
 
+  // Scroll to show first component fully with padding above
+  // MUST be called before any early returns
+  useEffect(() => {
+    if (!mounted || !contentRef.current || !firstComponentRef.current) return
+    if (typeof window === 'undefined') return
+    
+    const timeoutId = setTimeout(() => {
+      const container = contentRef.current
+      const firstComponent = firstComponentRef.current
+      if (!container || !firstComponent || typeof window === 'undefined') return
+      
+      try {
+        const componentTop = firstComponent.offsetTop
+        const scrollPosition = Math.max(0, componentTop - 40) // 40px padding above
+        
+        window.scrollTo({
+          top: scrollPosition,
+          behavior: 'smooth'
+        })
+      } catch (error) {
+        console.error('Error scrolling:', error)
+      }
+    }, 100)
+    
+    return () => clearTimeout(timeoutId)
+  }, [mounted, currentNodeId])
+
   const handleNext = async () => {
     const currentNode = getCurrentNode()
     if (!currentNode) {
@@ -855,32 +882,6 @@ export default function OnboardingFlowView() {
       }
     }
   }
-
-  // Scroll to show first component fully with padding above
-  useEffect(() => {
-    if (!mounted || !contentRef.current || !firstComponentRef.current) return
-    if (typeof window === 'undefined') return
-    
-    const timeoutId = setTimeout(() => {
-      const container = contentRef.current
-      const firstComponent = firstComponentRef.current
-      if (!container || !firstComponent || typeof window === 'undefined') return
-      
-      try {
-        const componentTop = firstComponent.offsetTop
-        const scrollPosition = Math.max(0, componentTop - 40) // 40px padding above
-        
-        window.scrollTo({
-          top: scrollPosition,
-          behavior: 'smooth'
-        })
-      } catch (error) {
-        console.error('Error scrolling:', error)
-      }
-    }, 100)
-    
-    return () => clearTimeout(timeoutId)
-  }, [mounted, currentNodeId])
 
   // Show success message when flow is complete
   if (showSuccess) {
