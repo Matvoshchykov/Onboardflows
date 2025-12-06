@@ -34,20 +34,46 @@ const getNodeColor = (nodeId: string, flowNodes: Array<{ id: string; title: stri
 }
 
 export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsProps) {
+  // ALL HOOKS MUST BE CALLED UNCONDITIONALLY AT THE TOP LEVEL
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [userNicknames, setUserNicknames] = useState<Record<string, string>>({})
-  const [isMobile, setIsMobile] = useState(false)
+  const [isMobile, setIsMobile] = useState(() => {
+    // Safely initialize isMobile state
+    if (typeof window === 'undefined') return false
+    try {
+      return window.innerWidth < 768 || 'ontouchstart' in window || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
+    } catch {
+      return false
+    }
+  })
   const [nodeVisitPage, setNodeVisitPage] = useState(0)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  // Set mounted flag after component mounts
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
+    // Guard window access to prevent SSR/hydration errors
+    if (typeof window === 'undefined') return
+    
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window || navigator.maxTouchPoints > 0)
+      try {
+        setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0))
+      } catch (error) {
+        console.error('Error checking mobile:', error)
+      }
     }
     checkMobile()
     window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('resize', checkMobile)
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -254,6 +280,8 @@ export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsP
     return paths
   }, [analytics])
 
+  // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
+  // Early returns must come after all hooks
   if (isLoading) {
     return (
       <div className="h-full w-full flex items-center justify-center bg-background">
