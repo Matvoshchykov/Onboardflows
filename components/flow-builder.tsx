@@ -65,6 +65,23 @@ export default function FlowBuilder({
   const [currentExperienceId, setCurrentExperienceId] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(propUserId || null)
   const [membershipActive, setMembershipActive] = useState<boolean>(propMembershipActive ?? false)
+  const [isMobile, setIsMobile] = useState(false)
+
+  // Check if device is mobile
+  useEffect(() => {
+    const checkMobile = () => {
+      if (typeof window !== 'undefined') {
+        const isMobileDevice = window.innerWidth < 768 || 
+          ('ontouchstart' in window || navigator.maxTouchPoints > 0)
+        setIsMobile(isMobileDevice)
+      }
+    }
+    checkMobile()
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', checkMobile)
+      return () => window.removeEventListener('resize', checkMobile)
+    }
+  }, [])
   
   // Get experienceId from prop or URL params
   useEffect(() => {
@@ -219,6 +236,23 @@ export default function FlowBuilder({
     }
     loadFlows()
   }, [isAdmin, currentExperienceId])
+
+  // Show mobile message if on mobile device
+  if (isMobile) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background p-4">
+        <div className="bg-card rounded-xl p-8 max-w-md w-full shadow-neumorphic-raised border border-border text-center">
+          <h2 className="text-xl font-semibold text-foreground mb-3">Mobile Not Supported</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            This app is optimized for use on a PC and not mobile. Please access the flow creation area from a desktop or laptop computer.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Sorry for the inconvenience.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-full overflow-hidden bg-background relative">

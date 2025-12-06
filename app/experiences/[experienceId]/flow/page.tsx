@@ -39,6 +39,8 @@ export default function OnboardingFlowView() {
   const [videoViewingTimes, setVideoViewingTimes] = useState<Record<string, number>>({})
   const [membershipActive, setMembershipActive] = useState(false)
   const [flowLoadError, setFlowLoadError] = useState<string | null>(null)
+  const [hasCompletedFlow, setHasCompletedFlow] = useState(false)
+  const [showRestartModal, setShowRestartModal] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const firstComponentRef = useRef<HTMLDivElement>(null)
 
@@ -89,6 +91,28 @@ export default function OnboardingFlowView() {
     }
     loadUserData()
   }, [mounted, experienceId])
+
+  // Check if user has completed the flow
+  useEffect(() => {
+    async function checkCompletedFlow() {
+      if (!mounted || !userId || !flow || !flow.id) return
+      try {
+        const response = await fetch(`/api/check-completed-flow?userId=${userId}&flowId=${flow.id}`)
+        if (response.ok) {
+          const { hasCompleted } = await response.json()
+          if (hasCompleted) {
+            setHasCompletedFlow(true)
+            setShowRestartModal(true)
+          }
+        }
+      } catch (error) {
+        console.error('Error checking completed flow:', error)
+      }
+    }
+    if (flow && userId) {
+      checkCompletedFlow()
+    }
+  }, [mounted, userId, flow?.id])
 
   // Load flow data - load active flow (experienceId is not the flow ID)
   useEffect(() => {
@@ -883,6 +907,47 @@ export default function OnboardingFlowView() {
     }
   }
 
+  // Handle restart flow
+  const handleRestartFlow = async () => {
+    if (!userId || !flow?.id) return
+    try {
+      // Clear any existing completed sessions for this user and flow
+      const response = await fetch(`/api/restart-flow?userId=${userId}&flowId=${flow.id}`, {
+        method: 'POST'
+      })
+      if (response.ok) {
+        setHasCompletedFlow(false)
+        setShowRestartModal(false)
+        setSessionId(null)
+        setCurrentAnswer(null)
+        setUserAnswers({})
+        setWatchedVideos(new Set())
+        // Reset to first node
+        if (flow.nodes && flow.nodes.length > 0) {
+          const firstNode = flow.nodes.find((node: FlowNode) => {
+            if (!node || !node.id) return false
+            const hasIncoming = flow.nodes.some((n: FlowNode) => 
+              n && n.connections && Array.isArray(n.connections) && n.connections.includes(node.id)
+            )
+            const hasLogicIncoming = flow.logicBlocks && Array.isArray(flow.logicBlocks)
+              ? flow.logicBlocks.some((lb: LogicBlock) =>
+                  lb && lb.connections && Array.isArray(lb.connections) && lb.connections.includes(node.id)
+                )
+              : false
+            return !hasIncoming && !hasLogicIncoming
+          })
+          if (firstNode && firstNode.id) {
+            setCurrentNodeId(firstNode.id)
+          } else if (flow.nodes[0] && flow.nodes[0].id) {
+            setCurrentNodeId(flow.nodes[0].id)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error restarting flow:', error)
+    }
+  }
+
   // Show success message when flow is complete
   if (showSuccess) {
     return <FlowSuccess />
@@ -890,6 +955,34 @@ export default function OnboardingFlowView() {
 
   return (
     <div className="min-h-screen bg-background relative" ref={contentRef}>
+      {/* Restart Modal */}
+      {showRestartModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowRestartModal(false)}>
+          <div 
+            className="bg-card rounded-xl p-6 max-w-md w-full mx-4 shadow-neumorphic-raised border border-border"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-foreground mb-2">Flow Already Completed</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              You have already completed this onboarding process. Would you like to start over?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowRestartModal(false)}
+                className="px-4 py-2 rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 transition-colors text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRestartFlow}
+                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm font-medium"
+              >
+                Start Over
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Left Arrow - Blue - Sticky in middle */}
       <button
         onClick={handlePrev}

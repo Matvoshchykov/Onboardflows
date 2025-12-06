@@ -4217,7 +4217,7 @@ function PreviewModal({
           >
           {/* Spacer to allow scrolling up 80px more */}
           <div style={{ height: '80px', width: '100%' }} />
-          <div className="w-full flex flex-col" style={{ transform: 'scale(1.25)', maxWidth: '840px', gap: '10px' }}>
+          <div className="w-full flex flex-col" style={{ maxWidth: '840px', gap: '10px' }}>
             {/* Display ALL components in order */}
             {allComponents.map((component, index) => {
               const isQuestion = ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(component.type)

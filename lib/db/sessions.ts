@@ -126,4 +126,29 @@ export async function getSession(sessionId: string): Promise<FlowSession | null>
   }
 }
 
+/**
+ * Check if user has completed a flow
+ */
+export async function hasUserCompletedFlow(userId: string, flowId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('flow_sessions')
+      .select('is_completed')
+      .eq('user_id', userId)
+      .eq('flow_id', flowId)
+      .eq('is_completed', true)
+      .limit(1)
+
+    if (error) {
+      console.error('Error checking completed flow:', error)
+      return false
+    }
+
+    return (data && data.length > 0) || false
+  } catch (error) {
+    console.error('Error checking completed flow:', error)
+    return false
+  }
+}
+
 
