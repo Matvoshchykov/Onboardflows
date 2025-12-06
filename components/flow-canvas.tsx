@@ -2305,7 +2305,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
                 color: hasUnsavedChanges ? '#f59e0b' : '#3b82f6',
                 border: hasUnsavedChanges ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid rgba(59, 130, 246, 0.5)',
                 minWidth: isMobile ? '80px' : '190px',
-                minHeight: isMobile ? '54px' : '42px',
+                minHeight: isMobile ? '48.6px' : '37.8px',
                 padding: isMobile ? '0 16px' : '0 12px',
                 fontSize: isMobile ? '0.75rem' : '0.827rem',
                 borderRadius: '16px'
