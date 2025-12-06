@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { Download, TrendingUp, Users, CheckCircle2, Clock, TrendingDown, PieChart, Activity, Lock } from "lucide-react"
-import { getFlowAnalytics, type AnalyticsData, type CompletedSessionData } from "@/lib/db/analytics"
+import type { AnalyticsData, CompletedSessionData } from "@/lib/db/analytics"
 import type { Flow } from "./flow-builder"
 import { ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from "recharts"
 import { UpgradeModal } from "./upgrade-modal"
@@ -179,12 +179,17 @@ export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsP
         }
 
         const nodeTitles = flow.nodes.map(n => ({ id: n.id, title: n.title || 'Untitled' }))
-        const data = await getFlowAnalytics(flow.id, nodeTitles)
+        // Use API route instead of direct import to avoid server/client boundary issues
+        const response = await fetch(`/api/get-flow-analytics?flowId=${encodeURIComponent(flow.id)}&flowNodes=${encodeURIComponent(JSON.stringify(nodeTitles))}`)
+        if (!response.ok) {
+          throw new Error('Failed to load analytics')
+        }
+        const { analytics: data } = await response.json()
         setAnalytics(data)
 
         // Load user nicknames
         if (data.sessions.length > 0) {
-          const userIds = [...new Set(data.sessions.map(s => s.userId))]
+          const userIds = [...new Set(data.sessions.map((s: CompletedSessionData) => s.userId))]
           try {
             const response = await fetch('/api/get-user-nicknames', {
               method: 'POST',
@@ -373,12 +378,10 @@ export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsP
             </>
           )}
         </button>
-      </div>
 
       {/* Blurred mock data for free users - show fake data but blurred */}
       <div className={!membershipActive ? 'blur-sm' : ''}>
-      
-      <div className="max-w-7xl mx-auto space-y-4 pt-8">
+        <div className="max-w-7xl mx-auto space-y-4 pt-8">
 
         {/* Stats Cards - Smaller */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -673,7 +676,7 @@ export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsP
             <p className="text-[10px] text-muted-foreground mt-1">Analytics will appear here once users complete the flow</p>
           </div>
         )}
-      </div>
+        </div>
       </div>
 
       {/* Free plan overlay - lock overlay on top of blurred data */}

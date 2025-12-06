@@ -25,24 +25,35 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Only wrap with WhopApp if appId is available (prevents build errors)
+  const hasWhopAppId = !!process.env.NEXT_PUBLIC_WHOP_APP_ID;
+  
+  const content = (
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="dark"
+      enableSystem
+      disableTransitionOnChange
+    >
+      {children}
+      <Toaster
+        position="bottom-left"
+        richColors
+        closeButton
+      />
+    </ThemeProvider>
+  );
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <WhopApp>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="dark"
-            enableSystem
-            disableTransitionOnChange
-          >
-            {children}
-            <Toaster
-              position="bottom-left"
-              richColors
-              closeButton
-            />
-          </ThemeProvider>
-        </WhopApp>
+        {hasWhopAppId ? (
+          <WhopApp>
+            {content}
+          </WhopApp>
+        ) : (
+          content
+        )}
       </body>
     </html>
   );
