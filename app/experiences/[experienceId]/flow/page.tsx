@@ -618,6 +618,80 @@ export default function OnboardingFlowView() {
     }
   }, [currentNodeId, sessionId, flow, membershipActive]) // Removed currentAnswer from dependencies
 
+  // Calculate derived values using useMemo to ensure consistent hook order
+  // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
+  const currentNode = useMemo(() => getCurrentNode(), [getCurrentNode])
+  
+  const allComponents = useMemo(() => {
+    if (!currentNode) return []
+    try {
+      return normalizePageComponents(currentNode?.pageComponents || [])
+    } catch (error) {
+      console.error('Error normalizing page components:', error)
+      return []
+    }
+  }, [currentNode])
+  
+  const questionComponent = useMemo(() => {
+    return Array.isArray(allComponents) ? allComponents.find(
+      comp => comp && comp.type && ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(comp.type)
+    ) : null
+  }, [allComponents])
+  
+  const needsAnswer = useMemo(() => {
+    return questionComponent && [
+      "multiple-choice",
+      "checkbox-multi",
+      "short-answer",
+      "scale-slider"
+    ].includes(questionComponent.type)
+  }, [questionComponent])
+
+  const getPrevNode = useCallback((): FlowNode | null => {
+    if (!flow || !currentNodeId || !flow.nodes || !Array.isArray(flow.nodes)) return null
+    // Find nodes that connect to current node
+    const prevNode = flow.nodes.find((n: FlowNode) => 
+      n && n.connections && Array.isArray(n.connections) && (
+        n.connections.includes(currentNodeId) ||
+        (flow.logicBlocks && Array.isArray(flow.logicBlocks) && flow.logicBlocks.some((lb: LogicBlock) => 
+          lb && lb.connections && Array.isArray(lb.connections) && 
+          lb.connections.includes(currentNodeId) && 
+          n.connections.includes(lb.id)
+        ))
+      )
+    )
+    return prevNode || null
+  }, [flow, currentNodeId])
+
+  const handlePrev = useCallback(() => {
+    const prevNode = getPrevNode()
+    if (prevNode) {
+      setCurrentNodeId(prevNode.id)
+      setCurrentAnswer(null)
+    }
+  }, [getPrevNode])
+
+  const hasPrev = useMemo(() => getPrevNode() !== null, [getPrevNode])
+  const hasNext = useMemo(() => getNextNode() !== null, [getNextNode])
+
+  // Check if all required videos are watched
+  const requiredVideos = useMemo(() => {
+    return Array.isArray(allComponents) ? allComponents.filter(
+      comp => comp && comp.type === "video-step" && comp.config?.requiredToWatch
+    ) : []
+  }, [allComponents])
+  
+  const allRequiredVideosWatched = useMemo(() => {
+    return requiredVideos.length === 0 || requiredVideos.every(
+      comp => comp && comp.id && watchedVideos.has(comp.id)
+    )
+  }, [requiredVideos, watchedVideos])
+
+  const isLastPage = useMemo(() => !hasNext, [hasNext])
+  const canProceed = useMemo(() => {
+    return (!needsAnswer || currentAnswer !== null) && allRequiredVideosWatched
+  }, [needsAnswer, currentAnswer, allRequiredVideosWatched])
+
   const handleNext = async () => {
     const currentNode = getCurrentNode()
     if (!currentNode) {
@@ -696,79 +770,6 @@ export default function OnboardingFlowView() {
       </div>
     )
   }
-
-  // Calculate derived values using useMemo to ensure consistent hook order
-  const currentNode = useMemo(() => getCurrentNode(), [getCurrentNode])
-  
-  const allComponents = useMemo(() => {
-    if (!currentNode) return []
-    try {
-      return normalizePageComponents(currentNode?.pageComponents || [])
-    } catch (error) {
-      console.error('Error normalizing page components:', error)
-      return []
-    }
-  }, [currentNode])
-  
-  const questionComponent = useMemo(() => {
-    return Array.isArray(allComponents) ? allComponents.find(
-      comp => comp && comp.type && ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(comp.type)
-    ) : null
-  }, [allComponents])
-  
-  const needsAnswer = useMemo(() => {
-    return questionComponent && [
-      "multiple-choice",
-      "checkbox-multi",
-      "short-answer",
-      "scale-slider"
-    ].includes(questionComponent.type)
-  }, [questionComponent])
-
-  const getPrevNode = useCallback((): FlowNode | null => {
-    if (!flow || !currentNodeId || !flow.nodes || !Array.isArray(flow.nodes)) return null
-    // Find nodes that connect to current node
-    const prevNode = flow.nodes.find((n: FlowNode) => 
-      n && n.connections && Array.isArray(n.connections) && (
-        n.connections.includes(currentNodeId) ||
-        (flow.logicBlocks && Array.isArray(flow.logicBlocks) && flow.logicBlocks.some((lb: LogicBlock) => 
-          lb && lb.connections && Array.isArray(lb.connections) && 
-          lb.connections.includes(currentNodeId) && 
-          n.connections.includes(lb.id)
-        ))
-      )
-    )
-    return prevNode || null
-  }, [flow, currentNodeId])
-
-  const handlePrev = useCallback(() => {
-    const prevNode = getPrevNode()
-    if (prevNode) {
-      setCurrentNodeId(prevNode.id)
-      setCurrentAnswer(null)
-    }
-  }, [getPrevNode])
-
-  const hasPrev = useMemo(() => getPrevNode() !== null, [getPrevNode])
-  const hasNext = useMemo(() => getNextNode() !== null, [flow, currentNodeId, currentAnswer])
-
-  // Check if all required videos are watched
-  const requiredVideos = useMemo(() => {
-    return Array.isArray(allComponents) ? allComponents.filter(
-      comp => comp && comp.type === "video-step" && comp.config?.requiredToWatch
-    ) : []
-  }, [allComponents])
-  
-  const allRequiredVideosWatched = useMemo(() => {
-    return requiredVideos.length === 0 || requiredVideos.every(
-      comp => comp && comp.id && watchedVideos.has(comp.id)
-    )
-  }, [requiredVideos, watchedVideos])
-
-  const isLastPage = useMemo(() => !hasNext, [hasNext])
-  const canProceed = useMemo(() => {
-    return (!needsAnswer || currentAnswer !== null) && allRequiredVideosWatched
-  }, [needsAnswer, currentAnswer, allRequiredVideosWatched])
   
   if (!currentNode) {
     return <FlowLoading message="Preparing flow..." />
