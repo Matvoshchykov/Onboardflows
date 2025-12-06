@@ -40,7 +40,6 @@ export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsP
   const [isMobile, setIsMobile] = useState(false)
   const [nodeVisitPage, setNodeVisitPage] = useState(0)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
-  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     const checkMobile = () => {
@@ -212,11 +211,7 @@ export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsP
     }, 30000) // Refresh every 30 seconds
     
     return () => clearInterval(refreshInterval)
-  }, [flow.id, flow.nodes, membershipActive, refreshKey])
-
-  const handleRefresh = () => {
-    setRefreshKey(prev => prev + 1)
-  }
+  }, [flow.id, flow.nodes, membershipActive])
 
   // Prepare chart data - filter out deleted nodes
   const nodeVisitChartData = useMemo(() => {
@@ -349,41 +344,23 @@ export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsP
 
   return (
     <div className="h-full w-full bg-background overflow-y-auto p-4 relative">
-      {/* Export and Refresh Buttons - Top Right */}
-      <div className="fixed right-4 z-50 flex gap-2" style={{ top: 'calc(3.5rem + 8px - 50px)' }}>
-        <button
-          onClick={handleRefresh}
-          disabled={isLoading}
-          className="font-medium transition-all duration-300 flex items-center justify-center shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{
-            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-            color: '#3b82f6',
-            minWidth: isMobile ? '80px' : '120px',
-            minHeight: isMobile ? '44px' : '32px',
-            padding: isMobile ? '0 16px' : '0 12px',
-            fontSize: isMobile ? '0.75rem' : '0.827rem',
-            borderRadius: '10px'
-          }}
-          title="Refresh Analytics"
-        >
-          <Activity className={isMobile ? 'w-4 h-4 mr-2' : 'w-4 h-4 mr-1.5'} />
-          <span>Refresh</span>
-        </button>
-        <button
-          onClick={membershipActive ? exportToCSV : () => setShowUpgradeModal(true)}
-          disabled={membershipActive && (!analytics || analytics.sessions.length === 0)}
-          className="font-medium transition-all duration-300 flex items-center justify-center shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{
-            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-            color: '#3b82f6',
-            minWidth: isMobile ? '80px' : '190px',
-            minHeight: isMobile ? '44px' : '32px',
-            padding: isMobile ? '0 16px' : '0 12px',
-            fontSize: isMobile ? '0.75rem' : '0.827rem',
-            borderRadius: '10px'
-          }}
-          title={!membershipActive ? "Premium only - Upgrade to export" : "Export CSV"}
-        >
+      {/* Export Button - Top Right */}
+      <button
+        onClick={membershipActive ? exportToCSV : () => setShowUpgradeModal(true)}
+        disabled={membershipActive && (!analytics || analytics.sessions.length === 0)}
+        className="fixed right-4 z-50 font-medium transition-all duration-300 flex items-center justify-center shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{
+          top: 'calc(3.5rem + 8px - 50px)',
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          color: '#3b82f6',
+          minWidth: isMobile ? '80px' : '190px',
+          minHeight: isMobile ? '44px' : '32px',
+          padding: isMobile ? '0 16px' : '0 12px',
+          fontSize: isMobile ? '0.75rem' : '0.827rem',
+          borderRadius: '10px'
+        }}
+        title={!membershipActive ? "Premium only - Upgrade to export" : "Export CSV"}
+      >
           {!membershipActive ? (
             <>
               <Lock className={isMobile ? 'w-4 h-4 mr-2' : 'w-4 h-4 mr-1.5'} />

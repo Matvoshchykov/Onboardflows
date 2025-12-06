@@ -833,8 +833,8 @@ export default function OnboardingFlowView() {
       setWatchedVideos(new Set()) // Reset watched videos for new node
     } else {
       console.log('handleNext - No next node found, flow complete')
-      // Flow complete - show success message and complete session (only for premium users)
-      if (sessionId && membershipActive) {
+      // Flow complete - show success message and complete session
+      if (sessionId) {
         try {
           const { completeFlowSession } = await import('@/lib/db/sessions')
           await completeFlowSession(sessionId)
