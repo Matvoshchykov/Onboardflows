@@ -251,7 +251,7 @@ export default function OnboardingFlowView() {
     return []
   }
 
-  const evaluateLogicBlock = (
+  const evaluateLogicBlock = useCallback((
     block: LogicBlock, 
     answer: any
   ): string | null => {

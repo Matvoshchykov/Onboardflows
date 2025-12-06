@@ -49,7 +49,7 @@ const getPlusIconColor = (type: LogicBlock['type']): string => {
 
 type LogicBlockLibraryProps = {
   onAddLogicBlock: (type: LogicBlock['type']) => void
-  addBlockButtonRef?: React.RefObject<HTMLButtonElement>
+  addBlockButtonRef?: React.RefObject<HTMLButtonElement | null>
 }
 
 export function LogicBlockLibrary({ onAddLogicBlock, addBlockButtonRef }: LogicBlockLibraryProps) {
