@@ -609,10 +609,10 @@ export default function OnboardingFlowView() {
     setCurrentAnswer(value)
   }
 
-  // Start session when flow loads (only for premium users)
+  // Start session when flow loads (for ALL users - we need to track completions)
   useEffect(() => {
     async function initializeSession() {
-      if (!flow || !userId || sessionId || !membershipActive) return
+      if (!flow || !userId || sessionId) return
       
       try {
         // Clear any previous A/B test decisions for this flow when starting a new session
@@ -653,15 +653,15 @@ export default function OnboardingFlowView() {
         console.error('Error starting session:', error)
       }
     }
-    if (flow && userId && currentNodeId && !sessionId && membershipActive) {
+    if (flow && userId && currentNodeId && !sessionId) {
       initializeSession()
     }
-  }, [flow, userId, currentNodeId, sessionId, membershipActive])
+  }, [flow, userId, currentNodeId, sessionId])
 
-  // Track path when moving to next node (but don't save responses here) - only for premium users
+  // Track path when moving to next node (for ALL users - we need to track completions)
   useEffect(() => {
     async function trackNavigation() {
-      if (!sessionId || !currentNodeId || !flow || !membershipActive) return
+      if (!sessionId || !currentNodeId || !flow) return
       
       try {
         // Find current node index in path
@@ -679,10 +679,10 @@ export default function OnboardingFlowView() {
         console.error('Error tracking navigation:', error)
       }
     }
-    if (currentNodeId && sessionId && membershipActive) {
+    if (currentNodeId && sessionId) {
       trackNavigation()
     }
-  }, [currentNodeId, sessionId, flow, membershipActive]) // Removed currentAnswer from dependencies
+  }, [currentNodeId, sessionId, flow]) // Removed currentAnswer from dependencies
 
   // Calculate derived values using useMemo to ensure consistent hook order
   // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
@@ -804,8 +804,8 @@ export default function OnboardingFlowView() {
     console.log('handleNext - Current answer:', currentAnswer)
     console.log('handleNext - Current node connections:', currentNode.connections)
     
-    // Save the answer before moving to next node (only for premium users)
-    if (sessionId && currentNodeId && currentAnswer !== null && currentAnswer !== undefined && membershipActive) {
+    // Save the answer before moving to next node (for ALL users - we need to track responses)
+    if (sessionId && currentNodeId && currentAnswer !== null && currentAnswer !== undefined) {
       try {
         const allComponents = normalizePageComponents(currentNode.pageComponents)
         if (Array.isArray(allComponents)) {
@@ -836,11 +836,19 @@ export default function OnboardingFlowView() {
       // Flow complete - show success message and complete session
       if (sessionId) {
         try {
+          console.log('Completing session:', sessionId)
           const { completeFlowSession } = await import('@/lib/db/sessions')
-          await completeFlowSession(sessionId)
+          const success = await completeFlowSession(sessionId)
+          if (success) {
+            console.log('Session marked as completed successfully')
+          } else {
+            console.error('Failed to mark session as completed')
+          }
         } catch (error) {
           console.error('Error completing session:', error)
         }
+      } else {
+        console.warn('No sessionId available to mark as completed')
       }
       setShowSuccess(true)
     }
