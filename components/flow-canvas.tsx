@@ -2301,9 +2301,9 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
                   : 'cursor-not-allowed opacity-50'
               }`}
               style={{
-                backgroundColor: hasUnsavedChanges ? 'rgba(245, 158, 11, 0.15)' : 'rgba(59, 130, 246, 0.15)',
-                color: hasUnsavedChanges ? '#f59e0b' : '#3b82f6',
-                border: hasUnsavedChanges ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid rgba(59, 130, 246, 0.5)',
+                backgroundColor: hasUnsavedChanges ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.25)',
+                color: hasUnsavedChanges ? '#f59e0b' : '#10b981',
+                border: hasUnsavedChanges ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid rgba(16, 185, 129, 0.5)',
                 minWidth: isMobile ? '80px' : '190px',
                 minHeight: isMobile ? '48.6px' : '37.8px',
                 padding: isMobile ? '0 16px' : '0 12px',
