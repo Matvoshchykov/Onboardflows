@@ -6,7 +6,7 @@ import { whopsdk } from "@/lib/whop-sdk";
 // Note: Whop API expects prices in dollars, not cents for checkout configurations
 const PRICING = {
   "premium-monthly": {
-    price: 30, // $30.00
+    price: 1, // $1.00 (temporarily set to $1)
     billingPeriod: 30, // 30 days = 1 month (minimum for monthly subscriptions)
   },
   "premium-yearly": {
