@@ -220,58 +220,79 @@ export default function OnboardingFlowView() {
 
   // Helper function to normalize pageComponents to array format (handles both old and new formats)
   const normalizePageComponents = (pageComponents: any): PageComponent[] => {
-    if (!pageComponents) return []
-    // If it's already an array, return it sorted by order
-    if (Array.isArray(pageComponents)) {
-      return [...pageComponents].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    try {
+      if (!pageComponents) return []
+      // If it's already an array, return it sorted by order
+      if (Array.isArray(pageComponents)) {
+        return [...pageComponents]
+          .filter(comp => comp && typeof comp === 'object')
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      }
+      // If it's the old object format, convert it to array
+      if (typeof pageComponents === 'object' && pageComponents !== null) {
+        const components: PageComponent[] = []
+        if (pageComponents.textInstruction && typeof pageComponents.textInstruction === 'object') {
+          components.push({ ...pageComponents.textInstruction, order: 0 })
+        }
+        if (pageComponents.displayUpload && typeof pageComponents.displayUpload === 'object') {
+          components.push({ ...pageComponents.displayUpload, order: 1 })
+        }
+        if (pageComponents.question && typeof pageComponents.question === 'object') {
+          components.push({ ...pageComponents.question, order: 2 })
+        }
+        return components.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      }
+      return []
+    } catch (error) {
+      console.error('Error normalizing page components:', error)
+      return []
     }
-    // If it's the old object format, convert it to array
-    if (typeof pageComponents === 'object') {
-      const components: PageComponent[] = []
-      if (pageComponents.textInstruction) components.push({ ...pageComponents.textInstruction, order: 0 })
-      if (pageComponents.displayUpload) components.push({ ...pageComponents.displayUpload, order: 1 })
-      if (pageComponents.question) components.push({ ...pageComponents.question, order: 2 })
-      return components.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    }
-    return []
   }
 
   const getPreviousBlockOptionsForLogic = (logicBlockId: string): string[] => {
-    if (!flow) return []
-    const sourceNode = flow.nodes.find(node => node.connections.includes(logicBlockId))
-    if (!sourceNode || !sourceNode.pageComponents) return []
-    const components = normalizePageComponents(sourceNode.pageComponents)
-    const questionComponent = components.find(
-      comp => ["multiple-choice", "checkbox-multi", "short-answer", "long-answer", "scale-slider"].includes(comp.type)
-    )
-    if (!questionComponent) return []
-    if (["multiple-choice", "checkbox-multi"].includes(questionComponent.type)) {
-      return questionComponent.config?.options || []
+    try {
+      if (!flow || !flow.nodes || !Array.isArray(flow.nodes) || !logicBlockId) return []
+      const sourceNode = flow.nodes.find(node => node && node.connections && Array.isArray(node.connections) && node.connections.includes(logicBlockId))
+      if (!sourceNode || !sourceNode.pageComponents) return []
+      const components = normalizePageComponents(sourceNode.pageComponents)
+      if (!Array.isArray(components)) return []
+      const questionComponent = components.find(
+        comp => comp && comp.type && ["multiple-choice", "checkbox-multi", "short-answer", "long-answer", "scale-slider"].includes(comp.type)
+      )
+      if (!questionComponent) return []
+      if (["multiple-choice", "checkbox-multi"].includes(questionComponent.type)) {
+        return Array.isArray(questionComponent.config?.options) ? questionComponent.config.options : []
+      }
+      return []
+    } catch (error) {
+      console.error('Error in getPreviousBlockOptionsForLogic:', error)
+      return []
     }
-    return []
   }
 
   const evaluateLogicBlock = useCallback((
     block: LogicBlock, 
     answer: any
   ): string | null => {
-    if (!flow || !block || !block.type) return null
-    if (!block.connections || !Array.isArray(block.connections)) return null
+    try {
+      if (!flow || !block || !block.type) return null
+      if (!block.connections || !Array.isArray(block.connections)) return null
+      if (!flow.nodes || !Array.isArray(flow.nodes)) return null
     
     if (block.type === "if-else") {
       // Use conditions array (slots) if available, otherwise fallback to condition string
       const conditionsList = block.config?.conditions || []
-      const filledConditions = conditionsList.filter((c: string) => c && c.trim().length > 0)
+      const filledConditions = Array.isArray(conditionsList) ? conditionsList.filter((c: string) => c && c.trim().length > 0) : []
       const condition = block.config?.condition || filledConditions[0] || ""
       
       // If no conditions specified, default to false path
       if (filledConditions.length === 0 && !condition) {
-        return block.connections[1] || block.connections[0] || null
+        return block.connections && block.connections.length > 1 ? block.connections[1] : (block.connections && block.connections.length > 0 ? block.connections[0] : null)
       }
       
       // Check if answer matches ANY condition (OR logic for multiple-choice/checkbox, AND logic otherwise)
       // First, check if previous question is multiple-choice or checkbox-multi
-      const sourceNode = flow.nodes.find(node => node.connections.includes(block.id))
+      const sourceNode = flow.nodes.find(node => node && node.connections && Array.isArray(node.connections) && node.connections.includes(block.id))
       let isMultipleChoice = false
       if (sourceNode) {
         const components = normalizePageComponents(sourceNode.pageComponents)
@@ -327,16 +348,16 @@ export default function OnboardingFlowView() {
       }
       
       if (matches) {
-        return block.connections[0] || null
+        return block.connections && block.connections.length > 0 ? block.connections[0] : null
       } else {
-        return block.connections[1] || block.connections[0] || null
+        return block.connections && block.connections.length > 1 ? block.connections[1] : (block.connections && block.connections.length > 0 ? block.connections[0] : null)
       }
     }
     
     if (block.type === "multi-path") {
-      const previousNode = flow.nodes.find(node => node.connections.includes(block.id))
+      const previousNode = flow.nodes.find(node => node && node.connections && Array.isArray(node.connections) && node.connections.includes(block.id))
       if (!previousNode || !previousNode.pageComponents) {
-        return block.connections[0] || null
+        return block.connections && block.connections.length > 0 ? block.connections[0] : null
       }
       
       const components = normalizePageComponents(previousNode.pageComponents)
@@ -344,23 +365,23 @@ export default function OnboardingFlowView() {
         (comp: PageComponent) => ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(comp.type)
       )
       if (!questionComponent) {
-        return block.connections[0] || null
+        return block.connections && block.connections.length > 0 ? block.connections[0] : null
       }
       
       // Get paths from config (these contain the variable/answer values)
-      const paths = block.config?.paths || []
+      const paths = Array.isArray(block.config?.paths) ? block.config.paths : []
       if (paths.length === 0) {
         // Fallback to matching by option index
-        const questionOptions = questionComponent.config?.options || []
+        const questionOptions = Array.isArray(questionComponent.config?.options) ? questionComponent.config.options : []
         let answerToMatch = answer
         if (Array.isArray(answer) && answer.length > 0) {
           answerToMatch = answer[0]
         }
         const answerIndex = questionOptions.indexOf(answerToMatch)
-        if (answerIndex >= 0 && answerIndex < block.connections.length) {
+        if (answerIndex >= 0 && block.connections && Array.isArray(block.connections) && answerIndex < block.connections.length) {
           return block.connections[answerIndex] || null
         }
-        return block.connections[0] || null
+        return block.connections && block.connections.length > 0 ? block.connections[0] : null
       }
       
       // Handle array answers (checkbox-multi) - use first selected option
@@ -378,12 +399,12 @@ export default function OnboardingFlowView() {
       })
       
       // If we found a matching path and it has a connection, use it
-      if (matchingPathIndex >= 0 && matchingPathIndex < block.connections.length && block.connections[matchingPathIndex]) {
+      if (matchingPathIndex >= 0 && block.connections && Array.isArray(block.connections) && matchingPathIndex < block.connections.length && block.connections[matchingPathIndex]) {
         return block.connections[matchingPathIndex]
       }
       
       // Fallback to first connection
-      return block.connections[0] || null
+      return block.connections && block.connections.length > 0 ? block.connections[0] : null
     }
     
     if (block.type === "score-threshold") {
@@ -395,9 +416,9 @@ export default function OnboardingFlowView() {
         score = parseInt(answer) || 0
       }
       if (score >= threshold) {
-        return block.connections[0] || null
+        return block.connections && block.connections.length > 0 ? block.connections[0] : null
       }
-      return block.connections[1] || block.connections[0] || null
+      return block.connections && block.connections.length > 1 ? block.connections[1] : (block.connections && block.connections.length > 0 ? block.connections[0] : null)
     }
     
     if (block.type === "a-b-test") {
@@ -419,8 +440,8 @@ export default function OnboardingFlowView() {
       if (storedDecision !== null) {
         // Use stored decision (persists when going back/forward)
         const pathIndex = parseInt(storedDecision)
-        if (!isNaN(pathIndex) && pathIndex >= 0 && pathIndex < block.connections.length) {
-          return block.connections[pathIndex] || block.connections[0] || null
+        if (!isNaN(pathIndex) && pathIndex >= 0 && block.connections && Array.isArray(block.connections) && pathIndex < block.connections.length) {
+          return block.connections[pathIndex] || (block.connections.length > 0 ? block.connections[0] : null)
         }
       }
       
@@ -437,108 +458,128 @@ export default function OnboardingFlowView() {
         }
       }
       
-      return block.connections[pathIndex] || block.connections[0] || null
+      return block.connections && Array.isArray(block.connections) && block.connections.length > pathIndex ? block.connections[pathIndex] : (block.connections && block.connections.length > 0 ? block.connections[0] : null)
     }
 
     return null
+    } catch (error) {
+      console.error('Error evaluating logic block:', error)
+      return null
+    }
   }, [flow, sessionId])
 
   // Get next node based on current node and answer (same logic as preview flow)
   const getNextNodeFromCurrent = useCallback((node: FlowNode, answer?: any): FlowNode | null => {
-    if (!flow || !node || !flow.nodes || !Array.isArray(flow.nodes)) return null
+    try {
+      if (!flow || !node || !flow.nodes || !Array.isArray(flow.nodes)) return null
+      if (!node.id) return null
     
-    // Check if there's a logic block connected to this node
-    const connectedLogicBlock = flow.logicBlocks && Array.isArray(flow.logicBlocks) 
-      ? flow.logicBlocks.find((lb: LogicBlock) =>
-          lb && lb.id && node.connections && Array.isArray(node.connections) && node.connections.includes(lb.id)
-        )
-      : null
-    
-    if (connectedLogicBlock) {
-      // For A/B test, always evaluate even without answer
-      if (connectedLogicBlock.type === "a-b-test") {
-        const targetId = evaluateLogicBlock(connectedLogicBlock, answer)
-        if (targetId) {
-          const targetNode = flow.nodes.find(n => n.id === targetId)
-          if (targetNode) {
-            return targetNode
-          }
-        }
-        return null
-      }
+      // Check if there's a logic block connected to this node
+      const connectedLogicBlock = flow.logicBlocks && Array.isArray(flow.logicBlocks) 
+        ? flow.logicBlocks.find((lb: LogicBlock) =>
+            lb && lb.id && node.connections && Array.isArray(node.connections) && node.connections.includes(lb.id)
+          )
+        : null
       
-      // Evaluate the logic block with the answer (even if null/undefined for A/B tests)
-      const targetId = evaluateLogicBlock(connectedLogicBlock, answer)
-      if (targetId) {
-        const targetNode = flow.nodes.find(n => n.id === targetId)
-        if (targetNode) {
-          return targetNode
-        }
-      }
-      // If evaluation failed, check if logic block has connections as fallback
-      if (connectedLogicBlock.connections.length > 0) {
-        const firstTargetId = connectedLogicBlock.connections[0]
-        const firstTargetNode = flow.nodes.find(n => n.id === firstTargetId)
-        if (firstTargetNode) {
-          return firstTargetNode
-        }
-      }
-      return null
-    }
-    
-    // Direct connection to next node (no logic block)
-    if (node.connections && Array.isArray(node.connections) && node.connections.length > 0) {
-      const nextId = node.connections[0]
-      // Check if it's a logic block
-      const isLogicBlock = flow.logicBlocks && Array.isArray(flow.logicBlocks)
-        ? flow.logicBlocks.some((lb: LogicBlock) => lb && lb.id === nextId)
-        : false
-      if (!isLogicBlock) {
-        const nextNode = flow.nodes.find(n => n.id === nextId)
-        if (nextNode) {
-          return nextNode
-        }
-      } else {
-        // If it's a logic block, we need to evaluate it with the answer
-        const nextLogicBlock = flow.logicBlocks?.find(lb => lb.id === nextId)
-        if (nextLogicBlock) {
-          // For A/B test, always evaluate even without answer
-          // Evaluate the logic block with the answer (even if null/undefined for A/B tests)
-          const targetId = evaluateLogicBlock(nextLogicBlock, answer)
+      if (connectedLogicBlock) {
+        // For A/B test, always evaluate even without answer
+        if (connectedLogicBlock.type === "a-b-test") {
+          const targetId = evaluateLogicBlock(connectedLogicBlock, answer)
           if (targetId) {
-            const targetNode = flow.nodes.find(n => n.id === targetId)
+            const targetNode = flow.nodes.find(n => n && n.id === targetId)
             if (targetNode) {
               return targetNode
             }
           }
-          // Fallback to first connection of logic block if evaluation failed
-          if (nextLogicBlock.connections.length > 0) {
-            const firstTargetId = nextLogicBlock.connections[0]
-            const firstTargetNode = flow.nodes.find(n => n.id === firstTargetId)
+          return null
+        }
+        
+        // Evaluate the logic block with the answer (even if null/undefined for A/B tests)
+        const targetId = evaluateLogicBlock(connectedLogicBlock, answer)
+        if (targetId) {
+          const targetNode = flow.nodes.find(n => n && n.id === targetId)
+          if (targetNode) {
+            return targetNode
+          }
+        }
+        // If evaluation failed, check if logic block has connections as fallback
+        if (connectedLogicBlock.connections && Array.isArray(connectedLogicBlock.connections) && connectedLogicBlock.connections.length > 0) {
+          const firstTargetId = connectedLogicBlock.connections[0]
+          if (firstTargetId) {
+            const firstTargetNode = flow.nodes.find(n => n && n.id === firstTargetId)
             if (firstTargetNode) {
               return firstTargetNode
             }
           }
         }
+        return null
       }
-    }
+      
+      // Direct connection to next node (no logic block)
+      if (node.connections && Array.isArray(node.connections) && node.connections.length > 0) {
+        const nextId = node.connections[0]
+        if (!nextId) return null
+        // Check if it's a logic block
+        const isLogicBlock = flow.logicBlocks && Array.isArray(flow.logicBlocks)
+          ? flow.logicBlocks.some((lb: LogicBlock) => lb && lb.id === nextId)
+          : false
+        if (!isLogicBlock) {
+          const nextNode = flow.nodes.find(n => n && n.id === nextId)
+          if (nextNode) {
+            return nextNode
+          }
+        } else {
+          // If it's a logic block, we need to evaluate it with the answer
+          const nextLogicBlock = flow.logicBlocks?.find(lb => lb && lb.id === nextId)
+          if (nextLogicBlock) {
+            // For A/B test, always evaluate even without answer
+            // Evaluate the logic block with the answer (even if null/undefined for A/B tests)
+            const targetId = evaluateLogicBlock(nextLogicBlock, answer)
+            if (targetId) {
+              const targetNode = flow.nodes.find(n => n && n.id === targetId)
+              if (targetNode) {
+                return targetNode
+              }
+            }
+            // Fallback to first connection of logic block if evaluation failed
+            if (nextLogicBlock.connections && Array.isArray(nextLogicBlock.connections) && nextLogicBlock.connections.length > 0) {
+              const firstTargetId = nextLogicBlock.connections[0]
+              if (firstTargetId) {
+                const firstTargetNode = flow.nodes.find(n => n && n.id === firstTargetId)
+                if (firstTargetNode) {
+                  return firstTargetNode
+                }
+              }
+            }
+          }
+        }
+      }
 
     return null
+    } catch (error) {
+      console.error('Error in getNextNodeFromCurrent:', error)
+      return null
+    }
   }, [flow, evaluateLogicBlock])
 
   const getNextNode = useCallback((answer?: any): FlowNode | null => {
-    const current = getCurrentNode()
-    if (!current || !flow) return null
+    try {
+      const current = getCurrentNode()
+      if (!current || !flow) return null
 
-    // Save current answer (even if null/undefined, save it to track state)
-    if (current) {
-      setUserAnswers((prev) => ({ ...prev, [current.id]: answer }))
+      // Save current answer (even if null/undefined, save it to track state)
+      if (current && current.id) {
+        setUserAnswers((prev) => ({ ...prev, [current.id]: answer }))
+      }
+
+      // Use the same logic as preview flow - always pass answer (even if null/undefined)
+      // This ensures logic blocks can evaluate properly (e.g., A/B tests work without answers)
+      return getNextNodeFromCurrent(current, answer)
+    } catch (error) {
+      console.error('Error in getNextNode:', error)
+      return null
     }
-
-    // Use the same logic as preview flow - always pass answer (even if null/undefined)
-    // This ensures logic blocks can evaluate properly (e.g., A/B tests work without answers)
-    return getNextNodeFromCurrent(current, answer)
-  }, [flow, currentNodeId, getNextNodeFromCurrent])
+  }, [getCurrentNode, getNextNodeFromCurrent, flow])
 
   const handleAnswerChange = (value: any) => {
     setCurrentAnswer(value)
@@ -600,7 +641,8 @@ export default function OnboardingFlowView() {
       
       try {
         // Find current node index in path
-        const nodeIndex = flow.nodes.findIndex(n => n.id === currentNodeId)
+        if (!flow.nodes || !Array.isArray(flow.nodes)) return
+        const nodeIndex = flow.nodes.findIndex(n => n && n.id === currentNodeId)
         if (nodeIndex >= 0) {
           const { trackPathNode } = await import('@/lib/db/paths')
           const { updateSessionStep } = await import('@/lib/db/sessions')
@@ -648,19 +690,27 @@ export default function OnboardingFlowView() {
   }, [questionComponent])
 
   const getPrevNode = useCallback((): FlowNode | null => {
-    if (!flow || !currentNodeId || !flow.nodes || !Array.isArray(flow.nodes)) return null
-    // Find nodes that connect to current node
-    const prevNode = flow.nodes.find((n: FlowNode) => 
-      n && n.connections && Array.isArray(n.connections) && (
-        n.connections.includes(currentNodeId) ||
-        (flow.logicBlocks && Array.isArray(flow.logicBlocks) && flow.logicBlocks.some((lb: LogicBlock) => 
-          lb && lb.connections && Array.isArray(lb.connections) && 
-          lb.connections.includes(currentNodeId) && 
-          n.connections.includes(lb.id)
-        ))
-      )
-    )
-    return prevNode || null
+    try {
+      if (!flow || !currentNodeId || !flow.nodes || !Array.isArray(flow.nodes)) return null
+      // Find nodes that connect to current node
+      const prevNode = flow.nodes.find((n: FlowNode) => {
+        if (!n || !n.connections || !Array.isArray(n.connections)) return false
+        if (n.connections.includes(currentNodeId)) return true
+        // Check if any logic block connects to current node
+        if (flow.logicBlocks && Array.isArray(flow.logicBlocks)) {
+          return flow.logicBlocks.some((lb: LogicBlock) => 
+            lb && lb.connections && Array.isArray(lb.connections) && 
+            lb.connections.includes(currentNodeId) && 
+            n.connections.includes(lb.id)
+          )
+        }
+        return false
+      })
+      return prevNode || null
+    } catch (error) {
+      console.error('Error in getPrevNode:', error)
+      return null
+    }
   }, [flow, currentNodeId])
 
   const handlePrev = useCallback(() => {
@@ -707,12 +757,14 @@ export default function OnboardingFlowView() {
     if (sessionId && currentNodeId && currentAnswer !== null && currentAnswer !== undefined && membershipActive) {
       try {
         const allComponents = normalizePageComponents(currentNode.pageComponents)
-        const questionComponent = allComponents.find(
-          comp => ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider", "long-answer"].includes(comp.type)
-        )
-        if (questionComponent) {
-          const { saveResponse } = await import('@/lib/db/responses')
-          await saveResponse(sessionId, currentNodeId, questionComponent.type, currentAnswer)
+        if (Array.isArray(allComponents)) {
+          const questionComponent = allComponents.find(
+            comp => comp && comp.type && ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider", "long-answer"].includes(comp.type)
+          )
+          if (questionComponent && questionComponent.type) {
+            const { saveResponse } = await import('@/lib/db/responses')
+            await saveResponse(sessionId, currentNodeId, questionComponent.type, currentAnswer)
+          }
         }
       } catch (error) {
         console.error('Error saving response:', error)
