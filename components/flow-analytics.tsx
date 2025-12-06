@@ -271,20 +271,29 @@ export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsP
   const pathFrequencyData = useMemo(() => {
     const freq = analytics?.pathAnalytics?.pathFrequency
     // Type guard: check if freq exists and has entries method (Map) or is an object
-    if (!freq || typeof freq !== "object") return []
+    if (!freq) return []
     
     // Handle both Map and plain object cases
-    let entries: Array<[string, number]>
+    let entries: Array<[string, number]> = []
+    
     if (freq instanceof Map) {
       entries = Array.from(freq.entries())
-    } else if (typeof freq.entries === "function") {
-      entries = Array.from(freq.entries())
-    } else if (typeof freq === "object") {
-      // If it's a plain object, convert to entries array
-      entries = Object.entries(freq).map(([key, value]) => [key, typeof value === "number" ? value : 0])
-    } else {
-      return []
+    } else if (typeof freq === "object" && freq !== null) {
+      // Check if it has entries method (Map-like object)
+      if (typeof (freq as any).entries === "function") {
+        try {
+          entries = Array.from((freq as any).entries())
+        } catch {
+          // If entries() fails, treat as plain object
+          entries = Object.entries(freq).map(([key, value]) => [key, typeof value === "number" ? value : 0])
+        }
+      } else {
+        // Plain object, convert to entries array
+        entries = Object.entries(freq).map(([key, value]) => [key, typeof value === "number" ? value : 0])
+      }
     }
+    
+    if (entries.length === 0) return []
     
     const paths = entries
       .map(([pathKey, freq]) => ({
