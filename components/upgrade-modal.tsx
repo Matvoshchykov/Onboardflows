@@ -31,7 +31,7 @@ const pricingPlans = [
     id: "premium-monthly" as PlanType,
     name: "Premium",
     description: "Ideal for growing teams and businesses",
-    monthlyPrice: 30,
+    monthlyPrice: 1,
     yearlyPrice: 280,
     flows: 5,
     blocks: 30,
@@ -235,7 +235,7 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
         <div className="p-6 sm:p-8">
           {/* Header */}
           <div className="text-center mb-6">
-            <h1 className="text-2xl sm:text-3xl font-bold text-balance mb-2">
+            <h1 className="text-2xl sm:text-3xl font-bold text-balance mb-2" style={{ color: '#3b82f6', fontWeight: '700' }}>
               Upgrade to Premium
             </h1>
             <p className="text-sm text-muted-foreground text-balance">
