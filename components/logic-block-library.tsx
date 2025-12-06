@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Plus, Waveform } from 'lucide-react'
+import { Plus, Waves } from 'lucide-react'
 import type { LogicBlock } from './flow-canvas'
 
 const logicBlockTypes: LogicBlock['type'][] = ["if-else", "multi-path", "score-threshold", "a-b-test"]
@@ -92,7 +92,7 @@ export function LogicBlockLibrary({ onAddLogicBlock, addBlockButtonRef }: LogicB
         }}
         title="Logic Blocks"
       >
-        <Waveform className="w-5 h-5" />
+        <Waves className="w-5 h-5" />
       </button>
 
       {/* Hover transfer area - invisible bridge between button and bubbles */}
