@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { ChevronLeft, ChevronRight, Check } from "lucide-react"
 import type { FlowNode, Flow } from "@/components/flow-builder"
@@ -17,7 +17,7 @@ export default function OnboardingFlowView() {
   const params = useParams()
   const router = useRouter()
   // Safely extract experienceId with fallback
-  const experienceId = (params?.experienceId as string) || (typeof window !== 'undefined' ? window.location.pathname.split('/experiences/')[1]?.split('/')[0] : null) || null
+  const experienceId = (params?.experienceId as string) || null
   const [currentNodeId, setCurrentNodeId] = useState<string | null>(null)
   const [flow, setFlow] = useState<Flow | null>(null)
   const [userAnswers, setUserAnswers] = useState<Record<string, any>>({})
@@ -26,24 +26,41 @@ export default function OnboardingFlowView() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      return window.innerWidth < 768 || 'ontouchstart' in window || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
+    } catch {
+      return false
+    }
+  })
+  const [mounted, setMounted] = useState(false)
   const [watchedVideos, setWatchedVideos] = useState<Set<string>>(new Set())
   const [videoViewingTimes, setVideoViewingTimes] = useState<Record<string, number>>({})
   const [membershipActive, setMembershipActive] = useState(false)
   const [flowLoadError, setFlowLoadError] = useState<string | null>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const firstComponentRef = useRef<HTMLDivElement>(null)
+
+  // Set mounted flag on client side
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Detect mobile
   useEffect(() => {
+    if (!mounted) return
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window || navigator.maxTouchPoints > 0)
     }
     checkMobile()
     window.addEventListener('resize', checkMobile)
     return () => window.removeEventListener('resize', checkMobile)
-  }, [])
+  }, [mounted])
 
   // Load user ID and membership status
   useEffect(() => {
+    if (!mounted || !experienceId) return
     async function loadUserData() {
       try {
         // Load user ID
@@ -54,11 +71,9 @@ export default function OnboardingFlowView() {
           
           // Check membership status - use experienceId directly
           try {
-            const pathParts = window.location.pathname.split('/')
-            const expId = pathParts[pathParts.indexOf('experiences') + 1]
-            if (expId) {
+            if (experienceId) {
               // Use experienceId directly, not companyId
-              const membershipResponse = await fetch(`/api/check-membership?experienceId=${expId}`)
+              const membershipResponse = await fetch(`/api/check-membership?experienceId=${experienceId}`)
               if (membershipResponse.ok) {
                 const { membershipActive: active } = await membershipResponse.json()
                 setMembershipActive(active)
@@ -73,7 +88,7 @@ export default function OnboardingFlowView() {
       }
     }
     loadUserData()
-  }, [])
+  }, [mounted, experienceId])
 
   // Load flow data - load active flow (experienceId is not the flow ID)
   useEffect(() => {
@@ -107,26 +122,57 @@ export default function OnboardingFlowView() {
         console.log('Active flow loaded:', dbFlow ? 'Found' : 'Not found', dbFlow)
         
         if (dbFlow) {
+          // Validate flow structure
+          if (!dbFlow.nodes || !Array.isArray(dbFlow.nodes)) {
+            console.error('Flow has invalid nodes structure:', dbFlow)
+            setFlowLoadError('Flow data is invalid. Please contact support.')
+            setIsLoading(false)
+            return
+          }
+          
+          if (dbFlow.nodes.length === 0) {
+            console.error('Flow has no nodes')
+            setFlowLoadError('Flow has no pages. Please contact support.')
+            setIsLoading(false)
+            return
+          }
+          
           setFlow(dbFlow)
           
           // Find first node (no incoming connections)
-          const firstNode = dbFlow.nodes.find((node: FlowNode) => {
-            // Check if any node connects to this one
-            const hasIncoming = dbFlow.nodes.some((n: FlowNode) => 
-              n.connections.includes(node.id)
-            )
-            // Check if any logic block connects to this one
-            const hasLogicIncoming = dbFlow.logicBlocks?.some((lb: LogicBlock) =>
-              lb.connections.includes(node.id)
-            )
-            return !hasIncoming && !hasLogicIncoming
-          })
-          
-          if (firstNode) {
-            setCurrentNodeId(firstNode.id)
-          } else if (dbFlow.nodes.length > 0) {
-            // Fallback: use first node if no entry node found
-            setCurrentNodeId(dbFlow.nodes[0].id)
+          try {
+            const firstNode = dbFlow.nodes.find((node: FlowNode) => {
+              if (!node || !node.id) return false
+              // Check if any node connects to this one
+              const hasIncoming = dbFlow.nodes.some((n: FlowNode) => 
+                n && n.connections && Array.isArray(n.connections) && n.connections.includes(node.id)
+              )
+              // Check if any logic block connects to this one
+              const hasLogicIncoming = dbFlow.logicBlocks && Array.isArray(dbFlow.logicBlocks)
+                ? dbFlow.logicBlocks.some((lb: LogicBlock) =>
+                    lb && lb.connections && Array.isArray(lb.connections) && lb.connections.includes(node.id)
+                  )
+                : false
+              return !hasIncoming && !hasLogicIncoming
+            })
+            
+            if (firstNode && firstNode.id) {
+              setCurrentNodeId(firstNode.id)
+            } else if (dbFlow.nodes.length > 0 && dbFlow.nodes[0] && dbFlow.nodes[0].id) {
+              // Fallback: use first node if no entry node found
+              setCurrentNodeId(dbFlow.nodes[0].id)
+            } else {
+              console.error('No valid node found in flow')
+              setFlowLoadError('Flow has no valid pages. Please contact support.')
+            }
+          } catch (error) {
+            console.error('Error finding first node:', error)
+            // Fallback to first node
+            if (dbFlow.nodes[0] && dbFlow.nodes[0].id) {
+              setCurrentNodeId(dbFlow.nodes[0].id)
+            } else {
+              setFlowLoadError('Error processing flow. Please contact support.')
+            }
           }
         } else {
           // No active flow found
@@ -153,10 +199,24 @@ export default function OnboardingFlowView() {
     }
   }, [experienceId])
 
-  const getCurrentNode = (): FlowNode | null => {
-    if (!flow || !currentNodeId) return null
-    return flow.nodes.find((n: FlowNode) => n.id === currentNodeId) || null
-  }
+  const getCurrentNode = useCallback((): FlowNode | null => {
+    try {
+      if (!flow || !currentNodeId || !flow.nodes || !Array.isArray(flow.nodes)) return null
+      const node = flow.nodes.find((n: FlowNode) => n && n.id === currentNodeId)
+      if (!node) {
+        console.warn('Current node not found:', currentNodeId, 'Available nodes:', flow.nodes.map(n => n?.id))
+        // Fallback to first node if current node not found
+        if (flow.nodes.length > 0 && flow.nodes[0]) {
+          return flow.nodes[0]
+        }
+        return null
+      }
+      return node
+    } catch (error) {
+      console.error('Error getting current node:', error)
+      return null
+    }
+  }, [flow, currentNodeId])
 
   // Helper function to normalize pageComponents to array format (handles both old and new formats)
   const normalizePageComponents = (pageComponents: any): PageComponent[] => {
@@ -195,7 +255,8 @@ export default function OnboardingFlowView() {
     block: LogicBlock, 
     answer: any
   ): string | null => {
-    if (!flow) return null
+    if (!flow || !block || !block.type) return null
+    if (!block.connections || !Array.isArray(block.connections)) return null
     
     if (block.type === "if-else") {
       // Use conditions array (slots) if available, otherwise fallback to condition string
@@ -346,12 +407,21 @@ export default function OnboardingFlowView() {
       const storageKey = `ab-test-${flow.id}-${block.id}-${sessionKey}`
       
       // Check if we already have a decision for this A/B test in this session
-      const storedDecision = sessionStorage.getItem(storageKey)
+      let storedDecision: string | null = null
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        try {
+          storedDecision = sessionStorage.getItem(storageKey)
+        } catch (e) {
+          console.error('Error accessing sessionStorage:', e)
+        }
+      }
       
       if (storedDecision !== null) {
         // Use stored decision (persists when going back/forward)
         const pathIndex = parseInt(storedDecision)
-        return block.connections[pathIndex] || block.connections[0] || null
+        if (!isNaN(pathIndex) && pathIndex >= 0 && pathIndex < block.connections.length) {
+          return block.connections[pathIndex] || block.connections[0] || null
+        }
       }
       
       // Generate new 50/50 random decision
@@ -359,22 +429,30 @@ export default function OnboardingFlowView() {
       const pathIndex = randomValue < 0.5 ? 0 : 1
       
       // Store decision in sessionStorage for this session
-      sessionStorage.setItem(storageKey, pathIndex.toString())
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        try {
+          sessionStorage.setItem(storageKey, pathIndex.toString())
+        } catch (e) {
+          console.error('Error setting sessionStorage:', e)
+        }
+      }
       
       return block.connections[pathIndex] || block.connections[0] || null
     }
 
     return null
-  }
+  }, [flow, sessionId])
 
   // Get next node based on current node and answer (same logic as preview flow)
-  const getNextNodeFromCurrent = (node: FlowNode, answer?: any): FlowNode | null => {
-    if (!flow || !node) return null
+  const getNextNodeFromCurrent = useCallback((node: FlowNode, answer?: any): FlowNode | null => {
+    if (!flow || !node || !flow.nodes || !Array.isArray(flow.nodes)) return null
     
     // Check if there's a logic block connected to this node
-    const connectedLogicBlock = flow.logicBlocks?.find((lb: LogicBlock) =>
-      node.connections.includes(lb.id)
-    )
+    const connectedLogicBlock = flow.logicBlocks && Array.isArray(flow.logicBlocks) 
+      ? flow.logicBlocks.find((lb: LogicBlock) =>
+          lb && lb.id && node.connections && Array.isArray(node.connections) && node.connections.includes(lb.id)
+        )
+      : null
     
     if (connectedLogicBlock) {
       // For A/B test, always evaluate even without answer
@@ -409,10 +487,12 @@ export default function OnboardingFlowView() {
     }
     
     // Direct connection to next node (no logic block)
-    if (node.connections.length > 0) {
+    if (node.connections && Array.isArray(node.connections) && node.connections.length > 0) {
       const nextId = node.connections[0]
       // Check if it's a logic block
-      const isLogicBlock = flow.logicBlocks?.some((lb: LogicBlock) => lb.id === nextId)
+      const isLogicBlock = flow.logicBlocks && Array.isArray(flow.logicBlocks)
+        ? flow.logicBlocks.some((lb: LogicBlock) => lb && lb.id === nextId)
+        : false
       if (!isLogicBlock) {
         const nextNode = flow.nodes.find(n => n.id === nextId)
         if (nextNode) {
@@ -444,9 +524,9 @@ export default function OnboardingFlowView() {
     }
 
     return null
-  }
+  }, [flow, evaluateLogicBlock])
 
-  const getNextNode = (answer?: any): FlowNode | null => {
+  const getNextNode = useCallback((answer?: any): FlowNode | null => {
     const current = getCurrentNode()
     if (!current || !flow) return null
 
@@ -458,7 +538,7 @@ export default function OnboardingFlowView() {
     // Use the same logic as preview flow - always pass answer (even if null/undefined)
     // This ensures logic blocks can evaluate properly (e.g., A/B tests work without answers)
     return getNextNodeFromCurrent(current, answer)
-  }
+  }, [flow, currentNodeId, getNextNodeFromCurrent])
 
   const handleAnswerChange = (value: any) => {
     setCurrentAnswer(value)
@@ -472,15 +552,25 @@ export default function OnboardingFlowView() {
       try {
         // Clear any previous A/B test decisions for this flow when starting a new session
         // This ensures a fresh 50/50 chance on restart
-        if (typeof window !== 'undefined' && flow) {
-          const keysToRemove: string[] = []
-          for (let i = 0; i < sessionStorage.length; i++) {
-            const key = sessionStorage.key(i)
-            if (key && key.startsWith(`ab-test-${flow.id}-`)) {
-              keysToRemove.push(key)
+        if (typeof window !== 'undefined' && window.sessionStorage && flow) {
+          try {
+            const keysToRemove: string[] = []
+            for (let i = 0; i < sessionStorage.length; i++) {
+              const key = sessionStorage.key(i)
+              if (key && key.startsWith(`ab-test-${flow.id}-`)) {
+                keysToRemove.push(key)
+              }
             }
+            keysToRemove.forEach(key => {
+              try {
+                sessionStorage.removeItem(key)
+              } catch (e) {
+                console.error('Error removing sessionStorage key:', e)
+              }
+            })
+          } catch (e) {
+            console.error('Error clearing sessionStorage:', e)
           }
-          keysToRemove.forEach(key => sessionStorage.removeItem(key))
         }
         
         // Start session if flow is active and user has premium
@@ -593,7 +683,11 @@ export default function OnboardingFlowView() {
             {flowLoadError || "No active onboarding flow found. Please contact support."}
           </p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                window.location.reload()
+              }
+            }}
             className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
           >
             Retry
@@ -603,59 +697,82 @@ export default function OnboardingFlowView() {
     )
   }
 
-  const currentNode = getCurrentNode()
-  if (!currentNode) {
-    return <FlowLoading message="Preparing flow..." />
-  }
-
-  // Components are already in order (top to bottom) in the array
-  const allComponents = normalizePageComponents(currentNode.pageComponents)
+  // Calculate derived values using useMemo to ensure consistent hook order
+  const currentNode = useMemo(() => getCurrentNode(), [getCurrentNode])
   
-  // Find question component if any (for logic purposes)
-  const questionComponent = allComponents.find(
-    comp => ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(comp.type)
-  )
+  const allComponents = useMemo(() => {
+    if (!currentNode) return []
+    try {
+      return normalizePageComponents(currentNode?.pageComponents || [])
+    } catch (error) {
+      console.error('Error normalizing page components:', error)
+      return []
+    }
+  }, [currentNode])
   
-  const needsAnswer = questionComponent && [
-    "multiple-choice",
-    "checkbox-multi",
-    "short-answer",
-    "scale-slider"
-  ].includes(questionComponent.type)
+  const questionComponent = useMemo(() => {
+    return Array.isArray(allComponents) ? allComponents.find(
+      comp => comp && comp.type && ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(comp.type)
+    ) : null
+  }, [allComponents])
+  
+  const needsAnswer = useMemo(() => {
+    return questionComponent && [
+      "multiple-choice",
+      "checkbox-multi",
+      "short-answer",
+      "scale-slider"
+    ].includes(questionComponent.type)
+  }, [questionComponent])
 
-  const getPrevNode = (): FlowNode | null => {
-    if (!flow || !currentNodeId) return null
+  const getPrevNode = useCallback((): FlowNode | null => {
+    if (!flow || !currentNodeId || !flow.nodes || !Array.isArray(flow.nodes)) return null
     // Find nodes that connect to current node
     const prevNode = flow.nodes.find((n: FlowNode) => 
-      n.connections.includes(currentNodeId) ||
-      (flow.logicBlocks?.some((lb: LogicBlock) => 
-        lb.connections.includes(currentNodeId) && n.connections.includes(lb.id)
-      ))
+      n && n.connections && Array.isArray(n.connections) && (
+        n.connections.includes(currentNodeId) ||
+        (flow.logicBlocks && Array.isArray(flow.logicBlocks) && flow.logicBlocks.some((lb: LogicBlock) => 
+          lb && lb.connections && Array.isArray(lb.connections) && 
+          lb.connections.includes(currentNodeId) && 
+          n.connections.includes(lb.id)
+        ))
+      )
     )
     return prevNode || null
-  }
+  }, [flow, currentNodeId])
 
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
     const prevNode = getPrevNode()
     if (prevNode) {
       setCurrentNodeId(prevNode.id)
       setCurrentAnswer(null)
     }
-  }
+  }, [getPrevNode])
 
-  const hasPrev = getPrevNode() !== null
-  const hasNext = getNextNode() !== null
+  const hasPrev = useMemo(() => getPrevNode() !== null, [getPrevNode])
+  const hasNext = useMemo(() => getNextNode() !== null, [flow, currentNodeId, currentAnswer])
 
   // Check if all required videos are watched
-  const requiredVideos = allComponents.filter(
-    comp => comp.type === "video-step" && comp.config?.requiredToWatch
-  )
-  const allRequiredVideosWatched = requiredVideos.every(
-    comp => watchedVideos.has(comp.id)
-  )
+  const requiredVideos = useMemo(() => {
+    return Array.isArray(allComponents) ? allComponents.filter(
+      comp => comp && comp.type === "video-step" && comp.config?.requiredToWatch
+    ) : []
+  }, [allComponents])
+  
+  const allRequiredVideosWatched = useMemo(() => {
+    return requiredVideos.length === 0 || requiredVideos.every(
+      comp => comp && comp.id && watchedVideos.has(comp.id)
+    )
+  }, [requiredVideos, watchedVideos])
 
-  const isLastPage = !hasNext
-  const canProceed = (!needsAnswer || currentAnswer !== null) && allRequiredVideosWatched
+  const isLastPage = useMemo(() => !hasNext, [hasNext])
+  const canProceed = useMemo(() => {
+    return (!needsAnswer || currentAnswer !== null) && allRequiredVideosWatched
+  }, [needsAnswer, currentAnswer, allRequiredVideosWatched])
+  
+  if (!currentNode) {
+    return <FlowLoading message="Preparing flow..." />
+  }
 
   const handleVideoWatched = (componentId: string, watched: boolean) => {
     if (watched) {
@@ -686,37 +803,55 @@ export default function OnboardingFlowView() {
     }
   }
 
+  // Scroll to show first component fully with padding above
+  useEffect(() => {
+    if (!mounted || !contentRef.current || !firstComponentRef.current) return
+    if (typeof window === 'undefined') return
+    
+    const timeoutId = setTimeout(() => {
+      const container = contentRef.current
+      const firstComponent = firstComponentRef.current
+      if (!container || !firstComponent || typeof window === 'undefined') return
+      
+      try {
+        const componentTop = firstComponent.offsetTop
+        const scrollPosition = Math.max(0, componentTop - 40) // 40px padding above
+        
+        window.scrollTo({
+          top: scrollPosition,
+          behavior: 'smooth'
+        })
+      } catch (error) {
+        console.error('Error scrolling:', error)
+      }
+    }, 100)
+    
+    return () => clearTimeout(timeoutId)
+  }, [mounted, currentNodeId])
+
   // Show success message when flow is complete
   if (showSuccess) {
     return <FlowSuccess />
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center relative py-4 sm:py-8 px-4 overflow-hidden">
-      {/* Left Arrow - Blue */}
+    <div className="min-h-screen bg-background relative" ref={contentRef}>
+      {/* Left Arrow - Blue - Sticky in middle */}
       <button
         onClick={handlePrev}
         disabled={!hasPrev}
-        className={`fixed z-10 p-3 rounded-full shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-          isMobile 
-            ? 'left-4 bottom-4' 
-            : 'left-2 sm:left-4 top-1/2 -translate-y-1/2'
-        }`}
+        className="fixed left-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         style={{ backgroundColor: '#3B82F6' }}
       >
         <ChevronLeft className="w-5 h-5 text-white" />
       </button>
       
-      {/* Right Arrow - Green or Checkmark */}
+      {/* Right Arrow - Green or Checkmark - Sticky in middle */}
       {isLastPage ? (
         <button
           onClick={handleNext}
           disabled={!canProceed}
-          className={`fixed z-10 p-3 rounded-full shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-            isMobile 
-              ? 'right-4 bottom-4' 
-              : 'right-2 sm:right-4 top-1/2 -translate-y-1/2'
-          }`}
+          className="fixed right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ backgroundColor: '#10b981' }}
         >
           <Check className="w-5 h-5 text-white" />
@@ -725,53 +860,77 @@ export default function OnboardingFlowView() {
         <button
           onClick={handleNext}
           disabled={!hasNext || !canProceed}
-          className={`fixed z-10 p-3 rounded-full shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-            isMobile 
-              ? 'right-4 bottom-4' 
-              : 'right-2 sm:right-4 top-1/2 -translate-y-1/2'
-          }`}
+          className="fixed right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ backgroundColor: '#10b981' }}
         >
           <ChevronRight className="w-5 h-5 text-white" />
         </button>
       )}
       
-      <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 flex flex-col items-center justify-center min-h-full">
+      <div 
+        className="w-full flex flex-col items-center justify-center min-h-screen" 
+        style={{ 
+          paddingLeft: 'clamp(20px, 8vw, 100px)', 
+          paddingRight: 'clamp(20px, 8vw, 100px)', 
+          paddingTop: '40px', 
+          paddingBottom: '40px' 
+        }}
+      >
+        {/* Spacer to allow scrolling up 80px more */}
+        <div style={{ height: '80px', width: '100%' }} />
         <div className="w-full flex flex-col" style={{ maxWidth: '840px', gap: '10px' }}>
           {/* Display ALL components in order */}
-          {allComponents.map((component, index) => {
-            const isQuestion = ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(component.type)
-            
-            if (isQuestion && needsAnswer) {
-              return (
-                <div key={component.id} className="w-full">
-                  <div className="relative group rounded-xl p-4 sm:p-6 transition-all bg-card shadow-neumorphic-raised flex flex-col justify-center">
-                    <InteractiveQuestionComponent
-                      component={component}
-                      value={currentAnswer}
-                      onChange={handleAnswerChange}
+          {Array.isArray(allComponents) && allComponents.length > 0 ? allComponents.map((component, index) => {
+            try {
+              if (!component || !component.id || !component.type) {
+                console.warn('Invalid component at index', index, component)
+                return null
+              }
+              const isQuestion = ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(component.type)
+              const isFirstComponent = index === 0
+              
+              if (isQuestion && needsAnswer) {
+                return (
+                  <div key={component.id} ref={isFirstComponent ? firstComponentRef : null} className="w-full">
+                    <div className="relative group rounded-xl p-4 sm:p-6 transition-all bg-card shadow-neumorphic-raised flex flex-col justify-center">
+                      <InteractiveQuestionComponent
+                        component={component}
+                        value={currentAnswer}
+                        onChange={handleAnswerChange}
+                      />
+                    </div>
+                  </div>
+                )
+              } else {
+                return (
+                  <div key={component.id} ref={isFirstComponent ? firstComponentRef : null} className="w-full">
+                    <PagePreview
+                      components={[component]}
+                      viewMode={isMobile ? "mobile" : "desktop"}
+                      selectedComponent={null}
+                      onSelectComponent={() => {}}
+                      onDeleteComponent={() => {}}
+                      previewMode={true}
+                      isMobile={isMobile}
+                      onVideoWatched={handleVideoWatched}
+                      onVideoTimeUpdate={handleVideoTimeUpdate}
                     />
                   </div>
-                </div>
-              )
-            } else {
+                )
+              }
+            } catch (error) {
+              console.error('Error rendering component at index', index, error)
               return (
-                <div key={component.id} className="w-full">
-                  <PagePreview
-                    components={[component]}
-                    viewMode={isMobile ? "mobile" : "desktop"}
-                    selectedComponent={null}
-                    onSelectComponent={() => {}}
-                    onDeleteComponent={() => {}}
-                    previewMode={true}
-                    isMobile={isMobile}
-                    onVideoWatched={handleVideoWatched}
-                    onVideoTimeUpdate={handleVideoTimeUpdate}
-                  />
+                <div key={component?.id || `error-${index}`} className="w-full p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                  <p className="text-sm text-red-600 dark:text-red-400">Error rendering component</p>
                 </div>
               )
             }
-          })}
+          }) : (
+            <div className="w-full p-8 text-center">
+              <p className="text-muted-foreground">No components to display</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -787,7 +946,11 @@ function InteractiveQuestionComponent({
   value: any
   onChange: (value: any) => void
 }) {
-  const config = component.config
+  if (!component || !component.type) {
+    return null
+  }
+  
+  const config = component.config || {}
 
   switch (component.type) {
     case "multiple-choice":

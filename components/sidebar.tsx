@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Plus, Moon, Sun } from 'lucide-react'
+import { useState, useEffect, useRef } from "react"
+import { Plus, FileText } from 'lucide-react'
 import { cn } from "@/lib/utils"
-import { useTheme } from "./theme-provider"
 import type { Flow } from "./flow-builder"
 
 type SidebarProps = {
@@ -15,17 +14,88 @@ type SidebarProps = {
   onToggleCollapse: () => void
 }
 
+type FlowButtonProps = {
+  flow: Flow
+  isSelected: boolean
+  onSelect: () => void
+}
+
+function FlowButton({ flow, isSelected, onSelect }: FlowButtonProps) {
+  const [imageError, setImageError] = useState(false)
+  const [showTooltip, setShowTooltip] = useState(false)
+  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 })
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  const handleMouseEnter = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      setTooltipPosition({
+        top: rect.top + rect.height / 2 - 7, // Center vertically with logo, moved up 7px
+        left: rect.right + 8
+      })
+    }
+    setShowTooltip(true)
+  }
+
+  return (
+    <>
+      <div 
+        className="relative" 
+        style={{ overflow: 'visible' }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={() => setShowTooltip(false)}
+      >
+        <button
+          ref={buttonRef}
+          onClick={onSelect}
+          className={cn(
+            "w-full aspect-square rounded-xl p-0 shadow-[4px_4px_8px_rgba(0,0,0,0.1),-4px_-4px_8px_rgba(255,255,255,0.9)] dark:shadow-[4px_4px_8px_rgba(0,0,0,0.4),-4px_-4px_8px_rgba(255,255,255,0.02)] transition-all hover:shadow-[2px_2px_4px_rgba(0,0,0,0.05),-2px_-2px_4px_rgba(255,255,255,0.8)] dark:hover:shadow-[2px_2px_4px_rgba(0,0,0,0.3),-2px_-2px_4px_rgba(255,255,255,0.01)] cursor-pointer flex items-center justify-center relative overflow-hidden",
+            isSelected && "shadow-[inset_4px_4px_8px_rgba(0,0,0,0.1),inset_-4px_-4px_8px_rgba(255,255,255,0.9)] dark:shadow-[inset_4px_4px_8px_rgba(0,0,0,0.4),inset_-4px_-4px_8px_rgba(255,255,255,0.02)]"
+          )}
+        >
+          {flow.icon_url && !imageError ? (
+            <img
+              src={flow.icon_url}
+              alt={flow.title}
+              className="w-full h-full object-cover rounded-xl"
+              onError={() => setImageError(true)}
+              loading="lazy"
+            />
+          ) : (
+            <div className={cn(
+              "w-full h-full rounded-xl shadow-[2px_2px_4px_rgba(0,0,0,0.15)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.3)]",
+              "bg-neutral-300 dark:bg-neutral-700 flex items-center justify-center"
+            )}>
+              <FileText className="text-neutral-500 dark:text-neutral-400" style={{ width: '15px', height: '15px' }} />
+            </div>
+          )}
+        </button>
+      </div>
+      {/* Tooltip on hover - sleek small card */}
+      {showTooltip && (
+        <div 
+          className="fixed px-3 py-2 bg-card border border-border/30 rounded-lg shadow-lg pointer-events-none whitespace-nowrap backdrop-blur-sm"
+          style={{ 
+            zIndex: 99999,
+            top: `${tooltipPosition.top}px`,
+            left: `${tooltipPosition.left}px`,
+            transform: 'translateY(-50%)',
+            fontSize: '0.75rem',
+            fontWeight: 500,
+            color: 'var(--foreground)'
+          }}
+        >
+          {flow.title}
+        </div>
+      )}
+    </>
+  )
+}
+
 export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, isCollapsed, onToggleCollapse }: SidebarProps) {
   // Sidebar is always expanded now (no collapse functionality)
   const [expandedFolders, setExpandedFolders] = useState<string[]>(["indicators"])
   const [showNewIndicatorPopup, setShowNewIndicatorPopup] = useState(false)
-  const [mounted, setMounted] = useState(false)
-  const { theme, toggleTheme } = useTheme()
-
-  // Prevent hydration mismatch by only rendering theme-dependent content after mount
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   const toggleFolder = (folder: string) => {
     setExpandedFolders((prev) =>
@@ -59,7 +129,7 @@ export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, isCol
             ? "w-16 absolute inset-y-0 left-0 shadow-lg"
             : "w-16"
         )}
-        style={{ borderRightWidth: '1px' }}
+        style={{ borderRightWidth: '1px', overflow: 'visible' }}
       >
 
       {showNewIndicatorPopup && (
@@ -83,49 +153,17 @@ export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, isCol
         </button>
       </div>
 
-      <div className="flex-1 px-3 py-3 space-y-2">
+      <div className="flex-1 px-3 py-3 space-y-2" style={{ overflow: 'visible' }}>
         {flows.map((flow) => (
-          <button
+          <FlowButton
             key={flow.id}
-            onClick={() => onSelectFlow(flow)}
-            className={cn(
-              "w-full aspect-square rounded-xl p-0 shadow-[4px_4px_8px_rgba(0,0,0,0.1),-4px_-4px_8px_rgba(255,255,255,0.9)] dark:shadow-[4px_4px_8px_rgba(0,0,0,0.4),-4px_-4px_8px_rgba(255,255,255,0.02)] transition-all hover:shadow-[2px_2px_4px_rgba(0,0,0,0.05),-2px_-2px_4px_rgba(255,255,255,0.8)] dark:hover:shadow-[2px_2px_4px_rgba(0,0,0,0.3),-2px_-2px_4px_rgba(255,255,255,0.01)] cursor-pointer flex items-center justify-center group relative overflow-hidden",
-              selectedFlow?.id === flow.id && "shadow-[inset_4px_4px_8px_rgba(0,0,0,0.1),inset_-4px_-4px_8px_rgba(255,255,255,0.9)] dark:shadow-[inset_4px_4px_8px_rgba(0,0,0,0.4),inset_-4px_-4px_8px_rgba(255,255,255,0.02)]"
-            )}
-          >
-            {flow.icon_url ? (
-              <img
-                src={flow.icon_url}
-                alt={flow.title}
-                className="w-full h-full object-cover rounded-xl"
-              />
-            ) : (
-              <div className={cn(
-                "w-full h-full rounded-xl shadow-[2px_2px_4px_rgba(0,0,0,0.15)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.3)]",
-                "bg-neutral-300 dark:bg-neutral-700"
-              )} />
-            )}
-            {/* Tooltip on hover - opposite theme */}
-            <div className="absolute left-full ml-2 px-2 py-1 bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
-              {flow.title}
-            </div>
-          </button>
+            flow={flow}
+            isSelected={selectedFlow?.id === flow.id}
+            onSelect={() => onSelectFlow(flow)}
+          />
         ))}
       </div>
 
-      <div className="px-3 pb-3 mt-auto">
-        <button
-          onClick={toggleTheme}
-          className="w-full rounded-lg bg-neutral-50 dark:bg-neutral-900 p-2 min-h-[44px] shadow-[3px_3px_6px_rgba(0,0,0,0.08),-3px_-3px_6px_rgba(255,255,255,0.9)] dark:shadow-[3px_3px_6px_rgba(0,0,0,0.35),-3px_-3px_6px_rgba(255,255,255,0.02)] transition-all hover:shadow-[2px_2px_4px_rgba(0,0,0,0.05),-2px_-2px_4px_rgba(255,255,255,0.8)] dark:hover:shadow-[2px_2px_4px_rgba(0,0,0,0.25),-2px_-2px_4px_rgba(255,255,255,0.01)] flex items-center justify-center"
-          title={mounted && theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
-        >
-          {mounted && theme === "dark" ? (
-            <Sun className="h-5 w-5 text-neutral-600 dark:text-neutral-400" />
-          ) : (
-            <Moon className="h-5 w-5 text-neutral-600 dark:text-neutral-400" />
-          )}
-        </button>
-      </div>
       </div>
     </>
   )

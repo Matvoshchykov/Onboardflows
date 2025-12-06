@@ -1,6 +1,7 @@
 "use client"
 
 import { memo, useState, useRef, useEffect } from "react"
+import { createPortal } from "react-dom"
 import { FileText, Eye, Crown, Plus, Trash2, ChevronDown } from 'lucide-react'
 import type { FlowNode } from "./flow-builder"
 import type { PageComponent, ComponentType } from "./page-editor"
@@ -102,8 +103,31 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
   const blockColor = getFlowBlockColor(index)
   const hasConnection = node.connections.length > 0
   const cardRef = useRef<HTMLDivElement>(null)
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null)
+  const addButtonRef1 = useRef<HTMLButtonElement>(null)
+  const addButtonRef2 = useRef<HTMLButtonElement>(null)
+  const addButtonRef3 = useRef<HTMLButtonElement>(null)
   
   const components = normalizePageComponents(node.pageComponents)
+  
+  // Calculate dropdown position when library is shown
+  useEffect(() => {
+    if (showComponentLibrary) {
+      // Find which button is visible and get its position
+      const button = addButtonRef1.current || addButtonRef2.current || addButtonRef3.current
+      if (button && cardRef.current) {
+        const buttonRect = button.getBoundingClientRect()
+        const cardRect = cardRef.current.getBoundingClientRect()
+        setDropdownPosition({
+          top: buttonRect.bottom + 8,
+          left: buttonRect.left + buttonRect.width / 2,
+          width: cardRect.width
+        })
+      }
+    } else {
+      setDropdownPosition(null)
+    }
+  }, [showComponentLibrary])
 
   // Measure height on mount and when content changes
   useEffect(() => {
@@ -196,7 +220,11 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
                   <input
                     type="text"
                     value={titleValue}
-                    onChange={(e) => setTitleValue(e.target.value)}
+                    onChange={(e) => {
+                      if (e.target.value.length <= 30) {
+                        setTitleValue(e.target.value)
+                      }
+                    }}
                     onBlur={handleTitleSubmit}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
@@ -210,6 +238,7 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
                     onClick={(e) => e.stopPropagation()}
                     className="font-semibold text-sm bg-transparent border-none focus:outline-none absolute left-0 top-0 w-full caret-current"
                     style={{ color: blockColor }}
+                    maxLength={30}
                     autoFocus
                   />
                 )}
@@ -273,6 +302,7 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
             style={{ transform: 'translate(-50%, calc(50% - 5px))' }}
           >
             <button
+              ref={addButtonRef1}
               onClick={(e) => {
                 e.stopPropagation()
                 onToggleComponentLibrary()
@@ -290,18 +320,6 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
             >
               <Plus className="w-4 h-4" />
             </button>
-            
-            {/* Component Library Dropdown */}
-            {showComponentLibrary && (
-              <div 
-                data-component-library-dropdown
-                className="absolute top-full left-1/2 -translate-x-1/2 w-[300px] bg-card rounded-lg p-3 shadow-lg border border-border z-50 mt-2"
-              >
-                <ComponentLibrary 
-                  onAddComponent={onAddComponent}
-                />
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -358,6 +376,7 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
                         style={{ transform: 'translate(-50%, calc(50% + 10px))' }}
                       >
                         <button
+                          ref={addButtonRef2}
                           onClick={(e) => {
                             e.stopPropagation()
                             onToggleComponentLibrary()
@@ -391,18 +410,6 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
                             className={`w-3 h-3 transition-transform ${collapsed ? 'rotate-180' : ''}`} 
                           />
                         </button>
-                        
-                        {/* Component Library Dropdown */}
-                        {showComponentLibrary && (
-                          <div 
-                            data-component-library-dropdown
-                            className="absolute top-full left-1/2 -translate-x-1/2 w-[300px] bg-card rounded-lg p-3 shadow-lg border border-border z-50 mt-2"
-                          >
-                            <ComponentLibrary 
-                              onAddComponent={onAddComponent}
-                            />
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
@@ -419,6 +426,7 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
             style={{ transform: 'translate(-50%, calc(-50% + 10px))' }}
           >
             <button
+              ref={addButtonRef3}
               onClick={(e) => {
                 e.stopPropagation()
                 onToggleComponentLibrary()
@@ -452,21 +460,34 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
                 className={`w-3 h-3 transition-transform ${collapsed ? 'rotate-180' : ''}`} 
               />
             </button>
-            
-            {/* Component Library Dropdown */}
-            {showComponentLibrary && (
-              <div 
-                data-component-library-dropdown
-                className="absolute top-full left-1/2 -translate-x-1/2 w-[300px] bg-card rounded-lg p-3 shadow-lg border border-border z-50 mt-2"
-              >
-                <ComponentLibrary 
-                  onAddComponent={onAddComponent}
-                />
-              </div>
-            )}
           </div>
         )}
       </div>
+      
+      {/* Component Library Dropdown - Rendered via Portal to appear above everything - Always matches flow block width */}
+      {showComponentLibrary && dropdownPosition && typeof window !== 'undefined' && createPortal(
+        <div 
+          data-component-library-dropdown
+          className="fixed bg-card rounded-lg p-3 shadow-lg border border-border"
+          style={{ 
+            zIndex: 2147483647, // Maximum z-index value
+            top: `${dropdownPosition.top}px`,
+            left: `${dropdownPosition.left}px`,
+            width: `${dropdownPosition.width}px`, // Always matches flow block width
+            transform: 'translateX(-50%)', // Center horizontally
+            position: 'fixed',
+            pointerEvents: 'auto',
+            zoom: '1', // Force standard zoom level
+            WebkitTransform: 'translateX(-50%) scale(1)', // Force standard scale for webkit
+            transformOrigin: 'top center'
+          }}
+        >
+          <ComponentLibrary 
+            onAddComponent={onAddComponent}
+          />
+        </div>,
+        document.body
+      )}
     </div>
   )
 }, (prevProps, nextProps) => {

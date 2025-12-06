@@ -83,7 +83,7 @@ export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsP
             'user_008': 'Frank Miller'
           }
           
-          for (let i = 0; i < 28; i++) {
+          for (let i = 0; i < 10; i++) {
             const userId = mockUserIds[i % mockUserIds.length]
             const sessionId = `session_${String(i + 1).padStart(3, '0')}`
             const startTime = new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000)
@@ -337,27 +337,35 @@ export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsP
 
   return (
     <div className="h-full w-full bg-background overflow-y-auto p-4 relative">
-      {/* Export Button - Top Right, aligned with toggle buttons in header */}
-      {membershipActive && (
-        <button
-          onClick={exportToCSV}
-          disabled={!analytics || analytics.sessions.length === 0}
-          className="fixed right-4 z-50 font-medium transition-all duration-300 flex items-center justify-center shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{
-            top: 'calc(3.5rem + 8px - 50px)',
-            backgroundColor: 'rgba(16, 185, 129, 0.1)',
-            color: '#10b981',
-            minWidth: isMobile ? '100px' : '140px',
-            minHeight: isMobile ? '44px' : '32px',
-            padding: isMobile ? '0 16px' : '0 12px',
-            fontSize: isMobile ? '0.75rem' : '0.827rem',
-            borderRadius: '10px'
-          }}
-        >
-          <Download className={isMobile ? 'w-4 h-4 mr-2' : 'w-4 h-4 mr-1.5'} />
-          Export CSV
-        </button>
-      )}
+      {/* Export Button - Top Right, same style as Save Changes */}
+      <button
+        onClick={membershipActive ? exportToCSV : () => setShowUpgradeModal(true)}
+        disabled={membershipActive && (!analytics || analytics.sessions.length === 0)}
+        className="fixed right-4 z-50 font-medium transition-all duration-300 flex items-center justify-center shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{
+          top: 'calc(3.5rem + 8px - 50px)',
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          color: '#3b82f6',
+          minWidth: isMobile ? '80px' : '190px',
+          minHeight: isMobile ? '44px' : '32px',
+          padding: isMobile ? '0 16px' : '0 12px',
+          fontSize: isMobile ? '0.75rem' : '0.827rem',
+          borderRadius: '10px'
+        }}
+        title={!membershipActive ? "Premium only - Upgrade to export" : "Export CSV"}
+      >
+        {!membershipActive ? (
+          <>
+            <Lock className={isMobile ? 'w-4 h-4 mr-2' : 'w-4 h-4 mr-1.5'} />
+            <span>Premium only</span>
+          </>
+        ) : (
+          <>
+            <Download className={isMobile ? 'w-4 h-4 mr-2' : 'w-4 h-4 mr-1.5'} />
+            <span>Export CSV</span>
+          </>
+        )}
+      </button>
 
       {/* Blurred mock data for free users - show fake data but blurred */}
       <div className={!membershipActive ? 'blur-sm' : ''}>
@@ -407,9 +415,9 @@ export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsP
           </div>
         </div>
 
-        {/* Charts Row */}
+        {/* Charts Row - Pie Chart and Visited Nodes Side by Side */}
         {analytics.sessions.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* Completion Pie Chart */}
             <div className="bg-card rounded-lg p-4 shadow-neumorphic-raised relative">
               <div className="flex items-center gap-2 mb-4">
@@ -432,6 +440,9 @@ export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsP
                         dataKey="value"
                         startAngle={90}
                         endAngle={-270}
+                        animationBegin={0}
+                        animationDuration={800}
+                        animationEasing="ease-out"
                       >
                         {completionChartData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -503,10 +514,11 @@ export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsP
                             </div>
                             <div className="w-full bg-muted/30 rounded-full h-1.5 overflow-hidden">
                               <div 
-                                className="h-full rounded-full transition-all"
+                                className="h-full rounded-full transition-all duration-1000 ease-out"
                                 style={{ 
                                   width: `${percentage}%`,
-                                  backgroundColor: nodeColor
+                                  backgroundColor: nodeColor,
+                                  transition: 'width 1s ease-out'
                                 }}
                               />
                             </div>

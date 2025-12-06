@@ -116,35 +116,50 @@ export function PagePreview({
                 
                 {/* Only show edit/delete buttons if not in preview mode */}
                 {!previewMode && !onUpdateComponent && (
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 z-50 pointer-events-auto">
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
+                        e.preventDefault()
                         onSelectComponent(component)
                       }}
-                      className="p-2 rounded-lg bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all"
+                      onMouseDown={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                      }}
+                      className="p-2 rounded-lg bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all pointer-events-auto"
                     >
                       <Edit3 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
+                        e.preventDefault()
                         onDeleteComponent(component.id)
                       }}
-                      className="p-2 rounded-lg bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-destructive"
+                      onMouseDown={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                      }}
+                      className="p-2 rounded-lg bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-destructive pointer-events-auto"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 )}
                 {!previewMode && onUpdateComponent && (
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-auto">
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
+                        e.preventDefault()
                         onDeleteComponent(component.id)
                       }}
-                      className="p-2 rounded-lg bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-destructive"
+                      onMouseDown={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                      }}
+                      className="p-2 rounded-lg bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-destructive pointer-events-auto"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -165,13 +180,15 @@ function EditableText({
   onChange, 
   className = "",
   placeholder = "",
-  multiline = false 
+  multiline = false,
+  maxLength
 }: { 
   value: string
   onChange: (value: string) => void
   className?: string
   placeholder?: string
   multiline?: boolean
+  maxLength?: number
 }) {
   const { theme } = useTheme()
   const [isEditing, setIsEditing] = useState(false)
@@ -207,12 +224,17 @@ function EditableText({
       return (
         <textarea
           value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
+          onChange={(e) => {
+            if (!maxLength || e.target.value.length <= maxLength) {
+              setEditValue(e.target.value)
+            }
+          }}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
           className={`${className} focus:outline-none bg-transparent resize-none border-none p-0 m-0`}
           autoFocus
           placeholder={placeholder}
+          maxLength={maxLength}
           style={{ 
             caretColor: caretColor,
             width: '100%',
@@ -225,12 +247,17 @@ function EditableText({
       <input
         type="text"
         value={editValue}
-        onChange={(e) => setEditValue(e.target.value)}
+        onChange={(e) => {
+          if (!maxLength || e.target.value.length <= maxLength) {
+            setEditValue(e.target.value)
+          }
+        }}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
         className={`${className} focus:outline-none bg-transparent border-none p-0 m-0`}
         autoFocus
         placeholder={placeholder}
+        maxLength={maxLength}
         style={{ 
           caretColor: caretColor,
           width: '100%'
@@ -244,10 +271,10 @@ function EditableText({
       onClick={(e) => {
         e.stopPropagation()
         setIsEditing(true)
-        setEditValue(value)
+        setEditValue(value || '')
       }}
       className={`cursor-text hover:underline hover:decoration-orange-500 transition-colors inline-block ${className}`}
-      style={{ minWidth: multiline ? 'auto' : '1ch' }}
+      style={{ minWidth: multiline ? 'auto' : '1ch', position: 'relative' }}
     >
       {value || placeholder}
     </span>
@@ -274,7 +301,28 @@ export function ComponentRenderer({
 
   const updateConfig = (updates: Record<string, any>) => {
     if (onUpdateComponent) {
-      onUpdateComponent({ ...config, ...updates })
+      // Remove empty text fields (title, label, text, description) from config
+      const cleanedUpdates: Record<string, any> = { ...updates }
+      const textFields = ['title', 'label', 'text', 'description']
+      textFields.forEach(field => {
+        if (cleanedUpdates[field] !== undefined) {
+          const value = cleanedUpdates[field]
+          if (!value || (typeof value === 'string' && value.trim().length === 0)) {
+            // Set to null to delete the field
+            cleanedUpdates[field] = null
+          }
+        }
+      })
+      
+      // Merge with existing config, removing null fields
+      const newConfig = { ...config, ...cleanedUpdates }
+      Object.keys(newConfig).forEach(key => {
+        if (newConfig[key] === null) {
+          delete newConfig[key]
+        }
+      })
+      
+      onUpdateComponent(newConfig)
     }
   }
 
@@ -552,16 +600,15 @@ export function ComponentRenderer({
       return (
         <div>
           {onUpdateComponent ? (
-            config.label && config.label.trim().length > 0 ? (
-              <EditableText
-                value={config.label}
-                onChange={(value) => updateConfig({ label: value })}
-                className="text-xs font-medium mb-1.5 block"
-                placeholder="Upload your documents"
-              />
-            ) : null
+            <EditableText
+              value={config.label || ""}
+              onChange={(value) => updateConfig({ label: value })}
+              className="text-xs font-medium mb-1.5 block"
+              placeholder="Upload your documents"
+            />
           ) : (
-            config.label && config.label.trim().length > 0 && (
+            // Only render label if it exists and is not empty
+            config.label && typeof config.label === 'string' && config.label.trim().length > 0 && (
               <label className="block text-xs font-medium mb-1.5">
                 {config.label}
               </label>
@@ -967,16 +1014,15 @@ export function ComponentRenderer({
       return (
         <div>
           {onUpdateComponent ? (
-            config.title && config.title.trim().length > 0 ? (
-              <EditableText
-                value={config.title}
-                onChange={(value) => updateConfig({ title: value })}
-                className="text-xs font-medium mb-3"
-                placeholder="Watch this instructional video"
-              />
-            ) : null
+            <EditableText
+              value={config.title || ""}
+              onChange={(value) => updateConfig({ title: value })}
+              className="text-xs font-medium mb-3"
+              placeholder="Watch this instructional video"
+            />
           ) : (
-            config.title && config.title.trim().length > 0 && (
+            // Only render title if it exists and is not empty
+            config.title && typeof config.title === 'string' && config.title.trim().length > 0 && (
               <h3 className="text-xs font-medium mb-3">
                 {config.title}
               </h3>
@@ -1233,16 +1279,15 @@ export function ComponentRenderer({
             )}
           </div>
           {onUpdateComponent ? (
-            config.description && config.description.trim().length > 0 ? (
-              <EditableText
-                value={config.description}
-                onChange={(value) => updateConfig({ description: value })}
-                className="text-[10px] text-muted-foreground mt-2"
-                placeholder="This video is required to continue"
-              />
-            ) : null
+            <EditableText
+              value={config.description || ""}
+              onChange={(value) => updateConfig({ description: value })}
+              className="text-[10px] text-muted-foreground mt-2"
+              placeholder="This video is required to continue"
+            />
           ) : (
-            config.description && config.description.trim().length > 0 && (
+            // Only render description if it exists and is not empty
+            config.description && typeof config.description === 'string' && config.description.trim().length > 0 && (
               <p className="text-[10px] text-muted-foreground mt-2">
                 {config.description}
               </p>
@@ -1261,38 +1306,25 @@ export function ComponentRenderer({
         right: "text-right"
       }
       
-      const hasTitle = config.title && config.title.trim().length > 0
+      // Don't render at all in preview/real flow if text is empty
+      if (!onUpdateComponent && (!config.text || config.text.trim().length === 0)) {
+        return null
+      }
       
       return (
         <div className="relative group w-full">
           {onUpdateComponent ? (
-            config.title && config.title.trim().length > 0 ? (
-              <EditableText
-                value={config.title}
-                onChange={(value) => updateConfig({ title: value })}
-                className={`text-xs font-medium ${isPreviewMode ? 'mb-1' : 'mb-2'} ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}
-                placeholder="Welcome to our onboarding"
-              />
-            ) : null
+            <EditableText
+              value={config.text || ""}
+              onChange={(value) => updateConfig({ text: value })}
+              className={`text-xs text-muted-foreground leading-relaxed block ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}
+              placeholder="This is a text instruction block. Use it for guidance, onboarding steps, expectations, disclaimers, etc."
+              multiline
+              maxLength={100}
+            />
           ) : (
-            config.title && config.title.trim().length > 0 && (
-              <h3 className={`text-xs font-medium ${isPreviewMode ? 'mb-1' : 'mb-2'} ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}>
-                {config.title}
-              </h3>
-            )
-          )}
-          {onUpdateComponent ? (
-            config.text && config.text.trim().length > 0 ? (
-              <EditableText
-                value={config.text}
-                onChange={(value) => updateConfig({ text: value })}
-                className={`text-xs text-muted-foreground leading-relaxed block ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}
-                placeholder="This is a text instruction block. Use it for guidance, onboarding steps, expectations, disclaimers, etc."
-                multiline
-              />
-            ) : null
-          ) : (
-            config.text && config.text.trim().length > 0 && (
+            // Only render text if it exists and is not empty
+            config.text && typeof config.text === 'string' && config.text.trim().length > 0 && (
               <p className={`text-xs text-muted-foreground leading-relaxed ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}>
                 {config.text}
               </p>
@@ -1357,16 +1389,15 @@ export function ComponentRenderer({
       return (
         <div>
           {onUpdateComponent ? (
-            config.title && config.title.trim().length > 0 ? (
-              <EditableText
-                value={config.title}
-                onChange={(value) => updateConfig({ title: value })}
-                className={`text-xs font-medium ${isPreviewMode ? 'mb-2' : 'mb-3'}`}
-                placeholder="Select your answer"
-              />
-            ) : null
+            <EditableText
+              value={config.title || ""}
+              onChange={(value) => updateConfig({ title: value })}
+              className={`text-xs font-medium ${isPreviewMode ? 'mb-2' : 'mb-3'}`}
+              placeholder="Select your answer"
+            />
           ) : (
-            config.title && config.title.trim().length > 0 && (
+            // Only render title if it exists and is not empty
+            config.title && typeof config.title === 'string' && config.title.trim().length > 0 && (
               <h3 className={`text-xs font-medium ${isPreviewMode ? 'mb-2' : 'mb-3'}`}>
                 {config.title}
               </h3>
@@ -1441,7 +1472,8 @@ export function ComponentRenderer({
               placeholder="Select all that apply"
             />
           ) : (
-            config.title && config.title.trim().length > 0 && (
+            // Only render title if it exists and is not empty
+            config.title && typeof config.title === 'string' && config.title.trim().length > 0 && (
               <h3 className="text-xs font-medium mb-3">
                 {config.title}
               </h3>
@@ -1505,16 +1537,15 @@ export function ComponentRenderer({
       return (
         <div>
           {onUpdateComponent ? (
-            config.label && config.label.trim().length > 0 ? (
-              <EditableText
-                value={config.label}
-                onChange={(value) => updateConfig({ label: value })}
-                className={`text-xs font-medium ${isPreviewMode ? 'mb-1.5' : 'mb-2'} block`}
-                placeholder="What is your name?"
-              />
-            ) : null
+            <EditableText
+              value={config.label || ""}
+              onChange={(value) => updateConfig({ label: value })}
+              className={`text-xs font-medium ${isPreviewMode ? 'mb-1.5' : 'mb-2'} block`}
+              placeholder="What is your name?"
+            />
           ) : (
-            config.label && config.label.trim().length > 0 && (
+            // Only render label if it exists and is not empty
+            config.label && typeof config.label === 'string' && config.label.trim().length > 0 && (
               <label className={`block text-xs font-medium ${isPreviewMode ? 'mb-1.5' : 'mb-2'}`}>
                 {config.label}
               </label>
@@ -1538,6 +1569,11 @@ export function ComponentRenderer({
         right: "text-right"
       }
       
+      // Don't render at all in preview/real flow if title is empty or doesn't exist
+      if (!onUpdateComponent && (!config.title || config.title.trim().length === 0)) {
+        return null
+      }
+      
       return (
         <div className="relative group w-full">
           {onUpdateComponent ? (
@@ -1546,10 +1582,12 @@ export function ComponentRenderer({
               onChange={(value) => updateConfig({ title: value })}
               className={`text-lg font-bold ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}
               placeholder="Header Title"
+              maxLength={20}
             />
           ) : (
-            config.title && config.title.trim().length > 0 && (
-              <h2 className={`text-lg font-bold ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`}>
+            // Only render title if it exists and is not empty - bold, bigger font, and gray in preview/real flow
+            config.title && typeof config.title === 'string' && config.title.trim().length > 0 && (
+              <h2 className={`text-2xl font-bold text-muted-foreground ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`} style={{ fontWeight: '700' }}>
                 {config.title}
               </h2>
             )
@@ -1610,15 +1648,22 @@ export function ComponentRenderer({
       const isValidUrl = linkUrl && linkUrl !== "#" && (linkUrl.startsWith('http://') || linkUrl.startsWith('https://'))
       
       return (
-        <div className="flex flex-col items-center w-full">
+        <div className="flex flex-col items-center w-full" onClick={(e) => e.stopPropagation()}>
           {onUpdateComponent && (
             <>
-              <div className="w-full mb-3">
-                <textarea
+              <div className="w-full mb-3 relative">
+                <input
+                  type="text"
                   value={config.description || ""}
-                  onChange={(e) => updateConfig({ description: e.target.value })}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    updateConfig({ description: value })
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onFocus={(e) => e.stopPropagation()}
                   placeholder="Add information about this button..."
-                  className="w-full bg-card border-none rounded-xl px-3 py-2 text-xs shadow-neumorphic-inset focus:outline-none min-h-[60px] resize-none"
+                  className="w-full bg-card border-none rounded-xl px-3 py-2 text-xs shadow-neumorphic-inset focus:outline-none pointer-events-auto"
                 />
               </div>
             <div className="w-full mb-2">
@@ -1626,14 +1671,17 @@ export function ComponentRenderer({
                 type="url"
                 value={config.url || ""}
                 onChange={(e) => updateConfig({ url: e.target.value })}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onFocus={(e) => e.stopPropagation()}
                 placeholder="https://example.com"
-                className="w-full bg-card border-none rounded-xl px-3 py-2 text-xs shadow-neumorphic-inset focus:outline-none"
+                className="w-full bg-card border-none rounded-xl px-3 py-2 text-xs shadow-neumorphic-inset focus:outline-none pointer-events-auto"
               />
             </div>
             </>
           )}
           {/* Show description above button with spacing */}
-          {!onUpdateComponent && config.description && config.description.trim().length > 0 && (
+          {!onUpdateComponent && config.description && typeof config.description === 'string' && config.description.trim().length > 0 && (
             <p className="text-xs text-muted-foreground mb-3 text-center max-w-md">
               {config.description}
             </p>
@@ -1660,18 +1708,14 @@ export function ComponentRenderer({
               }}
           >
             {onUpdateComponent ? (
-              config.label && config.label.trim().length > 0 ? (
-                <EditableText
-                  value={config.label}
-                  onChange={(value) => updateConfig({ label: value })}
-                  className="text-xs font-medium"
-                  placeholder="Click here"
-                />
-              ) : (
-                <span className="text-xs font-medium text-muted-foreground">Click here</span>
-              )
+              <EditableText
+                value={config.label || ""}
+                onChange={(value) => updateConfig({ label: value })}
+                className="text-xs font-medium"
+                placeholder="Click here"
+              />
             ) : (
-              (config.label && config.label.trim().length > 0) ? config.label : "Click here"
+              (config.label && typeof config.label === 'string' && config.label.trim().length > 0) ? config.label : "Click here"
             )}
           </a>
           ) : (
@@ -1774,16 +1818,15 @@ export function ComponentRenderer({
       return (
         <div>
           {onUpdateComponent ? (
-            config.title && config.title.trim().length > 0 ? (
-              <EditableText
-                value={config.title}
-                onChange={(value) => updateConfig({ title: value })}
-                className="text-xs font-medium mb-3"
-                placeholder="Image Title"
-              />
-            ) : null
+            <EditableText
+              value={config.title || ""}
+              onChange={(value) => updateConfig({ title: value })}
+              className="text-xs font-medium mb-3"
+              placeholder="Image Title"
+            />
           ) : (
-            config.title && config.title.trim().length > 0 && (
+            // Only render title if it exists and is not empty
+            config.title && typeof config.title === 'string' && config.title.trim().length > 0 && (
               <h3 className="text-xs font-medium mb-3">
                 {config.title}
               </h3>
@@ -1867,18 +1910,17 @@ export function ComponentRenderer({
       }, [minValue, maxValue])
       
       return (
-        <div>
+        <div onClick={(e) => e.stopPropagation()}>
           {onUpdateComponent ? (
-            config.label && config.label.trim().length > 0 ? (
-              <EditableText
-                value={config.label}
-                onChange={(value) => updateConfig({ label: value })}
-                className="text-xs font-medium mb-3 block"
-                placeholder="Rate your experience level"
-              />
-            ) : null
+            <EditableText
+              value={config.label || ""}
+              onChange={(value) => updateConfig({ label: value })}
+              className="text-xs font-medium mb-3 block"
+              placeholder="Rate your experience level"
+            />
           ) : (
-            config.label && config.label.trim().length > 0 && (
+            // Only render label if it exists and is not empty
+            config.label && typeof config.label === 'string' && config.label.trim().length > 0 && (
               <label className="block text-xs font-medium mb-3">
                 {config.label}
               </label>
@@ -1899,7 +1941,10 @@ export function ComponentRenderer({
                       setSliderValue(newMin)
                     }
                   }}
-                  className="w-full bg-card border-none rounded-lg px-2 py-1 text-xs shadow-neumorphic-inset focus:outline-none"
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onFocus={(e) => e.stopPropagation()}
+                  className="w-full bg-card border-none rounded-lg px-2 py-1 text-xs shadow-neumorphic-inset focus:outline-none pointer-events-auto"
                 />
               </div>
               <div className="flex-1">
@@ -1915,7 +1960,10 @@ export function ComponentRenderer({
                       setSliderValue(newMax)
                     }
                   }}
-                  className="w-full bg-card border-none rounded-lg px-2 py-1 text-xs shadow-neumorphic-inset focus:outline-none"
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onFocus={(e) => e.stopPropagation()}
+                  className="w-full bg-card border-none rounded-lg px-2 py-1 text-xs shadow-neumorphic-inset focus:outline-none pointer-events-auto"
                 />
               </div>
             </div>

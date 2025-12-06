@@ -200,7 +200,8 @@ export async function loadFlow(flowId: string, experienceId: string): Promise<Fl
       status: flowRecord.active ? 'Live' : 'Draft',
       nodes: flowRecord.flow_data.nodes || [],
       logicBlocks: flowRecord.flow_data.logicBlocks || [],
-      collapsedComponents: flowRecord.flow_data.collapsedComponents || {}
+      collapsedComponents: flowRecord.flow_data.collapsedComponents || {},
+      icon_url: flowRecord.icon_url
     } as Flow & { collapsedComponents?: Record<string, boolean> }
   } catch (error) {
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
@@ -581,7 +582,7 @@ export async function getActiveFlow(experienceId: string): Promise<Flow | null> 
   try {
     const { data, error } = await supabase
       .from('flows')
-      .select('id, title, active, flow_data, experience_id, created_at, updated_at')
+      .select('id, title, active, flow_data, experience_id, icon_url, created_at, updated_at')
       .eq('active', true)
       .eq('experience_id', experienceId)
       .not('experience_id', 'is', null)
@@ -606,7 +607,8 @@ export async function getActiveFlow(experienceId: string): Promise<Flow | null> 
       dateCreated: new Date(flowRecord.created_at).toISOString().split('T')[0],
       status: 'Live',
       nodes: flowRecord.flow_data.nodes || [],
-      logicBlocks: flowRecord.flow_data.logicBlocks || []
+      logicBlocks: flowRecord.flow_data.logicBlocks || [],
+      icon_url: flowRecord.icon_url
     }
   } catch (error) {
     console.error('Error getting active flow:', error)

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect, memo } from "react"
 import { clearFlowCache } from "@/lib/db/flows"
-import { Plus, Upload, X, Play, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ArrowUpDown, Eye, Check, Minus, AlertTriangle } from 'lucide-react'
+import { Plus, Upload, X, Play, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ArrowUpDown, Eye, Check, Minus, AlertTriangle, Mail } from 'lucide-react'
 import { toast } from "sonner"
 import { toggleFlowActive } from "@/lib/db/flows"
 import { useTheme } from "./theme-provider"
@@ -86,6 +86,10 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
   const [membershipActive, setMembershipActive] = useState(false)
   const [maxFlows, setMaxFlows] = useState(1)
   const [maxBlocksPerFlow, setMaxBlocksPerFlow] = useState(5)
+  const [showSuggestionModal, setShowSuggestionModal] = useState(false)
+  const [suggestionText, setSuggestionText] = useState("")
+  const saveButtonRef = useRef<HTMLButtonElement>(null)
+  const addBlockButtonRef = useRef<HTMLButtonElement>(null)
   
   // Load membership status - use prop if provided, otherwise fetch
   useEffect(() => {
@@ -777,6 +781,11 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
   }
 
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    // Disable panning when component library dropdown is open
+    if (showComponentLibraryForNode !== null) {
+      return
+    }
+    
     // Only handle left mouse button
     if (e.button !== 0) return
     
@@ -1711,6 +1720,11 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
   }
 
   const handleWheel = (e: React.WheelEvent) => {
+    // Disable zoom when component library dropdown is open
+    if (showComponentLibraryForNode !== null) {
+      return
+    }
+    
     e.preventDefault()
     
     if (!canvasRef.current) return
@@ -2154,7 +2168,6 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
         <header className="bg-card px-2 sm:px-4 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2 shadow-neumorphic-subtle relative border-b border-gray-400 dark:border-gray-500" style={{ borderBottomWidth: '1px' }}>
         <div className="flex items-center gap-3 flex-1">
           <div className="relative flex items-center gap-2">
-            {/* Enable/Disable button - above title input on the right */}
             <input
               type="text"
               value={flowTitle}
@@ -2220,6 +2233,14 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
               </button>
             )}
           </div>
+          {/* Suggestion button - outside title area */}
+          <button
+            onClick={() => setShowSuggestionModal(true)}
+            className="p-1.5 rounded-lg bg-card shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all text-muted-foreground hover:text-foreground"
+            title="Send suggestion"
+          >
+            <Mail className="w-4 h-4" />
+          </button>
         </div>
         
         {/* Mode Toggle Buttons - Centered */}
@@ -2254,6 +2275,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
           {/* Save Changes Button */}
           {onSaveToDatabase && flow && (
             <button
+              ref={saveButtonRef}
               onClick={async () => {
                 if (flow && hasUnsavedChanges && !isSaving) {
                   setIsSaving(true)
@@ -2279,9 +2301,10 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
                   : 'cursor-not-allowed opacity-50'
               }`}
               style={{
-                backgroundColor: hasUnsavedChanges ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                color: hasUnsavedChanges ? '#f59e0b' : '#10b981',
-                minWidth: isMobile ? '100px' : '210px',
+                backgroundColor: hasUnsavedChanges ? 'rgba(245, 158, 11, 0.1)' : 'rgba(59, 130, 246, 0.1)',
+                color: hasUnsavedChanges ? '#f59e0b' : '#3b82f6',
+                border: hasUnsavedChanges ? 'none' : '1px solid rgba(59, 130, 246, 0.3)',
+                minWidth: isMobile ? '80px' : '190px',
                 minHeight: isMobile ? '44px' : '32px',
                 padding: isMobile ? '0 16px' : '0 12px',
                 fontSize: isMobile ? '0.75rem' : '0.827rem',
@@ -2337,17 +2360,65 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
             onTouchEnd={handleTouchEnd}
           >
           <div className="absolute bottom-4 left-4 z-50 flex items-center gap-3">
-            <TierInfo 
-              flows={flows} 
-              selectedFlow={flow}
-              membershipActive={membershipActive}
-              maxFlows={maxFlows}
-              maxBlocksPerFlow={maxBlocksPerFlow}
-            />
+          <TierInfo 
+            flows={flows} 
+            selectedFlow={flow}
+            membershipActive={membershipActive}
+            maxFlows={maxFlows}
+            maxBlocksPerFlow={maxBlocksPerFlow}
+          />
             <LogicBlockLibrary 
-              onDragStart={handleLogicDragStart}
-              isExpanded={isLogicLibraryExpanded}
-              onToggle={() => setIsLogicLibraryExpanded(!isLogicLibraryExpanded)}
+              onAddLogicBlock={(type) => {
+                if (!flow) return
+                
+                // Find the latest created block (flow or logic)
+                let latestBlock: { position: { x: number; y: number } } | null = null
+                
+                if (lastCreatedBlockId) {
+                  const latestFlow = flow.nodes.find(n => n.id === lastCreatedBlockId)
+                  const latestLogic = logicBlocks.find(b => b.id === lastCreatedBlockId)
+                  latestBlock = latestFlow || latestLogic || null
+                }
+                
+                // If no latest block, use the rightmost block
+                if (!latestBlock && flow.nodes.length > 0) {
+                  latestBlock = flow.nodes.reduce((rightMost, current) =>
+                    current.position.x > rightMost.position.x ? current : rightMost
+                  , flow.nodes[0])
+                }
+                
+                // Default position if no blocks exist
+                const newPosition = latestBlock
+                  ? { x: latestBlock.position.x + 350, y: latestBlock.position.y }
+                  : { x: 100, y: 100 }
+                
+                // Check block limit
+                const totalBlocks = flow.nodes.length + (flow.logicBlocks?.length || 0)
+                if (totalBlocks >= maxBlocksPerFlow) {
+                  if (membershipActive) {
+                    toast.error("Plan limit reached")
+                  } else {
+                    toast.error(`You've reached the limit of ${maxBlocksPerFlow} blocks per flow. Upgrade to Premium for 30 blocks per flow.`)
+                    setTimeout(() => {
+                      setLimitPopupType("blocks")
+                      setLimitPopupCount({ current: totalBlocks, max: maxBlocksPerFlow })
+                      setShowLimitPopup(true)
+                    }, 1000)
+                  }
+                  return
+                }
+                
+                const newLogicBlock: LogicBlock = {
+                  id: `logic-${Date.now()}`,
+                  type: type,
+                  position: newPosition,
+                  connections: [],
+                  config: type === "multi-path" ? { paths: Array(6).fill('') } : {}
+                }
+                setLastCreatedBlockId(newLogicBlock.id)
+                handleLogicBlocksUpdate([...logicBlocks, newLogicBlock])
+              }}
+              addBlockButtonRef={addBlockButtonRef}
             />
           </div>
           {/* Mobile Controls - Floating buttons */}
@@ -3186,6 +3257,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
         {/* Add button - above zoom */}
         <div className="fixed bottom-[80px] right-6 z-[100] pointer-events-auto">
           <button
+            ref={addBlockButtonRef}
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -3407,6 +3479,67 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
                 className="px-4 py-2 rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors text-sm font-medium"
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Suggestion Modal */}
+      {showSuggestionModal && (
+        <div className="fixed inset-0 z-[300] bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card rounded-xl p-6 shadow-neumorphic-raised border border-border max-w-md w-full">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-foreground">Send Suggestion</h3>
+              <button
+                onClick={() => {
+                  setShowSuggestionModal(false)
+                  setSuggestionText("")
+                }}
+                className="p-1 rounded-lg hover:bg-muted transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <textarea
+              value={suggestionText}
+              onChange={(e) => setSuggestionText(e.target.value)}
+              placeholder="Share your feedback or suggestions to help us improve..."
+              className="w-full bg-background border border-border rounded-lg px-4 py-3 mb-4 min-h-[120px] resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowSuggestionModal(false)
+                  setSuggestionText("")
+                }}
+                className="px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!suggestionText.trim()) return
+                  try {
+                    const response = await fetch('/api/suggestions', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ message: suggestionText, experienceId })
+                    })
+                    if (response.ok) {
+                      toast.success('Thank you for your suggestion!')
+                      setShowSuggestionModal(false)
+                      setSuggestionText("")
+                    } else {
+                      toast.error('Failed to send suggestion')
+                    }
+                  } catch (error) {
+                    toast.error('Failed to send suggestion')
+                  }
+                }}
+                disabled={!suggestionText.trim()}
+                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Send
               </button>
             </div>
           </div>
@@ -3981,7 +4114,7 @@ function PreviewModal({
   const previewContentRef = useRef<HTMLDivElement>(null)
   const questionComponentRef = useRef<HTMLDivElement>(null)
   
-  // Scroll to show first component fully at top on mount
+  // Scroll to show first component fully with padding above on mount
   useEffect(() => {
     if (previewContentRef.current) {
       setTimeout(() => {
@@ -3990,10 +4123,16 @@ function PreviewModal({
         
         const firstComponent = container.querySelector('[data-preview-component="first"]')
         if (firstComponent) {
-          // Scroll to top of first component with some padding
+          // Scroll to show first component with padding above (40px)
           const componentTop = (firstComponent as HTMLElement).offsetTop
           container.scrollTo({
-            top: Math.max(0, componentTop - 20),
+            top: Math.max(0, componentTop - 40),
+            behavior: 'smooth'
+          })
+        } else {
+          // If no first component marker, scroll to top with padding (allow scrolling up 80px more)
+          container.scrollTo({
+            top: 0,
             behavior: 'smooth'
           })
         }
@@ -4019,15 +4158,6 @@ function PreviewModal({
     <div className="fixed inset-0 bg-background z-[200] flex flex-col">
       {/* Content - Full width customer view */}
       <div ref={previewContentRef} className="flex-1 overflow-y-auto bg-background scrollbar-hide relative">
-        {/* Page counter - floating top center */}
-        {pathNodes.length > 0 && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-20 bg-card/90 backdrop-blur-sm rounded-lg px-4 py-2 shadow-lg border border-border/30">
-            <p className="text-xs text-muted-foreground text-center">
-            Step {previewNodeIndex + 1} of {pathNodes.length}
-          </p>
-        </div>
-        )}
-        
         {/* Close button - top right */}
         <button
           onClick={() => {
@@ -4038,17 +4168,17 @@ function PreviewModal({
         >
           <X className="w-4 h-4" />
         </button>
-        {/* Left Arrow - Sticky (Blue) */}
+        {/* Left Arrow - Sticky in middle */}
         <button
           onClick={handlePrev}
           disabled={!hasPrev}
-          className="fixed left-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="fixed left-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ backgroundColor: '#3B82F6' }}
         >
           <ChevronLeft className="w-5 h-5 text-white" />
         </button>
         
-        {/* Right Arrow/Complete Button - Sticky (Green or Checkmark) */}
+        {/* Right Arrow/Complete Button - Sticky in middle */}
         {hasMorePages || hasAnswer ? (
           <button
             onClick={(e) => {
@@ -4057,7 +4187,7 @@ function PreviewModal({
               handleNext()
             }}
             disabled={!hasMorePages && !hasAnswer}
-            className="fixed right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="fixed right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ backgroundColor: '#10b981' }}
           >
             <ChevronRight className="w-5 h-5 text-white" />
@@ -4069,14 +4199,24 @@ function PreviewModal({
               e.stopPropagation()
               handleNext()
             }}
-            className="fixed right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full shadow-neumorphic-raised hover:shadow-neumorphic-pressed transition-all"
+            className="fixed right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full transition-all"
             style={{ backgroundColor: '#10b981' }}
           >
             <Check className="w-5 h-5 text-white" />
           </button>
         )}
         
-          <div className="w-full max-w-6xl mx-auto px-6 flex flex-col items-center justify-center min-h-full" style={{ paddingTop: '80px', paddingBottom: '80px' }}>
+          <div 
+            className="w-full flex flex-col items-center justify-center min-h-full" 
+            style={{ 
+              paddingLeft: 'clamp(20px, 8vw, 100px)', 
+              paddingRight: 'clamp(20px, 8vw, 100px)', 
+              paddingTop: '40px', 
+              paddingBottom: '40px' 
+            }}
+          >
+          {/* Spacer to allow scrolling up 80px more */}
+          <div style={{ height: '80px', width: '100%' }} />
           <div className="w-full flex flex-col" style={{ transform: 'scale(1.25)', maxWidth: '840px', gap: '10px' }}>
             {/* Display ALL components in order */}
             {allComponents.map((component, index) => {
