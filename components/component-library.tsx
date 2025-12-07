@@ -73,7 +73,7 @@ type ComponentLibraryProps = {
 
 export function ComponentLibrary({ onDragStart, onAddComponent }: ComponentLibraryProps) {
   return (
-    <div className="space-y-0.5" style={{ zoom: '1', transform: 'scale(1)', fontSize: '12px' }}>
+    <div className="space-y-1" style={{ zoom: '1', transform: 'scale(1)', fontSize: '12px' }}>
       {components.map((component) => {
         const Icon = component.icon
         return (
@@ -90,21 +90,21 @@ export function ComponentLibrary({ onDragStart, onAddComponent }: ComponentLibra
                 onDragStart(component.type, e)
               }
             }}
-            className="w-full text-left px-1.5 py-1 rounded-lg bg-card/40 backdrop-blur-sm hover:bg-card/70 transition-all duration-200 cursor-pointer border border-border/20 overflow-hidden"
+            className="w-full text-left px-2 py-1.5 rounded-lg bg-card/40 backdrop-blur-sm hover:bg-card/70 transition-all duration-200 cursor-pointer border border-border/20"
             style={{ 
               zoom: '1', 
               transform: 'scale(1)',
               fontSize: '12px',
-              lineHeight: '1.2'
+              lineHeight: '1.3'
             }}
           >
-            <div className="flex items-center gap-1.5">
-              <div className="w-3.5 h-3.5 bg-muted/40 rounded flex items-center justify-center flex-shrink-0" style={{ width: '14px', height: '14px', minWidth: '14px', minHeight: '14px' }}>
-                <Icon className="w-2 h-2" style={{ width: '8px', height: '8px', minWidth: '8px', minHeight: '8px' }} />
+            <div className="flex items-start gap-2">
+              <div className="bg-muted/40 rounded flex items-center justify-center flex-shrink-0" style={{ width: '20px', height: '20px', minWidth: '20px', minHeight: '20px' }}>
+                <Icon style={{ width: '12px', height: '12px', minWidth: '12px', minHeight: '12px' }} />
               </div>
-              <div className="flex-1 min-w-0 overflow-hidden">
-                <h4 className="font-medium leading-tight truncate mb-0.5" style={{ fontSize: '12px', lineHeight: '1.2' }}>{component.title}</h4>
-                <p className="text-muted-foreground leading-tight truncate" style={{ fontSize: '11px', lineHeight: '1.2' }}>{component.description}</p>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-medium leading-tight mb-0.5" style={{ fontSize: '12px', lineHeight: '1.3' }}>{component.title}</h4>
+                <p className="text-muted-foreground leading-tight" style={{ fontSize: '11px', lineHeight: '1.3', wordWrap: 'break-word' }}>{component.description}</p>
               </div>
             </div>
           </button>
