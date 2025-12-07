@@ -487,7 +487,10 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
             pointerEvents: 'auto',
             zoom: '1', // Force standard zoom level
             WebkitTransform: 'translateX(-50%) scale(1)', // Force standard scale for webkit
-            transformOrigin: 'top center'
+            transformOrigin: 'top center',
+            fontSize: '12px', // Fixed font size that doesn't scale with zoom
+            maxHeight: '400px',
+            overflowY: 'auto'
           }}
         >
           <ComponentLibrary 
