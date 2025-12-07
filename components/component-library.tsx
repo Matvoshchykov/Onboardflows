@@ -73,8 +73,8 @@ type ComponentLibraryProps = {
 
 export function ComponentLibrary({ onDragStart, onAddComponent }: ComponentLibraryProps) {
   return (
-    <div className="space-y-0.5" style={{ zoom: '1', transform: 'scale(1)', fontSize: '12px' }}>
-      {components.map((component) => {
+    <div style={{ zoom: '1', transform: 'scale(1)', fontSize: '12px' }}>
+      {components.map((component, index) => {
         const Icon = component.icon
         return (
           <button
@@ -90,22 +90,22 @@ export function ComponentLibrary({ onDragStart, onAddComponent }: ComponentLibra
                 onDragStart(component.type, e)
               }
             }}
-            className="w-full text-left px-1.5 py-1 rounded-lg bg-card/40 backdrop-blur-sm hover:bg-card/70 transition-all duration-200 cursor-pointer border border-border/20"
+            className="w-full text-left rounded-lg bg-card/40 backdrop-blur-sm hover:bg-card/70 transition-all duration-200 cursor-pointer border border-border/20"
             style={{ 
               zoom: '1', 
               transform: 'scale(1)',
-              fontSize: '12px'
+              fontSize: '12px',
+              padding: '6px 8px',
+              marginBottom: index < components.length - 1 ? '4px' : '0'
             }}
           >
-            <div className="flex items-center gap-1.5">
-              <div className="w-3.5 h-3.5 bg-muted/40 rounded flex items-center justify-center flex-shrink-0" style={{ width: '14px', height: '14px', minWidth: '14px', minHeight: '14px' }}>
-                <Icon className="w-2 h-2" style={{ width: '8px', height: '8px', minWidth: '8px', minHeight: '8px' }} />
+            <div className="flex items-center gap-1.5" style={{ gap: '6px' }}>
+              <div className="bg-muted/40 rounded flex items-center justify-center flex-shrink-0" style={{ width: '14px', height: '14px', minWidth: '14px', minHeight: '14px', maxWidth: '14px', maxHeight: '14px' }}>
+                <Icon style={{ width: '8px', height: '8px', minWidth: '8px', minHeight: '8px', maxWidth: '8px', maxHeight: '8px' }} />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <h4 className="font-medium truncate" style={{ fontSize: '12px', lineHeight: '1.2' }}>{component.title}</h4>
-                  <span className="text-muted-foreground truncate flex-1" style={{ fontSize: '11px', lineHeight: '1.2' }}>{component.description}</span>
-                </div>
+              <div className="flex-1 min-w-0" style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+                <h4 className="font-medium truncate" style={{ fontSize: '12px', lineHeight: '1.2', margin: 0, padding: 0, flexShrink: 0 }}>{component.title}</h4>
+                <span className="text-muted-foreground truncate" style={{ fontSize: '11px', lineHeight: '1.2', margin: 0, padding: 0, flex: '1 1 0', minWidth: 0 }}>{component.description}</span>
               </div>
             </div>
           </button>

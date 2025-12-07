@@ -472,11 +472,11 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
         )}
       </div>
       
-      {/* Component Library Dropdown - Rendered via Portal to appear above everything - Matches flow block width, fixed font size regardless of zoom */}
+      {/* Component Library Dropdown - Rendered via Portal to appear above everything - COMPLETELY STATIC: same size, font, icons regardless of zoom */}
       {showComponentLibrary && dropdownPosition && typeof window !== 'undefined' && createPortal(
         <div 
           data-component-library-dropdown
-          className="fixed bg-card rounded-lg p-3 shadow-lg border border-border"
+          className="fixed bg-card rounded-lg shadow-lg border border-border"
           style={{ 
             zIndex: 2147483647, // Maximum z-index value
             top: `${dropdownPosition.top}px`,
@@ -485,11 +485,13 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
             transform: 'translateX(-50%)', // Center horizontally
             position: 'fixed',
             pointerEvents: 'auto',
-            zoom: '1', // Force standard zoom level - prevents browser zoom from affecting this element
+            zoom: '1', // CRITICAL: Prevents browser zoom from affecting this element
             WebkitTransform: 'translateX(-50%) scale(1)', // Force standard scale for webkit
             transformOrigin: 'top center',
-            fontSize: '12px', // Fixed font size that doesn't scale with zoom
-            overflow: 'visible' // No scrolling - show all items
+            fontSize: '12px', // Fixed font size - never changes
+            padding: '12px', // Fixed padding
+            overflow: 'visible', // No scrolling - show all items
+            boxSizing: 'border-box'
           }}
         >
           <ComponentLibrary 
