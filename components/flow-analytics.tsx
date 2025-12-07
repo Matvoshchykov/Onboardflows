@@ -420,7 +420,7 @@ export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsP
           backgroundColor: '#3b82f6',
           color: '#ffffff',
           border: '1px solid #3b82f6',
-          minWidth: isMobile ? '80px' : '190px',
+          minWidth: isMobile ? '60px' : '170px',
           minHeight: isMobile ? '41.31px' : '32.13px',
           padding: isMobile ? '0 16px' : '0 12px',
           fontSize: isMobile ? '0.75rem' : '0.827rem',
