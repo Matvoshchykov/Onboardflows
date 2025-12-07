@@ -105,9 +105,9 @@ export function ComponentLibrary({ onDragStart, onAddComponent }: ComponentLibra
               <div className="bg-muted/40 rounded flex items-center justify-center flex-shrink-0" style={{ width: '14px', height: '14px', minWidth: '14px', minHeight: '14px', maxWidth: '14px', maxHeight: '14px', zoom: '1', transform: 'scale(1)' }}>
                 <Icon style={{ width: '8px', height: '8px', minWidth: '8px', minHeight: '8px', maxWidth: '8px', maxHeight: '8px', zoom: '1', transform: 'scale(1)' }} />
               </div>
-              <div className="flex items-center" style={{ gap: '6px', flex: '1 1 0', minWidth: 0, overflow: 'hidden', zoom: '1', transform: 'scale(1)' }}>
+              <div className="flex items-center" style={{ gap: '6px', flex: '1 1 0', minWidth: 0, zoom: '1', transform: 'scale(1)' }}>
                 <h4 className="font-medium" style={{ fontSize: '12px', lineHeight: '1.2', margin: 0, padding: 0, flexShrink: 0, whiteSpace: 'nowrap', zoom: '1', transform: 'scale(1)' }}>{component.title}</h4>
-                <span className="text-muted-foreground" style={{ fontSize: '11px', lineHeight: '1.2', margin: 0, padding: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: '1 1 0', minWidth: 0, zoom: '1', transform: 'scale(1)' }}>{component.description}</span>
+                <span className="text-muted-foreground" style={{ fontSize: '11px', lineHeight: '1.2', margin: 0, padding: 0, whiteSpace: 'normal', zoom: '1', transform: 'scale(1)' }}>{component.description}</span>
               </div>
             </div>
           </button>
