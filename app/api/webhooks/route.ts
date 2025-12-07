@@ -52,6 +52,10 @@ export async function POST(request: NextRequest): Promise<Response> {
 			console.log("[PAYMENT.SUCCEEDED] Processing payment...");
 			// Fire and forget - don't wait for the handler to complete
 			handlePaymentSucceeded(webhookData.data).catch(console.error);
+		} else if (webhookData.type === "membership.activated") {
+			console.log("[MEMBERSHIP.ACTIVATED] Processing membership activation...");
+			// Fire and forget - don't wait for the handler to complete
+			handleMembershipActivated(webhookData.data).catch(console.error);
 		} else {
 			console.log("[WEBHOOK IGNORED] Event type:", webhookData.type);
 		}
@@ -125,5 +129,88 @@ async function handlePaymentSucceeded(payment: Payment) {
 		}
 	} catch (error) {
 		console.error("Error handling payment succeeded:", error);
+	}
+}
+
+async function handleMembershipActivated(membership: any) {
+	try {
+		console.log("[MEMBERSHIP ACTIVATED]", JSON.stringify(membership, null, 2));
+		
+		// Extract user_id from membership webhook data
+		// Membership webhook may have different structure than payment
+		const userId: string | undefined = 
+			(membership as any).user?.id || 
+			(membership as any).user_id || 
+			(membership as any).customer_id ||
+			(membership as any).member?.id ||
+			(membership as any).member_id;
+		
+		// Extract company_id if available
+		const companyId: string | undefined = 
+			(membership as any).company?.id || 
+			(membership as any).company_id ||
+			(membership as any).experience?.id ||
+			(membership as any).experience_id;
+		
+		// Extract plan information if available
+		const planId: string | undefined = 
+			(membership as any).plan?.id || 
+			(membership as any).plan_id;
+		
+		// Determine plan type from plan_id or metadata
+		const metadata = (membership.metadata || {}) as {
+			user_id?: string;
+			plan_type?: string;
+			company_id?: string;
+		};
+		
+		// Use metadata if available, otherwise use direct fields
+		const finalUserId: string = metadata.user_id || userId || '';
+		const finalCompanyId: string = metadata.company_id || companyId || '';
+		
+		// Determine plan type - check if it's monthly or yearly based on plan_id or metadata
+		let planType: string = metadata.plan_type || "premium-monthly";
+		if (planId) {
+			// If plan_id contains monthly/yearly indicators, use that
+			if (planId.includes("monthly") || planId.includes("Eds0CKZHj3xiQ")) {
+				planType = "premium-monthly";
+			} else if (planId.includes("yearly") || planId.includes("8rq7G9zrL0SgF")) {
+				planType = "premium-yearly";
+			}
+		}
+		
+		console.log("[MEMBERSHIP DATA]", {
+			userId: finalUserId,
+			companyId: finalCompanyId,
+			planId,
+			planType,
+			metadata,
+			rawMembership: membership
+		});
+		
+		// Validate required fields
+		if (!finalUserId) {
+			console.error("Missing user_id in membership activation. Membership object:", membership);
+			return;
+		}
+		
+		console.log(`[ACTIVATING MEMBERSHIP] User: ${finalUserId}, Company: ${finalCompanyId || 'N/A'}, Plan: ${planType}`);
+		
+		// Update or create user membership - activate it
+		// Use type assertion to bypass build cache type issues
+		const result = await (upsertUserMembership as any)(
+			finalUserId,
+			true, // membership_active = true
+			planId, // Use plan_id as payment_id if available
+			planType
+		);
+		
+		if (result) {
+			console.log(`[MEMBERSHIP ACTIVATED] User ${finalUserId} for company ${finalCompanyId || 'N/A'}, Membership ID: ${result.id}`);
+		} else {
+			console.error(`[MEMBERSHIP ACTIVATION FAILED] User ${finalUserId} for company ${finalCompanyId || 'N/A'}`);
+		}
+	} catch (error) {
+		console.error("Error handling membership activated:", error);
 	}
 }
