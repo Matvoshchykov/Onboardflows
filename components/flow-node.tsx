@@ -472,7 +472,7 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
         )}
       </div>
       
-      {/* Component Library Dropdown - Rendered via Portal to appear above everything - COMPLETELY STATIC: same size, font, icons regardless of zoom */}
+      {/* Component Library Dropdown - Rendered via Portal to appear above everything - LOCKED TO STANDARD SIZE: same size, font, icons regardless of browser zoom */}
       {showComponentLibrary && dropdownPosition && typeof window !== 'undefined' && createPortal(
         <div 
           data-component-library-dropdown
@@ -482,11 +482,11 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
             top: `${dropdownPosition.top}px`,
             left: `${dropdownPosition.left}px`,
             width: `${dropdownPosition.width}px`, // Matches flow block width
-            transform: 'translateX(-50%) scale(1)', // Center horizontally, force scale 1
+            transform: 'translateX(-50%)', // Center horizontally
             position: 'fixed',
             pointerEvents: 'auto',
-            zoom: '1', // CRITICAL: Prevents browser zoom from affecting this element
-            WebkitTransform: 'translateX(-50%) scale(1)', // Force standard scale for webkit
+            zoom: '1', // LOCKED: Always appears at 100% scale regardless of browser zoom
+            WebkitTransform: 'translateX(-50%)', // Center horizontally for webkit
             transformOrigin: 'top center',
             fontSize: '12px', // Fixed font size - never changes
             padding: '12px', // Fixed padding
