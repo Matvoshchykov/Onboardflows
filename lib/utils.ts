@@ -90,29 +90,24 @@ export async function deleteComponentFiles(component: { type: string; config?: R
 
   const deletePromises: Promise<boolean>[] = []
 
-  // Check for image files
-  if (component.config.imageUrl && typeof component.config.imageUrl === 'string') {
-    // Only delete if it's a Supabase Storage URL (not a data URL)
-    if (component.config.imageUrl.startsWith('http')) {
-      deletePromises.push(deleteFileFromStorage(component.config.imageUrl, 'uploads'))
+  // Helper to add file to deletion queue
+  const addFileToDelete = (url: string | null | undefined) => {
+    if (url && typeof url === 'string' && url.startsWith('http')) {
+      deletePromises.push(deleteFileFromStorage(url, 'uploads'))
     }
   }
 
-  // Check for video files (thumbnails)
-  if (component.config.videoUrl && typeof component.config.videoUrl === 'string') {
-    // Only delete if it's a Supabase Storage URL (not a data URL)
-    if (component.config.videoUrl.startsWith('http')) {
-      deletePromises.push(deleteFileFromStorage(component.config.videoUrl, 'uploads'))
-    }
-  }
+  // Check for image files (both imageUrl and imageOriginal)
+  addFileToDelete(component.config.imageUrl)
+  addFileToDelete(component.config.imageOriginal)
+
+  // Check for video files (both videoUrl and videoOriginal)
+  addFileToDelete(component.config.videoUrl)
+  addFileToDelete(component.config.videoOriginal)
 
   // Check for file upload files
-  if (component.config.fileUrl && typeof component.config.fileUrl === 'string') {
-    // Only delete if it's a Supabase Storage URL (not a data URL)
-    if (component.config.fileUrl.startsWith('http')) {
-      deletePromises.push(deleteFileFromStorage(component.config.fileUrl, 'uploads'))
-    }
-  }
+  addFileToDelete(component.config.fileUrl)
+  addFileToDelete(component.config.fileOriginal)
 
   // Wait for all deletions to complete
   await Promise.all(deletePromises)
