@@ -525,8 +525,10 @@ export default function OnboardingFlowView() {
           if (targetNode) {
             return targetNode
           }
+          // If targetId exists but no node found, the path doesn't connect - end onboarding
+          return null
         }
-        // If evaluation failed, check if logic block has connections as fallback
+        // If evaluation returned null/undefined, check if logic block has connections as fallback
         if (connectedLogicBlock.connections && Array.isArray(connectedLogicBlock.connections) && connectedLogicBlock.connections.length > 0) {
           const firstTargetId = connectedLogicBlock.connections[0]
           if (firstTargetId) {
@@ -536,6 +538,7 @@ export default function OnboardingFlowView() {
             }
           }
         }
+        // If logic block answer path doesn't connect to any node, end onboarding
         return null
       }
       
@@ -564,6 +567,8 @@ export default function OnboardingFlowView() {
               if (targetNode) {
                 return targetNode
               }
+              // If targetId exists but no node found, the path doesn't connect - end onboarding
+              return null
             }
             // Fallback to first connection of logic block if evaluation failed
             if (nextLogicBlock.connections && Array.isArray(nextLogicBlock.connections) && nextLogicBlock.connections.length > 0) {
@@ -575,6 +580,8 @@ export default function OnboardingFlowView() {
                 }
               }
             }
+            // If logic block answer path doesn't connect to any node, end onboarding
+            return null
           }
         }
       }
@@ -992,22 +999,30 @@ export default function OnboardingFlowView() {
           </div>
         </div>
       )}
-      {/* Left Arrow - Blue - Sticky in middle */}
+      {/* Left Arrow - Blue - Desktop: sticky in middle, Mobile: bottom left */}
       <button
         onClick={handlePrev}
         disabled={!hasPrev}
-        className="fixed left-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        className={`fixed z-10 p-3 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+          isMobile 
+            ? 'left-4 bottom-4' 
+            : 'left-4 top-1/2 -translate-y-1/2'
+        }`}
         style={{ backgroundColor: '#3B82F6' }}
       >
         <ChevronLeft className="w-5 h-5 text-white" />
       </button>
       
-      {/* Right Arrow - Green or Checkmark - Sticky in middle */}
+      {/* Right Arrow - Green or Checkmark - Desktop: sticky in middle, Mobile: bottom right */}
       {isLastPage ? (
         <button
           onClick={handleNext}
           disabled={!canProceed}
-          className="fixed right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className={`fixed z-10 p-3 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+            isMobile 
+              ? 'right-4 bottom-4' 
+              : 'right-4 top-1/2 -translate-y-1/2'
+          }`}
           style={{ backgroundColor: '#10b981' }}
         >
           <Check className="w-5 h-5 text-white" />
@@ -1016,7 +1031,11 @@ export default function OnboardingFlowView() {
         <button
           onClick={handleNext}
           disabled={!hasNext || !canProceed}
-          className="fixed right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className={`fixed z-10 p-3 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+            isMobile 
+              ? 'right-4 bottom-4' 
+              : 'right-4 top-1/2 -translate-y-1/2'
+          }`}
           style={{ backgroundColor: '#10b981' }}
         >
           <ChevronRight className="w-5 h-5 text-white" />
@@ -1034,55 +1053,39 @@ export default function OnboardingFlowView() {
       >
         {/* Spacer to allow scrolling up 80px more */}
         <div style={{ height: '80px', width: '100%' }} />
-        <div className="w-full flex flex-col" style={{ maxWidth: '840px', gap: '10px' }}>
-          {/* Display ALL components in order */}
-          {Array.isArray(allComponents) && allComponents.length > 0 ? allComponents.map((component, index) => {
-            try {
-              if (!component || !component.id || !component.type) {
-                console.warn('Invalid component at index', index, component)
-                return null
-              }
-              const isQuestion = ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(component.type)
-              const isFirstComponent = index === 0
-              
-              if (isQuestion && needsAnswer) {
-                return (
-                  <div key={component.id} ref={isFirstComponent ? firstComponentRef : null} className="w-full">
-                    <div className="relative group rounded-xl p-4 sm:p-6 transition-all bg-card shadow-neumorphic-raised flex flex-col justify-center">
-                      <InteractiveQuestionComponent
-                        component={component}
-                        value={currentAnswer}
-                        onChange={handleAnswerChange}
-                      />
-                    </div>
-                  </div>
-                )
-              } else {
-                return (
-                  <div key={component.id} ref={isFirstComponent ? firstComponentRef : null} className="w-full">
-                    <PagePreview
-                      components={[component]}
-                      viewMode={isMobile ? "mobile" : "desktop"}
-                      selectedComponent={null}
-                      onSelectComponent={() => {}}
-                      onDeleteComponent={() => {}}
-                      previewMode={true}
-                      isMobile={isMobile}
-                      onVideoWatched={handleVideoWatched}
-                      onVideoTimeUpdate={handleVideoTimeUpdate}
+        <div className="w-full flex flex-col" style={{ maxWidth: '840px' }}>
+          {/* Display ALL components in order - combined into one card */}
+          {Array.isArray(allComponents) && allComponents.length > 0 ? (
+            <div className="w-full" ref={firstComponentRef}>
+              {/* Question components that need interactive handling - separate cards */}
+              {allComponents.filter(comp => ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(comp.type) && needsAnswer).map((component, index) => (
+                <div key={component.id} className="w-full mb-4 last:mb-0">
+                  <div className="relative group rounded-xl p-4 sm:p-6 transition-all bg-card shadow-neumorphic-raised flex flex-col justify-center">
+                    <InteractiveQuestionComponent
+                      component={component}
+                      value={currentAnswer}
+                      onChange={handleAnswerChange}
                     />
                   </div>
-                )
-              }
-            } catch (error) {
-              console.error('Error rendering component at index', index, error)
-              return (
-                <div key={component?.id || `error-${index}`} className="w-full p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                  <p className="text-sm text-red-600 dark:text-red-400">Error rendering component</p>
                 </div>
-              )
-            }
-          }) : (
+              ))}
+              
+              {/* All other components combined in one card via PagePreview */}
+              {allComponents.filter(comp => !(["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(comp.type) && needsAnswer)).length > 0 && (
+                <PagePreview
+                  components={allComponents.filter(comp => !(["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(comp.type) && needsAnswer))}
+                  viewMode={isMobile ? "mobile" : "desktop"}
+                  selectedComponent={null}
+                  onSelectComponent={() => {}}
+                  onDeleteComponent={() => {}}
+                  previewMode={true}
+                  isMobile={isMobile}
+                  onVideoWatched={handleVideoWatched}
+                  onVideoTimeUpdate={handleVideoTimeUpdate}
+                />
+              )}
+            </div>
+          ) : (
             <div className="w-full p-8 text-center">
               <p className="text-muted-foreground">No components to display</p>
             </div>

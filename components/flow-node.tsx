@@ -1,11 +1,9 @@
 "use client"
 
 import { memo, useState, useRef, useEffect } from "react"
-import { createPortal } from "react-dom"
 import { FileText, Eye, Crown, Plus, Trash2, ChevronDown } from 'lucide-react'
 import type { FlowNode } from "./flow-builder"
 import type { PageComponent, ComponentType } from "./page-editor"
-import { ComponentLibrary } from "./component-library"
 import { ComponentRenderer } from "./page-preview"
 
 // Flow block colors - expanded palette for more distinctive unique colors
@@ -111,31 +109,10 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
   const blockColor = getFlowBlockColor(index)
   const hasConnection = node.connections.length > 0
   const cardRef = useRef<HTMLDivElement>(null)
-  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null)
+  const components = normalizePageComponents(node.pageComponents)
   const addButtonRef1 = useRef<HTMLButtonElement>(null)
   const addButtonRef2 = useRef<HTMLButtonElement>(null)
   const addButtonRef3 = useRef<HTMLButtonElement>(null)
-  
-  const components = normalizePageComponents(node.pageComponents)
-  
-  // Calculate dropdown position when library is shown
-  useEffect(() => {
-    if (showComponentLibrary) {
-      // Find which button is visible and get its position
-      const button = addButtonRef1.current || addButtonRef2.current || addButtonRef3.current
-      if (button && cardRef.current) {
-        const buttonRect = button.getBoundingClientRect()
-        const cardRect = cardRef.current.getBoundingClientRect()
-        setDropdownPosition({
-          top: buttonRect.bottom + 8,
-          left: buttonRect.left + buttonRect.width / 2,
-          width: cardRect.width
-        })
-      }
-    } else {
-      setDropdownPosition(null)
-    }
-  }, [showComponentLibrary])
 
   // Measure height on mount and when content changes
   useEffect(() => {
@@ -472,35 +449,6 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
         )}
       </div>
       
-      {/* Component Library Dropdown - Rendered via Portal to appear above everything - LOCKED TO STANDARD SIZE: same size, font, icons regardless of browser zoom */}
-      {showComponentLibrary && dropdownPosition && typeof window !== 'undefined' && createPortal(
-        <div 
-          data-component-library-dropdown
-          className="fixed bg-card rounded-lg shadow-lg border border-border"
-          style={{ 
-            zIndex: 2147483647, // Maximum z-index value
-            top: `${dropdownPosition.top}px`,
-            left: `${dropdownPosition.left}px`,
-            width: `${dropdownPosition.width}px`, // Matches flow block width
-            transform: 'translateX(-50%)', // Center horizontally
-            position: 'fixed',
-            pointerEvents: 'auto',
-            zoom: '1', // LOCKED: Always appears at 100% scale regardless of browser zoom
-            WebkitTransform: 'translateX(-50%)', // Center horizontally for webkit
-            transformOrigin: 'top center',
-            fontSize: '12px', // Fixed font size - never changes
-            padding: '12px', // Fixed padding
-            overflow: 'visible', // No scrolling - show all items
-            boxSizing: 'border-box',
-            isolation: 'isolate' // Create new stacking context to isolate from zoom
-          }}
-        >
-          <ComponentLibrary 
-            onAddComponent={onAddComponent}
-          />
-        </div>,
-        document.body
-      )}
     </div>
   )
 }, (prevProps, nextProps) => {

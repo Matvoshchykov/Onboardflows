@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { X } from "lucide-react"
+import { X, Crown } from "lucide-react"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Check } from "lucide-react"
@@ -31,8 +31,8 @@ const pricingPlans = [
     id: "premium-monthly" as PlanType,
     name: "Premium",
     description: "Ideal for growing teams and businesses",
-    monthlyPrice: 1,
-    yearlyPrice: 280,
+    monthlyPrice: 19.99,
+    yearlyPrice: 190,
     flows: 5,
     blocks: 30,
     features: [
@@ -48,8 +48,8 @@ const pricingPlans = [
     id: "premium-yearly" as PlanType,
     name: "Premium",
     description: "Best value for long-term growth",
-    monthlyPrice: 30,
-    yearlyPrice: 280, // $30 * 12 * 0.78 = $280 (approximately 22% savings)
+    monthlyPrice: 19.99,
+    yearlyPrice: 190, // $19.99 * 12 * 0.79 = $190 (approximately 20% savings)
     flows: 5,
     blocks: 30,
     features: [
@@ -58,7 +58,7 @@ const pricingPlans = [
       "Advanced analytics",
       "Export data",
       "Priority support",
-      "Save 22%"
+      "Save 20%"
     ],
     popular: false,
   },
@@ -81,6 +81,18 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
       return
     }
 
+    // For premium-monthly, redirect to static checkout link
+    if (planId === "premium-monthly") {
+      window.location.href = "https://whop.com/checkout/plan_Eds0CKZHj3xiQ"
+      return
+    }
+
+    // For premium-yearly, redirect to static checkout link
+    if (planId === "premium-yearly") {
+      window.location.href = "https://whop.com/checkout/plan_8rq7G9zrL0SgF"
+      return
+    }
+
     if (!iframeSdk) {
       toast.error("Payment system not available. Please try again later.")
       return
@@ -96,7 +108,7 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
       }
       const { companyId } = await companyIdResponse.json()
 
-      // Create checkout configuration
+      // Create checkout configuration (fallback for other plans)
       const checkoutResponse = await fetch("/api/create-checkout", {
         method: "POST",
         headers: {
@@ -166,35 +178,65 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
         throw new Error("Invalid checkout response: missing checkoutId or planId")
       }
 
-      console.log("Opening payment modal with:", { checkoutId, planId: whopPlanId })
-
-      // Open payment modal using Whop iframe SDK with timeout
-      const purchasePromise = iframeSdk.inAppPurchase({
+      console.log("Opening payment modal with:", { 
+        checkoutId, 
         planId: whopPlanId,
-        id: checkoutId,
+        experienceId,
+        iframeSdkAvailable: !!iframeSdk
       })
 
-      // Add timeout to prevent infinite loading (30 seconds)
+      // Open payment modal using Whop iframe SDK
+      // According to Whop SDK: inAppPurchase requires checkout configuration ID and plan ID
+      const purchasePromise = iframeSdk.inAppPurchase({
+        id: checkoutId, // Checkout configuration ID (required)
+        planId: whopPlanId, // Plan ID from the checkout configuration (required)
+      }).catch((purchaseError: any) => {
+        console.error("inAppPurchase error:", purchaseError)
+        console.error("inAppPurchase error details:", {
+          message: purchaseError?.message,
+          error: purchaseError?.error,
+          status: purchaseError?.status,
+          checkoutId,
+          planId: whopPlanId
+        })
+        throw purchaseError
+      })
+
+      // Add timeout to prevent infinite loading (60 seconds - increased for payment processing)
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
           reject(new Error("Payment modal timeout - the payment window may not have opened. Please try again."))
-        }, 30000)
+        }, 60000)
       })
 
       // Race between purchase and timeout
       const res = await Promise.race([purchasePromise, timeoutPromise]) as any
 
       console.log("Payment modal response:", res)
+      console.log("Payment response details:", JSON.stringify(res, null, 2))
 
-      if (res.status === "ok") {
+      if (res && res.status === "ok") {
         toast.success("Payment successful! Your membership has been activated.")
-        // Refresh the page to update membership status
+        // Redirect to creator canvas area
         setTimeout(() => {
-          window.location.reload()
+          if (experienceId) {
+            window.location.href = `/experiences/${experienceId}`
+          } else {
+            window.location.reload()
+          }
         }, 1500)
       } else {
         console.error("Payment failed:", res)
-        const errorMessage = (res as any).message || (res as any).error || "Payment was cancelled or failed"
+        // Check for different error response formats
+        let errorMessage = "Payment was cancelled or failed"
+        if (res) {
+          if (res.message) errorMessage = res.message
+          else if (res.error) errorMessage = typeof res.error === 'string' ? res.error : res.error.message || errorMessage
+          else if (typeof res === 'string') errorMessage = res
+          else if (res.status && res.status !== "ok") {
+            errorMessage = `Payment failed with status: ${res.status}`
+          }
+        }
         toast.error(errorMessage)
         setIsProcessing(false)
       }
@@ -235,7 +277,8 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
         <div className="p-6 sm:p-8">
           {/* Header */}
           <div className="text-center mb-6">
-            <h1 className="text-2xl sm:text-3xl font-bold text-balance mb-2" style={{ color: '#3b82f6', fontWeight: '700' }}>
+            <h1 className="font-bold text-balance mb-2 text-[28px] sm:text-[34px] flex items-center justify-center gap-2" style={{ color: '#3b82f6', fontWeight: '700' }}>
+              <Crown className="w-7 h-7 sm:w-9 sm:h-9" style={{ color: '#3b82f6' }} />
               Upgrade to Premium
             </h1>
             <p className="text-sm text-muted-foreground text-balance">
@@ -249,19 +292,20 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
               const price = plan.id === "premium-yearly" ? plan.yearlyPrice : plan.monthlyPrice
               const period = plan.id === "premium-yearly" ? "per year" : "per month"
               const isYearly = plan.id === "premium-yearly"
+              const isMonthly = plan.id === "premium-monthly"
 
               return (
                 <Card
                   key={plan.id}
                   className="relative flex flex-col"
                   style={{
-                    border: isYearly ? '2px solid rgba(59, 130, 246, 0.5)' : '1px solid rgba(0, 0, 0, 0.1)',
-                    boxShadow: isYearly ? '0 0 20px rgba(59, 130, 246, 0.3)' : 'none',
-                    animation: isYearly ? 'pulseHighlight 2s ease-in-out infinite' : 'none'
+                    border: (isYearly || isMonthly) ? '2px solid rgba(59, 130, 246, 0.5)' : '1px solid rgba(0, 0, 0, 0.1)',
+                    boxShadow: (isYearly || isMonthly) ? '0 0 20px rgba(59, 130, 246, 0.3)' : 'none',
+                    animation: (isYearly || isMonthly) ? 'pulseHighlight 2s ease-in-out infinite' : 'none'
                   }}
                   role="listitem"
                 >
-                  {isYearly && (
+                  {(isYearly || isMonthly) && (
                     <style>{`
                       @keyframes pulseHighlight {
                         0%, 100% {
@@ -280,16 +324,16 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
                     </CardTitle>
                     <div className="mt-3">
                       <span className="text-3xl font-bold">
-                        ${price}
+                        ${typeof price === 'number' && price % 1 !== 0 ? price.toFixed(2) : price}
                       </span>
                       <span className="text-muted-foreground text-lg">
                         /{period}
                       </span>
                       {isYearly && (
                         <div className="text-xs text-muted-foreground mt-1">
-                          ${Math.round(plan.yearlyPrice / 12)}/month billed annually
+                          ${(plan.yearlyPrice / 12).toFixed(2)}/month billed annually
                           <div className="text-[#3b82f6] font-medium mt-0.5">
-                            Save 22%
+                            Save 20%
                           </div>
                         </div>
                       )}
@@ -298,7 +342,7 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
 
                   <CardContent className="flex-grow">
                     <ul className="space-y-2" aria-label="Premium plan features">
-                      {plan.features.filter(f => f !== "Save 22%").map((feature, featureIndex) => (
+                      {plan.features.filter(f => f !== "Save 20%").map((feature, featureIndex) => (
                         <li key={featureIndex} className="flex items-start gap-2">
                           <Check className="h-4 w-4 text-[#3b82f6] mt-0.5 flex-shrink-0" aria-hidden="true" />
                           <span className="text-sm">{feature}</span>

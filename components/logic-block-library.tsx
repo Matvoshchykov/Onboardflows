@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Plus, Activity } from 'lucide-react'
+import { Plus, GitBranch } from 'lucide-react'
 import type { LogicBlock } from './flow-canvas'
 
 const logicBlockTypes: LogicBlock['type'][] = ["if-else", "multi-path", "score-threshold", "a-b-test"]
@@ -92,7 +92,7 @@ export function LogicBlockLibrary({ onAddLogicBlock, addBlockButtonRef }: LogicB
         }}
         title="Logic Blocks"
       >
-        <Activity className="w-5 h-5" />
+        <GitBranch className="w-5 h-5" />
       </button>
 
       {/* Hover transfer area - invisible bridge between button and bubbles */}

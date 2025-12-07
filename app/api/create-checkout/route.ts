@@ -6,11 +6,11 @@ import { whopsdk } from "@/lib/whop-sdk";
 // Note: Whop API expects prices in dollars, not cents for checkout configurations
 const PRICING = {
   "premium-monthly": {
-    price: 1, // $1.00 (temporarily set to $1)
+    price: 19.99, // $19.99 per month
     billingPeriod: 30, // 30 days = 1 month (minimum for monthly subscriptions)
   },
   "premium-yearly": {
-    price: 280, // $280.00
+    price: 190, // $190.00 per year
     billingPeriod: 365, // 365 days = 1 year (or use 12 months if supported)
   },
 };
@@ -113,47 +113,61 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // - Plan type must be "renewal" ✓
     // - Currency must be lowercase (e.g., "usd") ✓
     // - initial_price: 0 for recurring plans (renewal_price is the recurring amount) ✓
-    const checkoutConfiguration = await whopsdk.checkoutConfigurations.create({
-      plan: {
-        company_id: appCompanyId, // App owner's company ID (biz_XXXXX)
-        initial_price: 0, // No initial fee for recurring plans
-        renewal_price: pricing.price, // Price in dollars per billing cycle ($30/month or $280/year)
-        plan_type: "renewal", // Required for recurring plans
-        billing_period: pricing.billingPeriod, // 30 days for monthly, 365 days for yearly (minimum 30 for monthly)
-        currency: "usd", // Required, must be lowercase
-      } as any, // Type assertion needed as SDK types may be incomplete
-      metadata: {
-        user_id: userId,
-        plan_type: planType, // 'premium-monthly' or 'premium-yearly'
-        company_id: appCompanyId, // App owner's company
-        experience_id: experienceId, // The whop company the user is accessing
-      },
-    });
-    
-    const checkoutConfig = checkoutConfiguration as any;
-    
-    console.log("Checkout created successfully:", {
-      id: checkoutConfig.id,
-      planId: checkoutConfig.plan_id || checkoutConfig.plan?.id,
-      plan: checkoutConfig.plan,
-    });
-    
-    // Return checkout ID and plan ID
-    if (!checkoutConfig.id) {
-      throw new Error("Invalid checkout configuration response: missing checkout ID");
+    // - company_id must be the app owner's company ID for payments to route correctly ✓
+    try {
+      const checkoutConfiguration = await whopsdk.checkoutConfigurations.create({
+        plan: {
+          company_id: appCompanyId, // App owner's company ID (biz_XXXXX) - CRITICAL for payment routing
+          initial_price: 0, // No initial fee for recurring plans
+          renewal_price: pricing.price, // Price in dollars per billing cycle ($19.99/month or $190/year)
+          plan_type: "renewal", // Required for recurring plans
+          billing_period: pricing.billingPeriod, // 30 days for monthly, 365 days for yearly (minimum 30 for monthly)
+          currency: "usd", // Required, must be lowercase
+        } as any, // Type assertion needed as SDK types may be incomplete
+        metadata: {
+          user_id: userId,
+          plan_type: planType, // 'premium-monthly' or 'premium-yearly'
+          company_id: appCompanyId, // App owner's company
+          experience_id: experienceId, // The whop company the user is accessing
+        },
+      });
+      
+      const checkoutConfig = checkoutConfiguration as any;
+      
+      console.log("Checkout created successfully:", {
+        id: checkoutConfig.id,
+        planId: checkoutConfig.plan_id || checkoutConfig.plan?.id,
+        plan: checkoutConfig.plan,
+        company_id: checkoutConfig.plan?.company_id || appCompanyId,
+      });
+      
+      // Return checkout ID and plan ID
+      if (!checkoutConfig.id) {
+        throw new Error("Invalid checkout configuration response: missing checkout ID");
+      }
+      
+      // Extract plan ID from response
+      const responsePlanId = checkoutConfig.plan_id || checkoutConfig.plan?.id;
+      
+      if (!responsePlanId) {
+        throw new Error("Invalid checkout configuration response: missing plan ID");
+      }
+      
+      return NextResponse.json({
+        checkoutId: checkoutConfig.id,
+        planId: responsePlanId,
+      });
+    } catch (checkoutError: any) {
+      console.error("Error creating checkout configuration:", checkoutError);
+      console.error("Checkout error details:", {
+        message: checkoutError?.message,
+        response: checkoutError?.response?.data,
+        status: checkoutError?.response?.status,
+        company_id: appCompanyId,
+        pricing,
+      });
+      throw checkoutError;
     }
-    
-    // Extract plan ID from response
-    const responsePlanId = checkoutConfig.plan_id || checkoutConfig.plan?.id;
-    
-    if (!responsePlanId) {
-      throw new Error("Invalid checkout configuration response: missing plan ID");
-    }
-    
-    return NextResponse.json({
-      checkoutId: checkoutConfig.id,
-      planId: responsePlanId,
-    });
     
   } catch (error) {
     console.error("Error creating checkout:", error);

@@ -100,13 +100,19 @@ export async function getFlowAnalytics(flowId: string, flowNodes: Array<{ id: st
 
     const sessions = (allSessions || []) as FlowSession[]
     const totalSessions = sessions.length
-    const completedSessions = sessions.filter(s => s.is_completed).length
+    // Only count sessions that are actually completed - never count completed sessions as dropped
+    const completedSessions = sessions.filter(s => s.is_completed === true).length
     const completionRate = totalSessions > 0 ? (completedSessions / totalSessions) * 100 : 0
 
     // Get completed sessions with their paths and responses
-    const completedSessionIds = sessions.filter(s => s.is_completed).map(s => s.id)
+    // IMPORTANT: Only include sessions that are explicitly marked as completed
+    // If a user completes the flow and then leaves, it should NOT count as dropped
+    const completedSessionIds = sessions.filter(s => s.is_completed === true).map(s => s.id)
     
-    const dropOffRate = totalSessions > 0 ? ((totalSessions - completedSessions) / totalSessions) * 100 : 0
+    // Calculate drop-off rate: only count incomplete sessions as dropped
+    // Completed sessions are never counted as dropped, even if user leaves after completion
+    const incompleteSessions = totalSessions - completedSessions
+    const dropOffRate = totalSessions > 0 ? (incompleteSessions / totalSessions) * 100 : 0
 
     if (completedSessionIds.length === 0) {
       return {

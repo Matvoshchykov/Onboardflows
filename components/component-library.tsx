@@ -73,7 +73,7 @@ type ComponentLibraryProps = {
 
 export function ComponentLibrary({ onDragStart, onAddComponent }: ComponentLibraryProps) {
   return (
-    <div style={{ zoom: '1', fontSize: '12px', isolation: 'isolate' }}>
+    <div style={{ zoom: '1', isolation: 'isolate', fontSize: '16px' }}>
       {components.map((component, index) => {
         const Icon = component.icon
         return (
@@ -92,21 +92,21 @@ export function ComponentLibrary({ onDragStart, onAddComponent }: ComponentLibra
             }}
             className="w-full text-left rounded-lg bg-card/40 backdrop-blur-sm hover:bg-card/70 transition-all duration-200 cursor-pointer border border-border/20"
             style={{ 
-              zoom: '1',
-              fontSize: '12px',
-              padding: '6px 8px',
+              padding: '6px',
               marginBottom: index < components.length - 1 ? '4px' : '0',
+              zoom: '1',
+              isolation: 'isolate',
               boxSizing: 'border-box',
-              isolation: 'isolate'
+              fontSize: '16px'
             }}
           >
-            <div className="flex items-center" style={{ gap: '6px', zoom: '1' }}>
-              <div className="bg-muted/40 rounded flex items-center justify-center flex-shrink-0" style={{ width: '14px', height: '14px', minWidth: '14px', minHeight: '14px', maxWidth: '14px', maxHeight: '14px', zoom: '1' }}>
-                <Icon style={{ width: '8px', height: '8px', minWidth: '8px', minHeight: '8px', maxWidth: '8px', maxHeight: '8px', zoom: '1' }} />
+            <div className="flex items-start" style={{ gap: '6px', zoom: '1', fontSize: '16px' }}>
+              <div className="bg-muted/40 rounded-md flex items-center justify-center flex-shrink-0" style={{ width: '20px', height: '20px', minWidth: '20px', minHeight: '20px', maxWidth: '20px', maxHeight: '20px', padding: '2px', zoom: '1', fontSize: '16px' }}>
+                <Icon style={{ width: '12px', height: '12px', minWidth: '12px', minHeight: '12px', maxWidth: '12px', maxHeight: '12px', zoom: '1', fontSize: '16px' }} />
               </div>
-              <div className="flex items-center" style={{ gap: '6px', flex: '1 1 0', minWidth: 0, zoom: '1' }}>
-                <h4 className="font-medium" style={{ fontSize: '12px', lineHeight: '1.2', margin: 0, padding: 0, flexShrink: 0, whiteSpace: 'nowrap', zoom: '1' }}>{component.title}</h4>
-                <span className="text-muted-foreground" style={{ fontSize: '11px', lineHeight: '1.2', margin: 0, padding: 0, whiteSpace: 'normal', zoom: '1' }}>{component.description}</span>
+              <div className="flex flex-col flex-1 min-w-0" style={{ zoom: '1', fontSize: '16px' }}>
+                <h4 className="font-medium leading-tight" style={{ fontSize: '10px', lineHeight: '1.2', margin: 0, marginBottom: '2px', padding: 0, zoom: '1', whiteSpace: 'nowrap' }}>{component.title}</h4>
+                <p className="text-muted-foreground leading-snug line-clamp-1" style={{ fontSize: '8px', lineHeight: '1.2', margin: 0, padding: 0, zoom: '1' }}>{component.description}</p>
               </div>
             </div>
           </button>

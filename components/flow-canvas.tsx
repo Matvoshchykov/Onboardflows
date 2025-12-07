@@ -10,6 +10,7 @@ import type { Flow, FlowNode } from "./flow-builder"
 import { LogicBlockLibrary } from "./logic-block-library"
 import { PagePreview } from "./page-preview"
 import { FlowAnalytics } from "./flow-analytics"
+import { ComponentLibrary } from "./component-library"
 
 import type { PageComponent, ComponentType } from "./page-editor"
 import { startFlowSession, updateSessionStep, completeFlowSession } from "@/lib/db/sessions"
@@ -197,7 +198,8 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
   const [flowNodeSizes, setFlowNodeSizes] = useState<Record<string, number>>({})
   const [lastCreatedBlockId, setLastCreatedBlockId] = useState<string | null>(null)
   const [showLogicLibrary, setShowLogicLibrary] = useState(true)
-  const [showComponentLibraryForNode, setShowComponentLibraryForNode] = useState<string | null>(null)
+  const [showComponentLibrary, setShowComponentLibrary] = useState(false)
+  const [componentLibraryNodeId, setComponentLibraryNodeId] = useState<string | null>(null)
   const [collapsedComponents, setCollapsedComponents] = useState<Record<string, boolean>>({})
   const [isLive, setIsLive] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -394,9 +396,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
       if (!target.closest('[data-variable-dropdown]')) {
         setShowVariableDropdown({})
       }
-      if (!target.closest('[data-component-library-dropdown]')) {
-        setShowComponentLibraryForNode(null)
-      }
+      // Don't close component library on canvas click - only close with X button
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
@@ -781,9 +781,13 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
   }
 
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
-    // Disable panning when component library dropdown is open
-    if (showComponentLibraryForNode !== null) {
-      return
+    // Allow panning even when component library is open
+    // (no longer disabling panning)
+    
+    // Don't close library on canvas interactions - only close with X button
+    // Check if clicking on the component library panel
+    if ((e.target as HTMLElement).closest('[data-component-library-panel]')) {
+      return // Let library handle its own events
     }
     
     // Only handle left mouse button
@@ -1653,7 +1657,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
     }
 
     onUpdateFlow(updatedFlow)
-    setShowComponentLibraryForNode(null)
+    // Don't close library - keep it open for multiple component additions
   }
 
   const handleUpdateComponent = (nodeId: string, componentId: string, config: Record<string, any>) => {
@@ -1720,10 +1724,8 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
   }
 
   const handleWheel = (e: React.WheelEvent) => {
-    // Disable zoom when component library dropdown is open
-    if (showComponentLibraryForNode !== null) {
-      return
-    }
+    // Allow zoom even when component library is open
+    // (no longer disabling zoom)
     
     e.preventDefault()
     
@@ -2301,9 +2303,9 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
                   : 'cursor-not-allowed'
               }`}
               style={{
-                backgroundColor: hasUnsavedChanges ? 'rgba(245, 158, 11, 0.225)' : '#3b82f6',
-                color: hasUnsavedChanges ? '#f59e0b' : '#ffffff',
-                border: hasUnsavedChanges ? '1px solid rgba(245, 158, 11, 0.75)' : '1px solid #3b82f6',
+                backgroundColor: hasUnsavedChanges ? 'rgba(245, 158, 11, 0.225)' : 'rgba(16, 185, 129, 0.225)',
+                color: hasUnsavedChanges ? '#f59e0b' : '#10b981',
+                border: hasUnsavedChanges ? '1px solid rgba(245, 158, 11, 0.75)' : '1px solid rgba(16, 185, 129, 0.75)',
                 minWidth: isMobile ? '60px' : '170px',
                 minHeight: isMobile ? '41.31px' : '32.13px',
                 padding: isMobile ? '0 16px' : '0 12px',
@@ -2341,6 +2343,80 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
       </header>
 
       <div className="flex flex-1 overflow-hidden">
+        {/* Component Library Panel - Fixed on left side of canvas */}
+        {showComponentLibrary && (
+          <div 
+            data-component-library-panel
+            className="w-64 bg-card border-r border-border shadow-lg flex flex-col z-40 pointer-events-auto"
+            style={{ 
+              height: '100%',
+              maxHeight: '100vh',
+              minWidth: '256px'
+            }}
+            onMouseDown={(e) => {
+              // Only stop propagation for clicks inside the library panel itself
+              // Allow events to bubble for canvas interactions outside the panel
+              if (e.target === e.currentTarget || (e.currentTarget as HTMLElement).contains(e.target as Node)) {
+                // Only stop if clicking directly on the panel or its children
+                // But allow canvas interactions to work normally
+              }
+            }}
+            onClick={(e) => {
+              // Stop propagation only for clicks on buttons/links inside the library
+              const target = e.target as HTMLElement
+              if (target.closest('button') || target.closest('a')) {
+                e.stopPropagation()
+              }
+            }}
+          >
+            <div className="p-4 border-b border-border flex items-center justify-between bg-card/50 backdrop-blur-sm">
+              <h3 className="text-sm font-semibold text-foreground">Component Library</h3>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowComponentLibrary(false)
+                  setComponentLibraryNodeId(null)
+                }}
+                className="p-1.5 rounded-lg hover:bg-muted transition-colors flex items-center justify-center"
+                title="Close library"
+              >
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+            <div 
+              className="flex-1 overflow-y-auto p-3 space-y-1" 
+              style={{ 
+                scrollbarWidth: 'thin',
+                scrollbarColor: 'var(--muted) transparent'
+              }}
+              onWheel={(e) => {
+                // Only stop wheel events if we're actually scrolling the library
+                // Allow wheel events to pass through to canvas for zooming
+                const element = e.currentTarget
+                const isAtTop = element.scrollTop === 0
+                const isAtBottom = element.scrollHeight - element.scrollTop === element.clientHeight
+                
+                // If scrolling up at top or down at bottom, allow event to bubble for canvas zoom
+                if ((e.deltaY < 0 && isAtTop) || (e.deltaY > 0 && isAtBottom)) {
+                  // Don't stop propagation - allow canvas to handle zoom
+                } else {
+                  // Stop propagation only when actually scrolling the library content
+                  e.stopPropagation()
+                }
+              }}
+            >
+              <ComponentLibrary 
+                onAddComponent={(type) => {
+                  if (componentLibraryNodeId) {
+                    handleAddComponent(componentLibraryNodeId, type)
+                    // Don't close library after adding - keep it open for multiple additions
+                  }
+                }}
+              />
+            </div>
+          </div>
+        )}
+        
         <div
           ref={canvasRef}
             className={`flex-1 bg-background relative overflow-hidden touch-none ${
@@ -2724,7 +2800,7 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
                   isMobile={isMobile}
                   theme={theme}
                   collapsed={!!collapsedComponents[node.id]}
-                  showComponentLibrary={showComponentLibraryForNode === node.id}
+                  showComponentLibrary={false}
                   onMouseDown={handleNodeMouseDown}
                   onStartConnection={handleStartConnection}
                   onEndConnection={handleEndConnection}
@@ -2773,7 +2849,13 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
                     }))
                   }}
                   onToggleComponentLibrary={() => {
-                    setShowComponentLibraryForNode(prev => prev === node.id ? null : node.id)
+                    if (showComponentLibrary && componentLibraryNodeId === node.id) {
+                      setShowComponentLibrary(false)
+                      setComponentLibraryNodeId(null)
+                    } else {
+                      setShowComponentLibrary(true)
+                      setComponentLibraryNodeId(node.id)
+                    }
                   }}
                   onAddComponent={(type) => handleAddComponent(node.id, type)}
                   onUpdateComponent={(id, config) => handleUpdateComponent(node.id, id, config)}
@@ -3521,20 +3603,31 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
                 onClick={async () => {
                   if (!suggestionText.trim()) return
                   try {
+                    const expId = experienceId || null
                     const response = await fetch('/api/suggestions', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ message: suggestionText, experienceId })
+                      body: JSON.stringify({ 
+                        message: suggestionText.trim(), 
+                        experienceId: expId 
+                      })
                     })
                     if (response.ok) {
-                      toast.success('Thank you for your suggestion!')
-                      setShowSuggestionModal(false)
-                      setSuggestionText("")
+                      const result = await response.json()
+                      if (result.success) {
+                        toast.success('Thank you for your suggestion!')
+                        setShowSuggestionModal(false)
+                        setSuggestionText("")
+                      } else {
+                        toast.error(result.error || 'Failed to send suggestion')
+                      }
                     } else {
-                      toast.error('Failed to send suggestion')
+                      const errorData = await response.json().catch(() => ({}))
+                      toast.error(errorData.error || 'Failed to send suggestion')
                     }
                   } catch (error) {
-                    toast.error('Failed to send suggestion')
+                    console.error('Error sending suggestion:', error)
+                    toast.error('Failed to send suggestion. Please try again.')
                   }
                 }}
                 disabled={!suggestionText.trim()}

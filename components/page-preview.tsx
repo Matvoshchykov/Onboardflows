@@ -53,13 +53,36 @@ export function PagePreview({
           viewMode === "desktop" ? "w-full" : "w-full max-w-md mx-auto"
         }`}
       >
-        <div className="flex flex-col items-center" style={{ gap: '10px' }}>
+        <div className={`flex flex-col items-center ${previewMode || isMobile ? '' : ''}`} style={previewMode || isMobile ? {} : { gap: '10px' }}>
           {components.length === 0 ? (
             <div className="flex items-center justify-center h-64 text-muted-foreground">
               Drag components here to build your page
             </div>
+          ) : previewMode || isMobile ? (
+            // In preview/real flow: combine all components into one big card
+            <div
+              className="relative group rounded-xl p-4 sm:p-6 bg-card shadow-neumorphic-raised w-full flex flex-col overflow-visible"
+              style={{ maxWidth: '840px', gap: '10px' }}
+            >
+              {components.map((component, index) => (
+                <div
+                  key={component.id}
+                  data-preview-component={index === 0 ? 'first' : undefined}
+                  className="w-full"
+                >
+                  <ComponentRenderer 
+                    component={component} 
+                    onUpdateComponent={undefined}
+                    isMobile={isMobile}
+                    isPreviewMode={previewMode}
+                    onVideoWatched={onVideoWatched}
+                    onVideoTimeUpdate={onVideoTimeUpdate}
+                  />
+                </div>
+              ))}
+            </div>
           ) : (
-            // Separate cards for both editor and preview mode
+            // Editor mode: separate cards for each component
             components.map((component, index) => (
               <div
                 key={component.id}
@@ -1587,7 +1610,7 @@ export function ComponentRenderer({
           ) : (
             // Only render title if it exists and is not empty - bold, bigger font, and gray in preview/real flow
             config.title && typeof config.title === 'string' && config.title.trim().length > 0 && (
-              <h2 className={`text-2xl font-bold text-muted-foreground ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`} style={{ fontWeight: '700' }}>
+              <h2 className={`font-bold text-muted-foreground ${alignmentClasses[alignment as keyof typeof alignmentClasses]}`} style={{ fontWeight: '700', fontSize: '46px' }}>
                 {config.title}
               </h2>
             )
