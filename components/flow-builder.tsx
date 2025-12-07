@@ -284,8 +284,11 @@ export default function FlowBuilder({
               return
             }
             
-            // Delete from database
-            const success = await (deleteFlow as any)(flowToDelete.id, expId)
+            // Delete from database (with flow data for file cleanup)
+            const success = await (deleteFlow as any)(flowToDelete.id, expId, {
+              flow_data: flowToDelete,
+              icon_url: flowToDelete.icon_url
+            })
             if (success) {
               // Remove from local state
               setFlows(flows.filter(f => f.id !== flowToDelete.id))
@@ -295,7 +298,7 @@ export default function FlowBuilder({
                 setSelectedFlow(null)
               }
               
-              toast.success(`Flow "${flowToDelete.title}" deleted`)
+              toast.success(`Flow "${flowToDelete.title}" and all associated data deleted`)
             } else {
               toast.error('Failed to delete flow')
             }

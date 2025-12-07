@@ -20,9 +20,11 @@ type FlowButtonProps = {
   isSelected: boolean
   onSelect: () => void
   onDelete: (flow: Flow) => void
+  showDeleteConfirm: Flow | null
+  setShowDeleteConfirm: (flow: Flow | null) => void
 }
 
-function FlowButton({ flow, isSelected, onSelect, onDelete }: FlowButtonProps) {
+function FlowButton({ flow, isSelected, onSelect, onDelete, showDeleteConfirm, setShowDeleteConfirm }: FlowButtonProps) {
   const [imageError, setImageError] = useState(false)
   const [showTooltip, setShowTooltip] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
@@ -65,9 +67,7 @@ function FlowButton({ flow, isSelected, onSelect, onDelete }: FlowButtonProps) {
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (window.confirm(`Are you sure you want to delete "${flow.title}"? This action cannot be undone.`)) {
-      onDelete(flow)
-    }
+    setShowDeleteConfirm(flow)
   }
 
   return (
@@ -152,6 +152,7 @@ export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, onDel
   // Sidebar is always expanded now (no collapse functionality)
   const [expandedFolders, setExpandedFolders] = useState<string[]>(["indicators"])
   const [showNewIndicatorPopup, setShowNewIndicatorPopup] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<Flow | null>(null)
 
   const toggleFolder = (folder: string) => {
     setExpandedFolders((prev) =>
@@ -217,9 +218,50 @@ export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, onDel
             isSelected={selectedFlow?.id === flow.id}
             onSelect={() => onSelectFlow(flow)}
             onDelete={onDeleteFlow}
+            showDeleteConfirm={showDeleteConfirm}
+            setShowDeleteConfirm={setShowDeleteConfirm}
           />
         ))}
       </div>
+
+      {/* Delete Flow Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]" onClick={() => setShowDeleteConfirm(null)}>
+          <div 
+            className="bg-card rounded-xl p-6 max-w-md w-full mx-4 shadow-neumorphic-raised border border-border"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-foreground mb-2">Delete Flow</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              This action cannot be undone. The flow "<strong>{showDeleteConfirm.title}</strong>" and all associated data will be permanently deleted, including:
+            </p>
+            <ul className="text-sm text-muted-foreground mb-4 list-disc list-inside space-y-1">
+              <li>All flow blocks and components</li>
+              <li>All user sessions and responses</li>
+              <li>All analytics data</li>
+              <li>All images, videos, and files</li>
+              <li>Flow icon and metadata</li>
+            </ul>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(null)}
+                className="px-4 py-2 rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 transition-colors text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  await onDeleteFlow(showDeleteConfirm)
+                  setShowDeleteConfirm(null)
+                }}
+                className="px-4 py-2 rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors text-sm font-medium"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       </div>
     </>

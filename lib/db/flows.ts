@@ -438,10 +438,64 @@ export async function createFlow(title: string, experienceId: string, iconUrl?: 
 }
 
 /**
- * Delete a flow from the database
+ * Delete a flow from the database and all associated data
  */
-export async function deleteFlow(flowId: string, experienceId: string): Promise<boolean> {
+export async function deleteFlow(flowId: string, experienceId: string, flowData?: any): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase) {
+    console.warn('Supabase not configured, cannot delete flow')
+    return false
+  }
+
   try {
+    // First, load the flow to get its data (if not provided)
+    let flowToDelete = flowData
+    if (!flowToDelete) {
+      const { data, error: fetchError } = await supabase
+        .from('flows')
+        .select('flow_data, icon_url')
+        .eq('id', flowId)
+        .eq('experience_id', experienceId)
+        .single()
+
+      if (fetchError) {
+        console.error('Error fetching flow for deletion:', fetchError)
+        return false
+      }
+
+      flowToDelete = data
+    }
+
+    // Delete flow icon from storage if it exists
+    if (flowToDelete?.icon_url && typeof flowToDelete.icon_url === 'string' && flowToDelete.icon_url.startsWith('http')) {
+      const { deleteFileFromStorage } = await import('@/lib/utils')
+      await deleteFileFromStorage(flowToDelete.icon_url, 'uploads')
+    }
+
+    // Delete all component files (images, videos) from all nodes
+    if (flowToDelete?.flow_data?.nodes) {
+      const { deleteComponentFiles } = await import('@/lib/utils')
+      const deletePromises: Promise<void>[] = []
+      
+      for (const node of flowToDelete.flow_data.nodes) {
+        if (node.pageComponents) {
+          // Handle both array and object formats
+          const components = Array.isArray(node.pageComponents) 
+            ? node.pageComponents 
+            : Object.values(node.pageComponents).filter(Boolean)
+          
+          for (const component of components) {
+            if (component && component.type) {
+              deletePromises.push(deleteComponentFiles(component))
+            }
+          }
+        }
+      }
+      
+      // Delete all component files in parallel
+      await Promise.all(deletePromises)
+    }
+
+    // Delete the flow record (this will cascade delete sessions, responses, and paths due to ON DELETE CASCADE)
     const { error } = await supabase
       .from('flows')
       .delete()
@@ -453,6 +507,9 @@ export async function deleteFlow(flowId: string, experienceId: string): Promise<
       console.error('Error deleting flow:', error)
       return false
     }
+
+    // Clear cache
+    flowCache.delete(flowId)
 
     return true
   } catch (error) {
