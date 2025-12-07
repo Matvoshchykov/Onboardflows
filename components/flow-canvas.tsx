@@ -2301,9 +2301,9 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
                   : 'cursor-not-allowed'
               }`}
               style={{
-                backgroundColor: '#3b82f6',
-                color: '#ffffff',
-                border: '1px solid #3b82f6',
+                backgroundColor: hasUnsavedChanges ? 'rgba(245, 158, 11, 0.225)' : '#3b82f6',
+                color: hasUnsavedChanges ? '#f59e0b' : '#ffffff',
+                border: hasUnsavedChanges ? '1px solid rgba(245, 158, 11, 0.75)' : '1px solid #3b82f6',
                 minWidth: isMobile ? '80px' : '190px',
                 minHeight: isMobile ? '41.31px' : '32.13px',
                 padding: isMobile ? '0 16px' : '0 12px',

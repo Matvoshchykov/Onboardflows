@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Plus, FileText } from 'lucide-react'
+import { Plus, FileText, Trash2 } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import type { Flow } from "./flow-builder"
 
@@ -10,6 +10,7 @@ type SidebarProps = {
   selectedFlow: Flow | null
   onSelectFlow: (flow: Flow) => void
   onCreateFlow: () => void
+  onDeleteFlow: (flow: Flow) => void
   isCollapsed: boolean
   onToggleCollapse: () => void
 }
@@ -18,9 +19,10 @@ type FlowButtonProps = {
   flow: Flow
   isSelected: boolean
   onSelect: () => void
+  onDelete: (flow: Flow) => void
 }
 
-function FlowButton({ flow, isSelected, onSelect }: FlowButtonProps) {
+function FlowButton({ flow, isSelected, onSelect, onDelete }: FlowButtonProps) {
   const [imageError, setImageError] = useState(false)
   const [showTooltip, setShowTooltip] = useState(false)
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 })
@@ -35,6 +37,13 @@ function FlowButton({ flow, isSelected, onSelect }: FlowButtonProps) {
       })
     }
     setShowTooltip(true)
+  }
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (window.confirm(`Are you sure you want to delete "${flow.title}"? This action cannot be undone.`)) {
+      onDelete(flow)
+    }
   }
 
   return (
@@ -69,6 +78,18 @@ function FlowButton({ flow, isSelected, onSelect }: FlowButtonProps) {
               <FileText className="text-neutral-500 dark:text-neutral-400" style={{ width: '15px', height: '15px' }} />
             </div>
           )}
+          {/* Delete button - red trash icon overlapping top right */}
+          <button
+            onClick={handleDelete}
+            className="absolute top-0 right-0 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors z-10"
+            style={{
+              transform: 'translate(25%, -25%)',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+            }}
+            title={`Delete ${flow.title}`}
+          >
+            <Trash2 className="w-2.5 h-2.5 text-white" />
+          </button>
         </button>
       </div>
       {/* Tooltip on hover - sleek small card */}
@@ -92,7 +113,7 @@ function FlowButton({ flow, isSelected, onSelect }: FlowButtonProps) {
   )
 }
 
-export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, isCollapsed, onToggleCollapse }: SidebarProps) {
+export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, onDeleteFlow, isCollapsed, onToggleCollapse }: SidebarProps) {
   // Sidebar is always expanded now (no collapse functionality)
   const [expandedFolders, setExpandedFolders] = useState<string[]>(["indicators"])
   const [showNewIndicatorPopup, setShowNewIndicatorPopup] = useState(false)
@@ -160,6 +181,7 @@ export function Sidebar({ flows, selectedFlow, onSelectFlow, onCreateFlow, isCol
             flow={flow}
             isSelected={selectedFlow?.id === flow.id}
             onSelect={() => onSelectFlow(flow)}
+            onDelete={onDeleteFlow}
           />
         ))}
       </div>

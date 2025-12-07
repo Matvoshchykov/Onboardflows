@@ -8,7 +8,7 @@ import { ChatModal } from "./chat-modal"
 import { FlowLoading } from "./flow-loading"
 import { UpgradeModal } from "./upgrade-modal"
 import { UpgradeLimitPopup } from "./upgrade-limit-popup"
-import { loadAllFlows, createFlow, saveFlow, toggleFlowActive } from "@/lib/db/flows"
+import { loadAllFlows, createFlow, saveFlow, toggleFlowActive, deleteFlow } from "@/lib/db/flows"
 import { isSupabaseConfigured } from "@/lib/supabase"
 import { toast } from "sonner"
 import type { PageComponent } from "./page-editor"
@@ -276,6 +276,34 @@ export default function FlowBuilder({
           }
         }}
         onCreateFlow={() => setShowChatModal(true)}
+        onDeleteFlow={async (flowToDelete) => {
+          try {
+            const expId = currentExperienceId || propExperienceId || (params?.experienceId as string)
+            if (!expId) {
+              toast.error('Experience ID not found. Cannot delete flow.')
+              return
+            }
+            
+            // Delete from database
+            const success = await (deleteFlow as any)(flowToDelete.id, expId)
+            if (success) {
+              // Remove from local state
+              setFlows(flows.filter(f => f.id !== flowToDelete.id))
+              
+              // If deleted flow was selected, clear selection
+              if (selectedFlow?.id === flowToDelete.id) {
+                setSelectedFlow(null)
+              }
+              
+              toast.success(`Flow "${flowToDelete.title}" deleted`)
+            } else {
+              toast.error('Failed to delete flow')
+            }
+          } catch (error) {
+            console.error('Error deleting flow:', error)
+            toast.error('Failed to delete flow')
+          }
+        }}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
