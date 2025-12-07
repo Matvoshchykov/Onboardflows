@@ -472,7 +472,7 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
         )}
       </div>
       
-      {/* Component Library Dropdown - Rendered via Portal to appear above everything - Fixed size regardless of zoom */}
+      {/* Component Library Dropdown - Rendered via Portal to appear above everything - Matches flow block width, fixed font size regardless of zoom */}
       {showComponentLibrary && dropdownPosition && typeof window !== 'undefined' && createPortal(
         <div 
           data-component-library-dropdown
@@ -481,7 +481,7 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
             zIndex: 2147483647, // Maximum z-index value
             top: `${dropdownPosition.top}px`,
             left: `${dropdownPosition.left}px`,
-            width: '320px', // Fixed width that doesn't change with zoom
+            width: `${dropdownPosition.width}px`, // Matches flow block width
             transform: 'translateX(-50%)', // Center horizontally
             position: 'fixed',
             pointerEvents: 'auto',
