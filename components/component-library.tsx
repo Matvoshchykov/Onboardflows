@@ -96,16 +96,17 @@ export function ComponentLibrary({ onDragStart, onAddComponent }: ComponentLibra
               transform: 'scale(1)',
               fontSize: '12px',
               padding: '6px 8px',
-              marginBottom: index < components.length - 1 ? '4px' : '0'
+              marginBottom: index < components.length - 1 ? '4px' : '0',
+              whiteSpace: 'nowrap'
             }}
           >
-            <div className="flex items-center gap-1.5" style={{ gap: '6px' }}>
+            <div className="flex items-center" style={{ gap: '6px' }}>
               <div className="bg-muted/40 rounded flex items-center justify-center flex-shrink-0" style={{ width: '14px', height: '14px', minWidth: '14px', minHeight: '14px', maxWidth: '14px', maxHeight: '14px' }}>
                 <Icon style={{ width: '8px', height: '8px', minWidth: '8px', minHeight: '8px', maxWidth: '8px', maxHeight: '8px' }} />
               </div>
-              <div className="flex-1 min-w-0" style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
-                <h4 className="font-medium truncate" style={{ fontSize: '12px', lineHeight: '1.2', margin: 0, padding: 0, flexShrink: 0 }}>{component.title}</h4>
-                <span className="text-muted-foreground truncate" style={{ fontSize: '11px', lineHeight: '1.2', margin: 0, padding: 0, flex: '1 1 0', minWidth: 0 }}>{component.description}</span>
+              <div className="flex items-center" style={{ gap: '6px', flex: '1 1 0', minWidth: 0, overflow: 'visible' }}>
+                <h4 className="font-medium" style={{ fontSize: '12px', lineHeight: '1.2', margin: 0, padding: 0, flexShrink: 0, whiteSpace: 'nowrap' }}>{component.title}</h4>
+                <span className="text-muted-foreground" style={{ fontSize: '11px', lineHeight: '1.2', margin: 0, padding: 0, whiteSpace: 'nowrap', overflow: 'visible' }}>{component.description}</span>
               </div>
             </div>
           </button>
