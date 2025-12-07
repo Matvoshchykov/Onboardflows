@@ -103,29 +103,29 @@ function FlowButton({ flow, isSelected, onSelect, onDelete, showDeleteConfirm, s
               <FileText className="text-neutral-500 dark:text-neutral-400" style={{ width: '15px', height: '15px' }} />
             </div>
           )}
-          {/* Delete button - red trash icon overlapping top right, only visible on hover */}
-          {isHovered && (
-            <button
-              onClick={handleDelete}
-              className="absolute rounded-full flex items-center justify-center shadow-lg hover:opacity-90 transition-all"
-              style={{
-                top: '-4px',
-                right: '-4px',
-                width: '18px',
-                height: '18px',
-                backgroundColor: isDarkTheme ? '#f5f5f5' : '#1a1a1a', // Opposite of theme
-                boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-                opacity: isHovered ? 1 : 0,
-                transition: 'opacity 0.2s ease-in-out',
-                zIndex: 100000,
-                position: 'absolute'
-              }}
-              title={`Delete ${flow.title}`}
-            >
-              <Trash2 className="w-2.5 h-2.5" style={{ color: '#ef4444' }} />
-            </button>
-          )}
         </button>
+        {/* Delete button - red trash icon overlapping top right, only visible on hover - positioned outside button to avoid nesting */}
+        {isHovered && (
+          <button
+            onClick={handleDelete}
+            className="absolute rounded-full flex items-center justify-center shadow-lg hover:opacity-90 transition-all"
+            style={{
+              top: '-4px',
+              right: '-4px',
+              width: '18px',
+              height: '18px',
+              backgroundColor: isDarkTheme ? '#f5f5f5' : '#1a1a1a', // Opposite of theme
+              boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+              opacity: isHovered ? 1 : 0,
+              transition: 'opacity 0.2s ease-in-out',
+              zIndex: 100000,
+              position: 'absolute'
+            }}
+            title={`Delete ${flow.title}`}
+          >
+            <Trash2 className="w-2.5 h-2.5" style={{ color: '#ef4444' }} />
+          </button>
+        )}
       </div>
       {/* Tooltip on hover - sleek small card */}
       {showTooltip && (
