@@ -73,7 +73,7 @@ type ComponentLibraryProps = {
 
 export function ComponentLibrary({ onDragStart, onAddComponent }: ComponentLibraryProps) {
   return (
-    <div className="space-y-0.5" style={{ zoom: '1', transform: 'scale(1)' }}>
+    <div className="space-y-0.5" style={{ zoom: '1', transform: 'scale(1)', fontSize: '12px' }}>
       {components.map((component) => {
         const Icon = component.icon
         return (
@@ -91,15 +91,20 @@ export function ComponentLibrary({ onDragStart, onAddComponent }: ComponentLibra
               }
             }}
             className="w-full text-left px-1.5 py-1 rounded-lg bg-card/40 backdrop-blur-sm hover:bg-card/70 transition-all duration-200 cursor-pointer border border-border/20 overflow-hidden"
-            style={{ zoom: '1', transform: 'scale(1)' }}
+            style={{ 
+              zoom: '1', 
+              transform: 'scale(1)',
+              fontSize: '12px',
+              lineHeight: '1.2'
+            }}
           >
             <div className="flex items-center gap-1.5">
-              <div className="w-3.5 h-3.5 bg-muted/40 rounded flex items-center justify-center flex-shrink-0" style={{ width: '14px', height: '14px' }}>
-                <Icon className="w-2 h-2" style={{ width: '8px', height: '8px' }} />
+              <div className="w-3.5 h-3.5 bg-muted/40 rounded flex items-center justify-center flex-shrink-0" style={{ width: '14px', height: '14px', minWidth: '14px', minHeight: '14px' }}>
+                <Icon className="w-2 h-2" style={{ width: '8px', height: '8px', minWidth: '8px', minHeight: '8px' }} />
               </div>
               <div className="flex-1 min-w-0 overflow-hidden">
-                <h4 className="font-medium leading-tight truncate mb-0.5" style={{ fontSize: '8px' }}>{component.title}</h4>
-                <p className="text-muted-foreground leading-tight truncate" style={{ fontSize: '7px' }}>{component.description}</p>
+                <h4 className="font-medium leading-tight truncate mb-0.5" style={{ fontSize: '12px', lineHeight: '1.2' }}>{component.title}</h4>
+                <p className="text-muted-foreground leading-tight truncate" style={{ fontSize: '11px', lineHeight: '1.2' }}>{component.description}</p>
               </div>
             </div>
           </button>
