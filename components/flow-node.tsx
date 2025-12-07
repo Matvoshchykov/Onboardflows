@@ -8,7 +8,7 @@ import type { PageComponent, ComponentType } from "./page-editor"
 import { ComponentLibrary } from "./component-library"
 import { ComponentRenderer } from "./page-preview"
 
-// Flow block colors - same as analytics for consistency
+// Flow block colors - expanded palette for more distinctive unique colors
 const FLOW_BLOCK_COLORS = [
   "#10b981", // green
   "#3b82f6", // blue
@@ -18,6 +18,14 @@ const FLOW_BLOCK_COLORS = [
   "#ec4899", // pink
   "#06b6d4", // cyan
   "#14b8a6", // teal
+  "#f97316", // orange
+  "#22c55e", // emerald
+  "#6366f1", // indigo
+  "#a855f7", // violet
+  "#eab308", // yellow
+  "#84cc16", // lime
+  "#0ea5e9", // sky
+  "#64748b", // slate
 ]
 
 // Get unique color for a flow block based on its index

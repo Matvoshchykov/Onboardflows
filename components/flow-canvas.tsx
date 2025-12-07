@@ -2298,17 +2298,18 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
               className={`font-medium transition-all duration-300 flex items-center justify-center shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed touch-manipulation ${
                 hasUnsavedChanges && !isSaving
                   ? 'cursor-pointer'
-                  : 'cursor-not-allowed opacity-50'
+                  : 'cursor-not-allowed'
               }`}
               style={{
-                backgroundColor: hasUnsavedChanges ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.375)',
-                color: hasUnsavedChanges ? '#f59e0b' : '#10b981',
-                border: hasUnsavedChanges ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid rgba(16, 185, 129, 0.75)',
+                backgroundColor: '#3b82f6',
+                color: '#ffffff',
+                border: '1px solid #3b82f6',
                 minWidth: isMobile ? '80px' : '190px',
                 minHeight: isMobile ? '41.31px' : '32.13px',
                 padding: isMobile ? '0 16px' : '0 12px',
                 fontSize: isMobile ? '0.75rem' : '0.827rem',
-                borderRadius: '16px'
+                borderRadius: '16px',
+                opacity: 1
               }}
               title={hasUnsavedChanges ? "Unsaved changes" : "All changes saved"}
             >

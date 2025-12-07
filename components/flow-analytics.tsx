@@ -12,7 +12,7 @@ type FlowAnalyticsProps = {
   membershipActive?: boolean
 }
 
-// Connection colors matching flow canvas
+// Connection colors matching flow canvas - expanded palette for more distinctive unique colors
 const CONNECTION_COLORS = [
   "#10b981", // green (default)
   "#3b82f6", // blue
@@ -22,9 +22,17 @@ const CONNECTION_COLORS = [
   "#ec4899", // pink
   "#06b6d4", // cyan
   "#14b8a6", // teal
+  "#f97316", // orange
+  "#22c55e", // emerald
+  "#6366f1", // indigo
+  "#a855f7", // violet
+  "#eab308", // yellow
+  "#84cc16", // lime
+  "#0ea5e9", // sky
+  "#64748b", // slate
 ]
 
-const CHART_COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#14b8a6"]
+const CHART_COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#14b8a6", "#f97316", "#22c55e", "#6366f1", "#a855f7", "#eab308", "#84cc16", "#0ea5e9", "#64748b"]
 
 // Get color for a node based on its index in the flow
 const getNodeColor = (nodeId: string, flowNodes: Array<{ id: string; title: string }>): string => {
@@ -406,17 +414,18 @@ export function FlowAnalytics({ flow, membershipActive = false }: FlowAnalyticsP
       <button
         onClick={membershipActive ? exportToCSV : () => setShowUpgradeModal(true)}
         disabled={membershipActive && (!analytics || analytics.sessions.length === 0)}
-        className="fixed right-4 z-50 font-medium transition-all duration-300 flex items-center justify-center shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+        className="fixed right-4 z-50 font-medium transition-all duration-300 flex items-center justify-center shadow-neumorphic-raised hover:shadow-neumorphic-pressed active:shadow-neumorphic-pressed touch-manipulation disabled:cursor-not-allowed"
         style={{
           top: 'calc(3.5rem + 8px - 50px)',
-          backgroundColor: 'rgba(16, 185, 129, 0.375)',
-          color: '#10b981',
-          border: '1px solid rgba(16, 185, 129, 0.75)',
+          backgroundColor: '#3b82f6',
+          color: '#ffffff',
+          border: '1px solid #3b82f6',
           minWidth: isMobile ? '80px' : '190px',
           minHeight: isMobile ? '41.31px' : '32.13px',
           padding: isMobile ? '0 16px' : '0 12px',
           fontSize: isMobile ? '0.75rem' : '0.827rem',
-          borderRadius: '16px'
+          borderRadius: '16px',
+          opacity: membershipActive && analytics && analytics.sessions.length > 0 ? 1 : 0.7
         }}
         title={!membershipActive ? "Premium only - Upgrade to export" : "Export CSV"}
       >
