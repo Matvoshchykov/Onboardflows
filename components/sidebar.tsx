@@ -65,9 +65,10 @@ function FlowButton({ flow, isSelected, onSelect, onDelete }: FlowButtonProps) {
           ref={buttonRef}
           onClick={onSelect}
           className={cn(
-            "w-full aspect-square rounded-xl p-0 shadow-[4px_4px_8px_rgba(0,0,0,0.1),-4px_-4px_8px_rgba(255,255,255,0.9)] dark:shadow-[4px_4px_8px_rgba(0,0,0,0.4),-4px_-4px_8px_rgba(255,255,255,0.02)] transition-all hover:shadow-[2px_2px_4px_rgba(0,0,0,0.05),-2px_-2px_4px_rgba(255,255,255,0.8)] dark:hover:shadow-[2px_2px_4px_rgba(0,0,0,0.3),-2px_-2px_4px_rgba(255,255,255,0.01)] cursor-pointer flex items-center justify-center relative overflow-hidden",
+            "w-full aspect-square rounded-xl p-0 shadow-[4px_4px_8px_rgba(0,0,0,0.1),-4px_-4px_8px_rgba(255,255,255,0.9)] dark:shadow-[4px_4px_8px_rgba(0,0,0,0.4),-4px_-4px_8px_rgba(255,255,255,0.02)] transition-all hover:shadow-[2px_2px_4px_rgba(0,0,0,0.05),-2px_-2px_4px_rgba(255,255,255,0.8)] dark:hover:shadow-[2px_2px_4px_rgba(0,0,0,0.3),-2px_-2px_4px_rgba(255,255,255,0.01)] cursor-pointer flex items-center justify-center relative",
             isSelected && "shadow-[inset_4px_4px_8px_rgba(0,0,0,0.1),inset_-4px_-4px_8px_rgba(255,255,255,0.9)] dark:shadow-[inset_4px_4px_8px_rgba(0,0,0,0.4),inset_-4px_-4px_8px_rgba(255,255,255,0.02)]"
           )}
+          style={{ overflow: 'visible' }}
         >
           {flow.icon_url && !imageError ? (
             <img
@@ -89,16 +90,21 @@ function FlowButton({ flow, isSelected, onSelect, onDelete }: FlowButtonProps) {
           {isHovered && (
             <button
               onClick={handleDelete}
-              className="absolute top-0 right-0 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-all z-10"
+              className="absolute bg-red-500 rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-all"
               style={{
-                transform: 'translate(25%, -25%)',
+                top: '-2px',
+                right: '-2px',
+                width: '16px',
+                height: '16px',
                 boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
                 opacity: isHovered ? 1 : 0,
-                transition: 'opacity 0.2s ease-in-out'
+                transition: 'opacity 0.2s ease-in-out',
+                zIndex: 100000,
+                position: 'absolute'
               }}
               title={`Delete ${flow.title}`}
             >
-              <Trash2 className="w-2.5 h-2.5 text-white" />
+              <Trash2 className="w-2.5 h-2.5 text-white" style={{ color: '#ffffff' }} />
             </button>
           )}
         </button>
