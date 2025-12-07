@@ -482,7 +482,7 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
             top: `${dropdownPosition.top}px`,
             left: `${dropdownPosition.left}px`,
             width: `${dropdownPosition.width}px`, // Matches flow block width
-            transform: 'translateX(-50%)', // Center horizontally
+            transform: 'translateX(-50%) scale(1)', // Center horizontally, force scale 1
             position: 'fixed',
             pointerEvents: 'auto',
             zoom: '1', // CRITICAL: Prevents browser zoom from affecting this element
@@ -491,7 +491,8 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
             fontSize: '12px', // Fixed font size - never changes
             padding: '12px', // Fixed padding
             overflow: 'visible', // No scrolling - show all items
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            isolation: 'isolate' // Create new stacking context to isolate from zoom
           }}
         >
           <ComponentLibrary 
