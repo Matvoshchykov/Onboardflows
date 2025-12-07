@@ -25,10 +25,12 @@ type FlowButtonProps = {
 function FlowButton({ flow, isSelected, onSelect, onDelete }: FlowButtonProps) {
   const [imageError, setImageError] = useState(false)
   const [showTooltip, setShowTooltip] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 })
   const buttonRef = useRef<HTMLButtonElement>(null)
 
   const handleMouseEnter = () => {
+    setIsHovered(true)
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
       setTooltipPosition({
@@ -37,6 +39,11 @@ function FlowButton({ flow, isSelected, onSelect, onDelete }: FlowButtonProps) {
       })
     }
     setShowTooltip(true)
+  }
+
+  const handleMouseLeave = () => {
+    setIsHovered(false)
+    setShowTooltip(false)
   }
 
   const handleDelete = (e: React.MouseEvent) => {
@@ -52,7 +59,7 @@ function FlowButton({ flow, isSelected, onSelect, onDelete }: FlowButtonProps) {
         className="relative" 
         style={{ overflow: 'visible' }}
         onMouseEnter={handleMouseEnter}
-        onMouseLeave={() => setShowTooltip(false)}
+        onMouseLeave={handleMouseLeave}
       >
         <button
           ref={buttonRef}
@@ -78,18 +85,22 @@ function FlowButton({ flow, isSelected, onSelect, onDelete }: FlowButtonProps) {
               <FileText className="text-neutral-500 dark:text-neutral-400" style={{ width: '15px', height: '15px' }} />
             </div>
           )}
-          {/* Delete button - red trash icon overlapping top right */}
-          <button
-            onClick={handleDelete}
-            className="absolute top-0 right-0 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors z-10"
-            style={{
-              transform: 'translate(25%, -25%)',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
-            }}
-            title={`Delete ${flow.title}`}
-          >
-            <Trash2 className="w-2.5 h-2.5 text-white" />
-          </button>
+          {/* Delete button - red trash icon overlapping top right, only visible on hover */}
+          {isHovered && (
+            <button
+              onClick={handleDelete}
+              className="absolute top-0 right-0 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-all z-10"
+              style={{
+                transform: 'translate(25%, -25%)',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                opacity: isHovered ? 1 : 0,
+                transition: 'opacity 0.2s ease-in-out'
+              }}
+              title={`Delete ${flow.title}`}
+            >
+              <Trash2 className="w-2.5 h-2.5 text-white" />
+            </button>
+          )}
         </button>
       </div>
       {/* Tooltip on hover - sleek small card */}
