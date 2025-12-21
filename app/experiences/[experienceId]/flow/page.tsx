@@ -309,9 +309,10 @@ export default function OnboardingFlowView() {
       const filledConditions = Array.isArray(conditionsList) ? conditionsList.filter((c: string) => c && c.trim().length > 0) : []
       const condition = block.config?.condition || filledConditions[0] || ""
       
-      // If no conditions specified, default to false path
+      // If no conditions specified, default to false path (else path)
+      // If no else path exists, end onboarding
       if (filledConditions.length === 0 && !condition) {
-        return block.connections && block.connections.length > 1 ? block.connections[1] : (block.connections && block.connections.length > 0 ? block.connections[0] : null)
+        return block.connections && block.connections.length > 1 ? block.connections[1] : null
       }
       
       // Check if answer matches ANY condition (OR logic for multiple-choice/checkbox, AND logic otherwise)
@@ -374,14 +375,17 @@ export default function OnboardingFlowView() {
       if (matches) {
         return block.connections && block.connections.length > 0 ? block.connections[0] : null
       } else {
-        return block.connections && block.connections.length > 1 ? block.connections[1] : (block.connections && block.connections.length > 0 ? block.connections[0] : null)
+        // If no match, check if there's an else path (connections[1])
+        // If no else path exists, return null to end onboarding
+        return block.connections && block.connections.length > 1 ? block.connections[1] : null
       }
     }
     
     if (block.type === "multi-path") {
       const previousNode = flow.nodes.find(node => node && node.connections && Array.isArray(node.connections) && node.connections.includes(block.id))
       if (!previousNode || !previousNode.pageComponents) {
-        return block.connections && block.connections.length > 0 ? block.connections[0] : null
+        // If no previous node or components, end onboarding
+        return null
       }
       
       const components = normalizePageComponents(previousNode.pageComponents)
@@ -389,7 +393,8 @@ export default function OnboardingFlowView() {
         (comp: PageComponent) => ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(comp.type)
       )
       if (!questionComponent) {
-        return block.connections && block.connections.length > 0 ? block.connections[0] : null
+        // If no question component, end onboarding
+        return null
       }
       
       // Get paths from config (these contain the variable/answer values)
@@ -405,7 +410,8 @@ export default function OnboardingFlowView() {
         if (answerIndex >= 0 && block.connections && Array.isArray(block.connections) && answerIndex < block.connections.length) {
           return block.connections[answerIndex] || null
         }
-        return block.connections && block.connections.length > 0 ? block.connections[0] : null
+        // If answer doesn't match any option, end onboarding
+        return null
       }
       
       // Handle array answers (checkbox-multi) - use first selected option
@@ -427,8 +433,8 @@ export default function OnboardingFlowView() {
         return block.connections[matchingPathIndex]
       }
       
-      // Fallback to first connection
-      return block.connections && block.connections.length > 0 ? block.connections[0] : null
+      // If no path matches the answer, end onboarding (don't fallback to random connection)
+      return null
     }
     
     if (block.type === "score-threshold") {
@@ -442,7 +448,9 @@ export default function OnboardingFlowView() {
       if (score >= threshold) {
         return block.connections && block.connections.length > 0 ? block.connections[0] : null
       }
-      return block.connections && block.connections.length > 1 ? block.connections[1] : (block.connections && block.connections.length > 0 ? block.connections[0] : null)
+      // If score is below threshold, check if there's an else path (connections[1])
+      // If no else path exists, end onboarding
+      return block.connections && block.connections.length > 1 ? block.connections[1] : null
     }
     
     if (block.type === "a-b-test") {
@@ -528,17 +536,8 @@ export default function OnboardingFlowView() {
           // If targetId exists but no node found, the path doesn't connect - end onboarding
           return null
         }
-        // If evaluation returned null/undefined, check if logic block has connections as fallback
-        if (connectedLogicBlock.connections && Array.isArray(connectedLogicBlock.connections) && connectedLogicBlock.connections.length > 0) {
-          const firstTargetId = connectedLogicBlock.connections[0]
-          if (firstTargetId) {
-            const firstTargetNode = flow.nodes.find(n => n && n.id === firstTargetId)
-            if (firstTargetNode) {
-              return firstTargetNode
-            }
-          }
-        }
-        // If logic block answer path doesn't connect to any node, end onboarding
+        // If evaluation returned null/undefined, the path isn't connected - end onboarding
+        // Don't fallback to first connection - end onboarding instead
         return null
       }
       

@@ -56,6 +56,10 @@ export async function POST(request: NextRequest): Promise<Response> {
 			console.log("[MEMBERSHIP.ACTIVATED] Processing membership activation...");
 			// Fire and forget - don't wait for the handler to complete
 			handleMembershipActivated(webhookData.data).catch(console.error);
+		} else if (webhookData.type === "membership.deactivated") {
+			console.log("[MEMBERSHIP.DEACTIVATED] Processing membership deactivation...");
+			// Fire and forget - don't wait for the handler to complete
+			handleMembershipDeactivated(webhookData.data).catch(console.error);
 		} else {
 			console.log("[WEBHOOK IGNORED] Event type:", webhookData.type);
 		}
@@ -171,10 +175,10 @@ async function handleMembershipActivated(membership: any) {
 		// Determine plan type - check if it's monthly or yearly based on plan_id or metadata
 		let planType: string = metadata.plan_type || "premium-monthly";
 		if (planId) {
-			// If plan_id contains monthly/yearly indicators, use that
-			if (planId.includes("monthly") || planId.includes("Eds0CKZHj3xiQ")) {
+			// Check for plan IDs: plan_5AkO6N2HzVGnm (monthly) or plan_89uDJIAjz0XFJ (yearly)
+			if (planId.includes("monthly") || planId.includes("5AkO6N2HzVGnm")) {
 				planType = "premium-monthly";
-			} else if (planId.includes("yearly") || planId.includes("8rq7G9zrL0SgF")) {
+			} else if (planId.includes("yearly") || planId.includes("89uDJIAjz0XFJ")) {
 				planType = "premium-yearly";
 			}
 		}
@@ -212,5 +216,87 @@ async function handleMembershipActivated(membership: any) {
 		}
 	} catch (error) {
 		console.error("Error handling membership activated:", error);
+	}
+}
+
+async function handleMembershipDeactivated(membership: any) {
+	try {
+		console.log("[MEMBERSHIP DEACTIVATED]", JSON.stringify(membership, null, 2));
+		
+		// Extract user_id from membership webhook data
+		const userId: string | undefined = 
+			(membership as any).user?.id || 
+			(membership as any).user_id || 
+			(membership as any).customer_id ||
+			(membership as any).member?.id ||
+			(membership as any).member_id;
+		
+		// Extract company_id if available
+		const companyId: string | undefined = 
+			(membership as any).company?.id || 
+			(membership as any).company_id ||
+			(membership as any).experience?.id ||
+			(membership as any).experience_id;
+		
+		// Extract plan information if available
+		const planId: string | undefined = 
+			(membership as any).plan?.id || 
+			(membership as any).plan_id;
+		
+		// Determine plan type from plan_id or metadata
+		const metadata = (membership.metadata || {}) as {
+			user_id?: string;
+			plan_type?: string;
+			company_id?: string;
+		};
+		
+		// Use metadata if available, otherwise use direct fields
+		const finalUserId: string = metadata.user_id || userId || '';
+		const finalCompanyId: string = metadata.company_id || companyId || '';
+		
+		// Determine plan type - check if it's monthly or yearly based on plan_id
+		let planType: string = metadata.plan_type || "premium-monthly";
+		if (planId) {
+			// Check for plan IDs: plan_5AkO6N2HzVGnm (monthly) or plan_89uDJIAjz0XFJ (yearly)
+			if (planId.includes("monthly") || planId.includes("5AkO6N2HzVGnm")) {
+				planType = "premium-monthly";
+			} else if (planId.includes("yearly") || planId.includes("89uDJIAjz0XFJ")) {
+				planType = "premium-yearly";
+			}
+		}
+		
+		console.log("[MEMBERSHIP DEACTIVATION DATA]", {
+			userId: finalUserId,
+			companyId: finalCompanyId,
+			planId,
+			planType,
+			metadata,
+			rawMembership: membership
+		});
+		
+		// Validate required fields
+		if (!finalUserId) {
+			console.error("Missing user_id in membership deactivation. Membership object:", membership);
+			return;
+		}
+		
+		console.log(`[DEACTIVATING MEMBERSHIP] User: ${finalUserId}, Company: ${finalCompanyId || 'N/A'}, Plan: ${planType}`);
+		
+		// Update or create user membership - deactivate it
+		// Use type assertion to bypass build cache type issues
+		const result = await (upsertUserMembership as any)(
+			finalUserId,
+			false, // membership_active = false
+			planId, // Use plan_id as payment_id if available
+			planType
+		);
+		
+		if (result) {
+			console.log(`[MEMBERSHIP DEACTIVATED] User ${finalUserId} for company ${finalCompanyId || 'N/A'}, Membership ID: ${result.id}`);
+		} else {
+			console.error(`[MEMBERSHIP DEACTIVATION FAILED] User ${finalUserId} for company ${finalCompanyId || 'N/A'}`);
+		}
+	} catch (error) {
+		console.error("Error handling membership deactivated:", error);
 	}
 }

@@ -81,18 +81,6 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
       return
     }
 
-    // For premium-monthly, redirect to static checkout link
-    if (planId === "premium-monthly") {
-      window.location.href = "https://whop.com/checkout/plan_Eds0CKZHj3xiQ"
-      return
-    }
-
-    // For premium-yearly, redirect to static checkout link
-    if (planId === "premium-yearly") {
-      window.location.href = "https://whop.com/checkout/plan_8rq7G9zrL0SgF"
-      return
-    }
-
     if (!iframeSdk) {
       toast.error("Payment system not available. Please try again later.")
       return
@@ -101,6 +89,83 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
     setIsProcessing(true)
 
     try {
+      // For premium-monthly, open static plan
+      if (planId === "premium-monthly") {
+        const purchasePromise = iframeSdk.inAppPurchase({
+          planId: "plan_5AkO6N2HzVGnm", // Static plan ID for premium monthly
+        }).catch((purchaseError: any) => {
+          console.error("inAppPurchase error:", purchaseError)
+          throw purchaseError
+        })
+
+        // Add timeout to prevent infinite loading
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => {
+            reject(new Error("Payment modal timeout - the payment window may not have opened. Please try again."))
+          }, 60000)
+        })
+
+        const res = await Promise.race([purchasePromise, timeoutPromise]) as any
+
+        if (res && res.status === "ok") {
+          toast.success("Payment successful! Your membership has been activated.")
+          window.location.reload()
+        } else {
+          console.error("Payment failed:", res)
+          let errorMessage = "Payment was cancelled or failed"
+          if (res) {
+            if (res.message) errorMessage = res.message
+            else if (res.error) errorMessage = typeof res.error === 'string' ? res.error : res.error.message || errorMessage
+            else if (typeof res === 'string') errorMessage = res
+            else if (res.status && res.status !== "ok") {
+              errorMessage = `Payment failed with status: ${res.status}`
+            }
+          }
+          toast.error(errorMessage)
+          setIsProcessing(false)
+        }
+        return
+      }
+
+      // For premium-yearly, open static plan
+      if (planId === "premium-yearly") {
+        const purchasePromise = iframeSdk.inAppPurchase({
+          planId: "plan_89uDJIAjz0XFJ", // Static plan ID for premium yearly
+        }).catch((purchaseError: any) => {
+          console.error("inAppPurchase error:", purchaseError)
+          throw purchaseError
+        })
+
+        // Add timeout to prevent infinite loading
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => {
+            reject(new Error("Payment modal timeout - the payment window may not have opened. Please try again."))
+          }, 60000)
+        })
+
+        const res = await Promise.race([purchasePromise, timeoutPromise]) as any
+
+        if (res && res.status === "ok") {
+          toast.success("Payment successful! Your membership has been activated.")
+          window.location.reload()
+        } else {
+          console.error("Payment failed:", res)
+          let errorMessage = "Payment was cancelled or failed"
+          if (res) {
+            if (res.message) errorMessage = res.message
+            else if (res.error) errorMessage = typeof res.error === 'string' ? res.error : res.error.message || errorMessage
+            else if (typeof res === 'string') errorMessage = res
+            else if (res.status && res.status !== "ok") {
+              errorMessage = `Payment failed with status: ${res.status}`
+            }
+          }
+          toast.error(errorMessage)
+          setIsProcessing(false)
+        }
+        return
+      }
+
+      // Fallback for other plans (should not reach here for premium plans)
       // Get company ID
       const companyIdResponse = await fetch(`/api/get-company-id?experienceId=${experienceId}`)
       if (!companyIdResponse.ok) {
@@ -217,14 +282,8 @@ export function UpgradeModal({ onClose, currentPlan = "free" }: UpgradeModalProp
 
       if (res && res.status === "ok") {
         toast.success("Payment successful! Your membership has been activated.")
-        // Redirect to creator canvas area
-        setTimeout(() => {
-          if (experienceId) {
-            window.location.href = `/experiences/${experienceId}`
-          } else {
-            window.location.reload()
-          }
-        }, 1500)
+        // Immediately reload the entire app page after payment validates
+        window.location.reload()
       } else {
         console.error("Payment failed:", res)
         // Check for different error response formats

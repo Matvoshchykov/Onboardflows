@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect, memo } from "react"
-import { clearFlowCache } from "@/lib/db/flows"
+import { clearFlowCache, saveFlow } from "@/lib/db/flows"
 import { Plus, Upload, X, Play, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ArrowUpDown, Eye, Check, Minus, AlertTriangle, Mail } from 'lucide-react'
 import { toast } from "sonner"
 import { toggleFlowActive } from "@/lib/db/flows"
@@ -408,7 +408,14 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
   const handleLogicBlocksUpdate = (updatedLogicBlocks: LogicBlock[]) => {
     setLogicBlocks(updatedLogicBlocks)
     if (flow) {
-      onUpdateFlow({ ...flow, logicBlocks: updatedLogicBlocks })
+      const updatedFlow = { ...flow, logicBlocks: updatedLogicBlocks }
+      onUpdateFlow(updatedFlow)
+      // Update lastSavedFlow immediately to keep button showing "All changes saved"
+      const flowWithCollapsed = {
+        ...updatedFlow,
+        collapsedComponents: collapsedComponents
+      } as Flow & { collapsedComponents?: Record<string, boolean> }
+      setLastSavedFlow(JSON.parse(JSON.stringify(flowWithCollapsed)))
     }
   }
 
@@ -891,9 +898,29 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
           }
           return n
         })
-        onUpdateFlow({ ...flow, nodes: updatedNodes })
+        const updatedFlow = { ...flow, nodes: updatedNodes }
+        onUpdateFlow(updatedFlow)
+        // Update lastSavedFlow immediately to keep button showing "All changes saved"
+        const flowWithCollapsed = {
+          ...updatedFlow,
+          collapsedComponents: collapsedComponents
+        } as Flow & { collapsedComponents?: Record<string, boolean> }
+        setLastSavedFlow(JSON.parse(JSON.stringify(flowWithCollapsed)))
       } else if (draggingNodeId && e.buttons !== 1) {
         // Stop dragging if button is released
+        // Auto-save in background (silent, no toast, no button change)
+        if (flow) {
+          const flowToSave = {
+            ...flow,
+            collapsedComponents: collapsedComponents
+          } as Flow & { collapsedComponents?: Record<string, boolean> }
+          // Update lastSavedFlow silently so button doesn't change
+          setLastSavedFlow(JSON.parse(JSON.stringify(flowToSave)))
+          // Save to database in background
+          ;(saveFlow as any)(flowToSave).catch((error: any) => {
+            console.error('Background auto-save error:', error)
+          })
+        }
         setDraggingNodeId(null)
         pendingDragNodeIdRef.current = null
         dragStartPosRef.current = null
@@ -947,8 +974,31 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
           return b
         })
         handleLogicBlocksUpdate(updatedLogicBlocks)
+        // Update lastSavedFlow immediately to keep button showing "All changes saved"
+        if (flow) {
+          const updatedFlow = {
+            ...flow,
+            logicBlocks: updatedLogicBlocks,
+            collapsedComponents: collapsedComponents
+          } as Flow & { collapsedComponents?: Record<string, boolean> }
+          setLastSavedFlow(JSON.parse(JSON.stringify(updatedFlow)))
+        }
       } else if (draggingLogicId && e.buttons !== 1) {
         // Stop dragging if button is released
+        // Auto-save in background (silent, no toast, no button change)
+        if (flow) {
+          const flowToSave = {
+            ...flow,
+            logicBlocks: logicBlocks,
+            collapsedComponents: collapsedComponents
+          } as Flow & { collapsedComponents?: Record<string, boolean> }
+          // Update lastSavedFlow silently so button doesn't change
+          setLastSavedFlow(JSON.parse(JSON.stringify(flowToSave)))
+          // Save to database in background
+          ;(saveFlow as any)(flowToSave).catch((error: any) => {
+            console.error('Background auto-save error:', error)
+          })
+        }
         setDraggingLogicId(null)
         pendingDragLogicIdRef.current = null
         dragStartPosRef.current = null
@@ -1000,6 +1050,10 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
     
     // Logic block drop is now handled by global mouseup handler
     
+    // Check if we were dragging before clearing state
+    const wasDraggingNode = draggingNodeId !== null
+    const wasDraggingLogic = draggingLogicId !== null
+    
     setIsPanning(false)
     setDraggingNodeId(null)
     setDraggingLogicId(null)
@@ -1009,6 +1063,22 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
     dragStartNodePosRef.current = null
     dragCanvasStateRef.current = null
     lastMousePosRef.current = null
+    
+    // Auto-save in background if we were dragging (silent, no toast, no button change)
+    // This is a backup in case handleCanvasMouseMove didn't catch the drag end
+    if ((wasDraggingNode || wasDraggingLogic) && flow) {
+      const flowToSave = {
+        ...flow,
+        logicBlocks: logicBlocks,
+        collapsedComponents: collapsedComponents
+      } as Flow & { collapsedComponents?: Record<string, boolean> }
+      // Update lastSavedFlow silently so button doesn't change
+      setLastSavedFlow(JSON.parse(JSON.stringify(flowToSave)))
+      // Save to database in background
+      ;(saveFlow as any)(flowToSave).catch((error: any) => {
+        console.error('Background auto-save error:', error)
+      })
+    }
     
     if (plusClickTimer) {
       clearTimeout(plusClickTimer)
@@ -1408,6 +1478,20 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
           return b
         })
         handleLogicBlocksUpdate(updatedBlocks)
+        // Auto-save in background (silent, no toast, no button change)
+        if (flow) {
+          const updatedFlow = {
+            ...flow,
+            logicBlocks: updatedBlocks,
+            collapsedComponents: collapsedComponents
+          } as Flow & { collapsedComponents?: Record<string, boolean> }
+          // Update lastSavedFlow silently so button doesn't change
+          setLastSavedFlow(JSON.parse(JSON.stringify(updatedFlow)))
+          // Save to database in background
+          ;(saveFlow as any)(updatedFlow).catch((error: any) => {
+            console.error('Background auto-save error:', error)
+          })
+        }
         setSelectedNodeId(null) // Deselect after drop
       } 
       // Flow block to logic block connection - validate component types
@@ -1467,7 +1551,18 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
           }
           return node
         })
-        onUpdateFlow({ ...flow, nodes: updatedNodes })
+        const updatedFlow = { ...flow, nodes: updatedNodes }
+        onUpdateFlow(updatedFlow)
+        // Update lastSavedFlow immediately to keep button showing "All changes saved"
+        const flowWithCollapsed = {
+          ...updatedFlow,
+          collapsedComponents: collapsedComponents
+        } as Flow & { collapsedComponents?: Record<string, boolean> }
+        setLastSavedFlow(JSON.parse(JSON.stringify(flowWithCollapsed)))
+        // Auto-save in background (silent, no toast, no button change)
+        ;(saveFlow as any)(flowWithCollapsed).catch((error: any) => {
+          console.error('Background auto-save error:', error)
+        })
         setSelectedNodeId(null) // Deselect after drop
       }
       // Flow block to flow block connection
@@ -1510,7 +1605,18 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
           return node
         })
         console.log('[FLOW-TO-FLOW] Updating flow with nodes:', updatedNodes.map(n => ({ id: n.id, connections: n.connections })))
-        onUpdateFlow({ ...flow, nodes: updatedNodes })
+        const updatedFlow = { ...flow, nodes: updatedNodes }
+        onUpdateFlow(updatedFlow)
+        // Update lastSavedFlow immediately to keep button showing "All changes saved"
+        const flowWithCollapsed = {
+          ...updatedFlow,
+          collapsedComponents: collapsedComponents
+        } as Flow & { collapsedComponents?: Record<string, boolean> }
+        setLastSavedFlow(JSON.parse(JSON.stringify(flowWithCollapsed)))
+        // Auto-save in background (silent, no toast, no button change)
+        ;(saveFlow as any)(flowWithCollapsed).catch((error: any) => {
+          console.error('Background auto-save error:', error)
+        })
         setSelectedNodeId(null) // Deselect after drop
       }
     }
@@ -2342,17 +2448,18 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Component Library Panel - Fixed on left side of canvas */}
-        {showComponentLibrary && (
-          <div 
-            data-component-library-panel
-            className="w-64 bg-card border-r border-border shadow-lg flex flex-col z-40 pointer-events-auto"
-            style={{ 
-              height: '100%',
-              maxHeight: '100vh',
-              minWidth: '256px'
-            }}
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Component Library Panel - Slides from left edge of canvas */}
+        <div 
+          data-component-library-panel
+          className={`absolute left-0 top-0 bottom-0 w-64 bg-card border-r border-border shadow-lg flex flex-col z-40 pointer-events-auto transition-transform duration-300 ease-in-out ${
+            showComponentLibrary ? 'translate-x-0' : '-translate-x-full'
+          }`}
+          style={{ 
+            height: '100%',
+            maxHeight: '100%',
+            minWidth: '256px'
+          }}
             onMouseDown={(e) => {
               // Only stop propagation for clicks inside the library panel itself
               // Allow events to bubble for canvas interactions outside the panel
@@ -2415,7 +2522,6 @@ export function FlowCanvas({ flow, onUpdateFlow, onSaveToDatabase, experienceId,
               />
             </div>
           </div>
-        )}
         
         <div
           ref={canvasRef}
@@ -4311,60 +4417,50 @@ function PreviewModal({
           >
           {/* Spacer to allow scrolling up 80px more */}
           <div style={{ height: '80px', width: '100%' }} />
-          <div className="w-full flex flex-col" style={{ maxWidth: '840px', gap: '10px' }}>
-            {/* Display ALL components in order */}
-            {allComponents.map((component, index) => {
-              const isQuestion = ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(component.type)
-              
-              if (isQuestion && needsAnswer) {
-                return (
-                  <div 
-                    key={component.id} 
-                    ref={index === 0 ? questionComponentRef : null}
-                    className="w-full mx-auto" 
-                    style={{ maxWidth: '840px' }}
-                  >
-                    <div className="relative group rounded-xl p-4 sm:p-6 transition-all bg-card shadow-neumorphic-raised flex flex-col">
-                      <InteractiveQuestionComponent
-                        key={currentPreviewNode.id}
-                        component={component}
-                        value={previewAnswers[currentPreviewNode.id]}
-                        onChange={async (value) => {
-                          if (currentPreviewNode) {
-                            setPreviewAnswers(prev => {
-                              const updated = { ...prev, [currentPreviewNode.id]: value }
-                              if (typeof window !== 'undefined') {
-                                localStorage.setItem(`preview-answers-${flow.id}`, JSON.stringify(updated))
-                              }
-                              return updated
-                            })
+          <div className="w-full flex flex-col" style={{ maxWidth: '840px' }}>
+            {/* Question components that need interactive handling - separate cards */}
+            {allComponents.filter(comp => ["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(comp.type) && needsAnswer).map((component, index) => (
+              <div 
+                key={component.id} 
+                ref={index === 0 ? questionComponentRef : null}
+                className="w-full mb-4 last:mb-0"
+              >
+                <div className="relative group rounded-xl p-4 sm:p-6 transition-all bg-card shadow-neumorphic-raised flex flex-col">
+                  <InteractiveQuestionComponent
+                    key={currentPreviewNode.id}
+                    component={component}
+                    value={previewAnswers[currentPreviewNode.id]}
+                    onChange={async (value) => {
+                      if (currentPreviewNode) {
+                        setPreviewAnswers(prev => {
+                          const updated = { ...prev, [currentPreviewNode.id]: value }
+                          if (typeof window !== 'undefined') {
+                            localStorage.setItem(`preview-answers-${flow.id}`, JSON.stringify(updated))
                           }
-                        }}
-                      />
-                    </div>
-                  </div>
-                )
-              } else {
-                return (
-                  <div 
-                    key={component.id} 
-                    data-preview-component={index === 0 ? 'first' : undefined}
-                    className="w-full mx-auto" 
-                    style={{ maxWidth: '840px' }}
-                  >
-                    <PagePreview
-                      components={[component]}
-                      viewMode="desktop"
-                      selectedComponent={null}
-                      onSelectComponent={() => {}}
-                      onDeleteComponent={() => {}}
-                      onUpdateComponent={undefined}
-                      previewMode={true}
-                    />
-                  </div>
-                )
-              }
-            })}
+                          return updated
+                        })
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+            
+            {/* All other components combined in one unified card via PagePreview */}
+            {allComponents.filter(comp => !(["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(comp.type) && needsAnswer)).length > 0 && (
+              <div data-preview-component="first" className="w-full">
+                <PagePreview
+                  components={allComponents.filter(comp => !(["multiple-choice", "checkbox-multi", "short-answer", "scale-slider"].includes(comp.type) && needsAnswer))}
+                  viewMode="desktop"
+                  selectedComponent={null}
+                  onSelectComponent={() => {}}
+                  onDeleteComponent={() => {}}
+                  onUpdateComponent={undefined}
+                  previewMode={true}
+                  isMobile={false}
+                />
+              </div>
+            )}
           </div>
         </div>
         </div>
